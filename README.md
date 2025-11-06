@@ -1,4 +1,4 @@
-✨ Collab Aura.
+✨ Collab Aura2
 
 Collab Aura is the visual foundation of the Collab.codes ecosystem.
 It defines how every generated application looks, feels, and behaves on the frontend — from layout composition to component structure and interface identity.
