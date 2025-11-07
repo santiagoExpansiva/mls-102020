@@ -161,82 +161,65 @@ async function executeEsBuild(importsMap: Record<string, string>, valids: string
 
             build.onResolve({ filter: /.*/ }, (args: any) => {
 
-                const transforPathInitId = (input: string) => {
-
-                    let [idPart, ...restParts] = input.split('/');
-                    if (input.startsWith('./')) {
-                        idPart = restParts[0];
-                        restParts.shift();
+            
+                    if (valids.includes(args.path)) {
+                        return {
+                            path: args.path,
+                            namespace: 'virtual',
+                        };
                     }
 
-                    const rest = restParts.join('/');
-                    const lastSlashIndex = rest.lastIndexOf('/');
-                    const path = rest.substring(0, lastSlashIndex);
-                    const file = rest.substring(lastSlashIndex + 1);
+                    if (args.path.startsWith("_") &&
+                        !args.importer.startsWith("https://")) {
+                        return {
+                            path: args.path.replace('_', '/_'),
+                            namespace: 'virtual',
+                        };
+                    }
 
-                    return `/${path}/${idPart}${file}`;
-                }
+                    if ((args.path.startsWith("./") || args.path.startsWith("../")) &&
+                        !args.importer.startsWith("https://") && !importsMap[args.importer]) {
 
-                const isValidStart = (path: string) => {
-                    return !path.startsWith("./l2/") && !path.startsWith("_") && !(path.startsWith("./_") && path.indexOf("/l2/") >= 0)
-                }
+                        const url = new URL(args.path, 'file:' + args.importer);
+                        let path = url.pathname;
 
-                if (valids.includes(args.path)) {
-                    return {
-                        path: args.path,
-                        namespace: 'virtual',
-                    };
-                }
+                        if (!(/_(\d+)_/.test(path))) {
 
-                if (args.path.startsWith("./") &&
-                    !args.importer.startsWith("https://") && isValidStart(args.path)) {
-                    return {
-                        path: args.path.replace('./', '/'),
-                        namespace: 'virtual',
-                    };
-                }
+                            const info = mls.l2.getPath(args.importer.replace('/l2/', '').replace('/', ''));
 
-                if ((
-                    args.path.startsWith("./") ||
-                    args.path.startsWith("../") ||
-                    args.path.startsWith("/")) &&
-                    importsMap[args.importer] && isValidStart(args.path)) {
+                            if (!info.project) info.project = mls.actualProject as number;
+                            
+                            if (path.indexOf(`_${info.project}_`) < 0) {
+                                path = url.pathname.replace('/', `/_${info.project}_`)
+                            }
+                        }
 
-                    const url = new URL(args.path, importsMap[args.importer]);
-                    return { path: url.href, namespace: 'virtual' };
+                        return { path, namespace: 'virtual' };
 
-                }
+                    }
 
-                if ((
-                    args.path.startsWith("./") ||
-                    args.path.startsWith("../") ||
-                    args.path.startsWith("/")) &&
-                    args.importer.startsWith("https://") && isValidStart(args.path)) {
+                    // import url externa
+                    if ((
+                        args.path.startsWith("./") ||
+                        args.path.startsWith("../") ||
+                        args.path.startsWith("/")) &&
+                        args.importer.startsWith("https://")) {
 
-                    const url = new URL(args.path, args.importer);
-                    return { path: url.href, namespace: 'virtual' };
+                        const url = new URL(args.path, args.importer);
+                        return { path: url.href, namespace: 'virtual' };
 
-                }
+                    }
 
-                if (args.path.startsWith("http")) {
-                    return { path: args.path, namespace: 'virtual' };
-                }
+                    // import url externa
+                    if (args.path.startsWith("/") && importsMap[args.importer]) {
+                        const url = new URL(args.path, importsMap[args.importer]);
+                        return { path: url.href, namespace: 'virtual' };
+                    }
 
-                if ((args.path.startsWith("_") || args.path.startsWith("./_")) &&
-                    !args.importer.startsWith("https://") && !args.path.startsWith("./l2/")) {
-                    return {
-                        path: transforPathInitId(args.path),
-                        namespace: 'virtual',
-                    };
-                }
-
-                if (args.path.indexOf("/l2/") &&
-                    !args.importer.startsWith("https://")) {
-                    return {
-                        path: args.path.replace('./l2/', `/_${mls.actualProject}_`),
-                        namespace: 'virtual',
-                    };
-                }
+                    // url externa
+                    if (args.path.startsWith("http")) {
+                        return { path: args.path, namespace: 'virtual' };
+                    }
 
 
                 return null;
@@ -445,7 +428,6 @@ async function createStorFileOutput(data: { project: number, shortName: string, 
     const storFile = await createStorFile(param, false, false, false);
     return storFile;
 }
-
 
 async function getAllPages(project: number, modulePath: string) {
 
