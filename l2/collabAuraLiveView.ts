@@ -3,7 +3,7 @@
 import { html } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import { CollabLitElement } from './_100554_collabLitElement';
-import { DISTFOLDER, buildModule } from './_100554_libLiveView';
+import { DISTFOLDER, buildModule } from './_102020_build';
 import { getProjectConfig } from './_100554_libCommom';
 import './_100554_collabNav4Menu'
 
