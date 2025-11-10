@@ -513,7 +513,6 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
             height: 100%;
         }`;
         this.iframe?.contentDocument?.head.appendChild(style);
-
     }
 
     private addScript() {
@@ -526,6 +525,7 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
                 functionReplaceAnchor(e);
             }
         });`;
+        this.iframe.contentDocument.body?.appendChild(s);
         (this.iframe.contentWindow as any).functionReplaceAnchor = this.functionReplaceAnchor.bind(this);
 
     }
