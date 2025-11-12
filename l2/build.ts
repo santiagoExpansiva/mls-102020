@@ -27,14 +27,23 @@ export async function buildModule(project: number, moduleName: string) {
         const dist = getDistStorFile(ts);
 
         const needBuild = await needsRebuild(page, dist);
+        if ((mls as any).isBuildTrace) {
+            console.info({
+                needBuild,
+                page: page.ts.shortName
+            })
+        }
         if (needBuild) {
             buildRequired = true;
             buildPromises.push(buildPage(ts, html, moduleConfig.theme));
         }
     }
 
-    await createL1Models();
-    await Promise.all(buildPromises);
+    if (buildPromises.length > 0) {
+        await createL1Models();
+        await Promise.all(buildPromises);
+    }
+
     return buildRequired;
 }
 
@@ -45,18 +54,15 @@ async function needsRebuild(storFiles: any, dist: any): Promise<boolean> {
     const { ts, html, defs } = storFiles;
 
     if (!dist.storFileDistJs || !dist.storFileDistHtml) return true;
-
     const dtJsDist = new Date(dist.storFileDistJs.updatedAt || '');
     const dtHtmlDist = new Date(dist.storFileDistHtml.updatedAt || '');
 
     if (ts.updatedAt && html.updatedAt) {
         const dtJs = new Date(ts.updatedAt);
         const dtHtml = new Date(html.updatedAt);
-
         if (dtJsDist < dtJs || dtHtmlDist < dtHtml) return true;
-
-        const cleared = maybeClearLocalStorage(ts, html, dist, dtJsDist, dtHtmlDist, dtJs, dtHtml);
-        if (cleared) return true;
+        const needRebuild = maybeClearLocalStorage(ts, html, dist, dtJsDist, dtHtmlDist, dtJs, dtHtml);
+        return needRebuild;
     }
 
     const organismsOutdated = await checkOrganismInPageIsOutdated(
@@ -73,22 +79,41 @@ async function needsRebuild(storFiles: any, dist: any): Promise<boolean> {
 /**
  * Regras de limpeza e sincronização com o localStorage
  */
-function maybeClearLocalStorage(
-    ts: any,
-    html: any,
-    dist: any,
+async function maybeClearLocalStorage(
+    ts: mls.stor.IFileInfo,
+    html: mls.stor.IFileInfo,
+    dist: { storFileDistJs: mls.stor.IFileInfo, storFileDistHtml: mls.stor.IFileInfo },
     dtJsDist: Date,
     dtHtmlDist: Date,
     dtJs: Date,
     dtHtml: Date
-): boolean {
+): Promise<boolean> {
     const { storFileDistJs, storFileDistHtml } = dist;
 
     const isInLocalStorage = storFileDistJs.inLocalStorage && storFileDistHtml.inLocalStorage;
     const sourceNotLocal = !ts.inLocalStorage && !html.inLocalStorage;
     if (isInLocalStorage && sourceNotLocal && dtJsDist > dtJs && dtHtmlDist > dtHtml) {
         clearDistContent(storFileDistHtml, storFileDistJs);
-        return true;
+        await mls.stor.cache.clearObsoleteCache();
+        await mls.stor.cache.addIfNeed({
+            project: ts.project,
+            folder: ts.folder,
+            content: await ts.getContent(),
+            extension: '.ts',
+            shortName: ts.shortName,
+            version: ts.versionRef,
+            contentType: 'application/javascript'
+        });
+        await mls.stor.cache.addIfNeed({
+            project: html.project,
+            folder: html.folder,
+            content: await html.getContent(),
+            extension: '.html',
+            shortName: html.shortName,
+            version: html.versionRef,
+            contentType: 'text/plain'
+        });
+        return false;
     }
 
     if (!isInLocalStorage && !ts.inLocalStorage && !html.inLocalStorage) {

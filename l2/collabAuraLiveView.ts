@@ -1,6 +1,6 @@
 /// <mls shortName="collabAuraLiveView" project="102020" enhancement="_100554_enhancementLit" />
 
-import { html } from 'lit';
+import { html, repeat } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import { CollabLitElement } from './_100554_collabLitElement';
 import { DISTFOLDER, buildModule } from './_102020_build';
@@ -45,6 +45,8 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
 
     @state() tabsMenu: any = [];
 
+    @state() lastInit: number = 0;
+
     @query('.liveview-container') container?: HTMLElement;
 
     public tabs: ITab[] = [];
@@ -68,8 +70,9 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
     render() {
         const lang = this.getMessageKey(messages);
         this.msg = messages[lang];
+
         return html`
-			<div class="liveview-container">
+			<div class="liveview-container" key=${this.lastInit}>
                 <collab-nav4-menu-100554
                     mode="full"
                     .selectedIndex=${this.actualTab} 
@@ -77,24 +80,29 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
                     @tab-selected=${this.onTabSelected}
                     @tab-closed=${this.onTabClosed}
                     ></collab-nav4-menu-100554>
-                ${this.tabs.map((tab, index) => {
-            return html`
-                <iframe
-                    tab-index=${index}
-                    style="width:100%; height:calc(100% - 47px); border:none;display:none;"
-                    class="${this.actualTab === index ? '' : 'closed'}"
-                    src="/_100554_servicePreview"
-                    @load=${this.load}>
-                </iframe>
-            `
-        })}
+                ${repeat(
+            this.tabs,
+            ((tab: ITab, index: number) => index) as any, // chave única (pode usar um ID se tiver)
+            ((tab: ITab, index: number) => html`
+				<iframe
+					tab-index=${index}
+					style="width:100%; height:calc(100% - 47px); border:none; display:none;"
+					class="${this.actualTab === index ? '' : 'closed'}"
+					src="/_100554_servicePreview"
+					@load=${this.load}>
+				</iframe>
+			`
+            ) as any)
+            }
                 
 			</div>
-		`;
+    `;
     }
 
     public async init(project: number, shortName: string, folder: string) {
         this.tabs = [...[]];
+        this.lastInit = Date.now();
+        await this.updateComplete;
         await this.setInitialTabInfos(project, shortName, folder);
     }
 
@@ -136,7 +144,7 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
 
         if (tabActual.project !== project || tabActual.moduleName !== moduleName) {
             this.toogleLoading(true);
-            await buildModule(project, moduleName);
+            // await buildModule(project, moduleName);
             await this.setActualTabInfos(project, pageName, modulePath, moduleName, _target);
         } else if (_target !== '') {
             await this.setActualTabInfos(project, pageName, modulePath, moduleName, _target);
@@ -285,7 +293,7 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
 
         try {
             this.toogleLoading(true);
-            await buildModule(tabActual.project, tabActual.moduleName);
+            // const needBuild = await buildModule(tabActual.project, tabActual.moduleName);
             await this.injectGlobalStyle();
             await this.injectScriptRunTime();
             this.liveViewReady = true;
@@ -333,7 +341,7 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
 
         try {
             this.toogleLoading(true);
-            const htmlUrl: string = `/${tabActual.modulePath}/${pageName}.html`;
+            const htmlUrl: string = `/ ${tabActual.modulePath} /${pageName}.html`;
             const jsUrl: string = `/${tabActual.modulePath}/${pageName}.js`;
 
             this.clearOldPageScripts();
@@ -367,6 +375,7 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
 
         try {
             this.toogleLoading(true);
+            await mls.stor.cache.clearObsoleteCache();
             const cacheJs = await mls.stor.cache.getFileFromCache(tabActual.project, folder, pageName, '.js', versionJs);
             const cacheHtml = await mls.stor.cache.getFileFromCache(tabActual.project, folder, pageName, '.html', versionHtml);
             if (!cacheHtml) {
