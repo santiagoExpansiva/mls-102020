@@ -40,7 +40,7 @@ Transformar o organismo para que ele consiga:
    - Use essa intenção para nomear as interfaces e os mocks de forma coerente.
 
 2. **Criar JSON em memória (simulando BD)**
-   - No topo do arquivo, crie um objeto simples que represente o que o organismo precisa.
+   - No topo do arquivo, se necessário, crie um objeto simples que represente os dados dinamicos que o organismo precisa.
    - Exemplo:
      ```ts
      const inMemoryDb = {
@@ -52,7 +52,7 @@ Transformar o organismo para que ele consiga:
      ```
    - O JSON deve ser pequeno e diretamente utilizável pelo render.
 
-3. **Criar interfaces, request e response**
+3. **Criar interfaces request e response somente se o organismo tiver acesso a algum endpoint **
    - Crie uma interface que descreve o dado que o organismo consome.
    - Exemplo:
      ```ts
@@ -72,35 +72,41 @@ Transformar o organismo para que ele consiga:
 
    - Exemplo:
      ```ts
-     @state() contentResponse: ContentResponse;
+     @state() contentResponse?: ContentResponse;
      ```
 
 5. **Criar função de mock com JSDoc de intenção**
-   - Crie uma função que lê do `inMemoryDb` e devolve o dado no formato da interface.
-   - Acima da função, coloque um JSDoc explicando o endpoint real que deverá existir.
-   - Formato do JSDoc:
-     ```ts
-     /**
-      * endpoint-intent: preciso de um endpoint para buscar/atualizar &lt;descrição do="" dado="" mls_origin="true"&gt;
-      * method: GET|POST|PUT
-      * notes: usado por este organismo apenas para preencher/atualizar a tela
-      */
-     ```
-   - Exemplo:
-     ```ts
-     /**
-      * endpoint-intent: preciso de um endpoint para buscar o conteúdo institucional atual
-      * method: GET
-      * notes: client-only mock, reads from inMemoryDb.content
-      */
-     private mockFetchContent(): ContentResponse { ... }
-     ```
+   - Se o organismo tiver algum endpoint:
+      - Crie uma função que lê do `inMemoryDb` e devolve o dado no formato da interface.
+      - Acima da função, coloque um JSDoc **em ingles** explicando o endpoint real que deverá existir.
+      - Formato do JSDoc:
+        ```ts
+        /**
+          * endpoint-intent: I need an endpoint to search/update.
+          * method: GET|POST|PUT
+          * notes: used by this organization only to populate/update the screen.
+          */
+        ```
+      - Exemplo:
+        ```ts
+        /**
+          * endpoint-intent: preciso de um endpoint para buscar o conteúdo institucional atual
+          * method: GET
+          * notes: client-only mock, reads from inMemoryDb.content
+          */
+        private mockFetchContent(): ContentResponse { ... }
+        ```
 
 6. **Criar função que atualiza states**
-   - Crie uma função do tipo:
+   - Se necessário adicionar import: 
+    ```ts
+        import { setState } from '_100554_collabState';
+     ```
+   - Crie uma função para atualizar o state:
+      - O padrão de nomenclatura do state deve começar com: ui.{{moduleName}}.{{organismName}}
      ```ts
      private updateStatesFromContent(resp: ContentResponse) {
-       setState("module.organism.content", resp);
+       setState("ui.module.organism.xxx", resp);
        contentResponse = resp;
      }
      ```
@@ -128,7 +134,7 @@ Transformar o organismo para que ele consiga:
 
 9. **Criar i18n**
    - Extraia os textos literal que são estaticos do template (labels, títulos, botões).
-   - Os textos que serão gerados dinamicamente de um json ou mockup, não devem ser gerados no i18n.
+   - NÃO GERAR i18n para os dados dinamicos(dados do mockup, dados retornados de api, etc)
    - Crie um objeto de i18n no topo do typescript, abaixo dos imports, seguindo o modelo abaixo:
      ```typescript
       /// **collab_i18n_start**
@@ -194,4 +200,4 @@ Saída esperada:
     "logs": []
    }
 } &lt;/descrição&gt; </promptcustom>  <promptcustom type="human" group=""> ##Solicitação do usuário:
-{{promptUser}} </promptcustom>  <promptcustom type="memory" group=""> {} </promptcustom> </plugin-agent-playground-100554>
+{{promptUser}} </promptcustom>  <promptcustom type="memory" group=""> { "page": "_102017_petshop/organismServiceHighlights", "position": "left", "prompt": ""} </promptcustom> </plugin-agent-playground-100554>
