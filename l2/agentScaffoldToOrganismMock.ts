@@ -1,5 +1,14 @@
 /// <mls shortName="agentScaffoldToOrganismMock" project="102020" enhancement="_blank" />
 
+
+/*
+ Ordem dos agentes:
+  Executar agentScaffoldToOrganismMock para cada organismo em devFidelity: scaffold -> organismMock
+  Executar agentUpdateTemporaryEndpoints -> vai passar em todos organismo em devFidelity: organismMock e fazer a normalização de endpoints
+  Executar agentUpdateTemporaryEndpoints2 -> vai passar em todas as paginas  em devFidelity: scaffold fazer a normalização de endpoints
+  Executar agentUpdateMocks -> vai analisar o defs do modulo, e executar todos os actions necessários em organismos ou pages e alterar devFidelity para moduleMock
+*/
+
 import { IAgent, svg_agent } from './_100554_aiAgentBase';
 import { getPromptByHtml } from './_100554_aiPrompts';
 import { createAllModels } from './_100554_collabLibModel';
@@ -165,9 +174,6 @@ async function updateFile(context: mls.msg.ExecutionContext) {
 
   if (!result) throw new Error(`[${agentName}] updateFile: Not found "result"`);
 
-  console.info(result.logs)
-  console.info(result.typescript);
-
   if (context.modeSingleStep) {
     return context;
   }
@@ -187,11 +193,11 @@ async function updateFile(context: mls.msg.ExecutionContext) {
   let contentDefs = await getDefsUpdated(+projectMemory, shortNameMemory, folderMemory || "")
 
   if (contentTS && models.ts) {
-    serviceSource.setValueInModeKeepingUndo(models.ts.model, contentTS, false);
+    serviceSource.setValueInModeKeepingUndo(models.ts.model, contentTS.trim(), false);
   }
 
   if (contentDefs && models.defs) {
-    serviceSource.setValueInModeKeepingUndo(models.defs.model, contentDefs, false);
+    serviceSource.setValueInModeKeepingUndo(models.defs.model, contentDefs.trim(), false);
   }
 
   context = await updateStepStatus(context, step.stepId, "completed");
@@ -202,8 +208,11 @@ async function updateFile(context: mls.msg.ExecutionContext) {
 async function getDefsUpdated(projectMemory: number, shortNameMemory: string, folderMemory: string) {
   const module = await import(`/_${projectMemory}_${folderMemory ? folderMemory + '/' : ''}${shortNameMemory}.defs.js`);
   if (!module || !module.defs) return;
-  module.defs.meta.devFidelity = 'organismMock2';
-  return `export const defs = ${JSON.stringify(module.defs)}`
+  module.defs.meta.devFidelity = 'organismMock';
+  return `/// <mls shortName="${shortNameMemory}" project="${projectMemory}" folder="${folderMemory}" enhancement="_blank" />
+
+export const defs = ${JSON.stringify(module.defs, null, 2)}`;
+
 }
 
 interface IDataResult {
