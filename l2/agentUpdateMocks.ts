@@ -4,7 +4,8 @@ import { IAgent, svg_agent } from './_100554_aiAgentBase';
 import { getPromptByHtml } from './_100554_aiPrompts';
 import { createAllModels } from './_100554_collabLibModel';
 import { collabImport } from './_100554_collabImport';
-
+import { getState } from './_100554_collabState';
+import { ServiceSource100554 } from './_100554_serviceSource';
 
 import {
   appendLongTermMemory,
@@ -69,6 +70,10 @@ const _afterPrompt = async (context: mls.msg.ExecutionContext): Promise<void> =>
 
   const organismRemaing: mls.cbe.IPath[] = JSON.parse(context.task?.iaCompressed?.longMemory['actions_remaing'] || '[]');
   if (!organismRemaing || organismRemaing.length === 0) {
+    const projectMemory = context.task?.iaCompressed?.longMemory['project'];
+    const folderMemory = context.task?.iaCompressed?.longMemory['module_path'];
+    if (!folderMemory || !projectMemory) throw new Error(`[${agentName}] updateFile: Invalid task memory arguments`);
+    await updateAllOrganismsAndPageInStatusMockup(+projectMemory, folderMemory);
     context.task = await updateTaskTitle(context.task, "Ok, all actions executed created, see result");
     await executeNextStep(context);
     return;
@@ -102,7 +107,6 @@ async function getPrompts(context: mls.msg.ExecutionContext, action: ITemporaryE
     action: JSON.stringify(action)
   }
 
-  console.info({ dataForReplace, iPath });
   const prompts = await getPromptByHtml({ project: projectAgent, shortName: agentName, folder: '', data: dataForReplace })
   return prompts;
 
@@ -228,9 +232,9 @@ async function updateFile(context: mls.msg.ExecutionContext) {
 
   if (!result) throw new Error(`[${agentName}] updateFile: Not found "result"`);
 
-  console.info(result.logs)
-  console.info(result.moduleEndPoints);
-  console.info(result.typescript);
+  // console.info(result.logs)
+  // console.info(result.moduleEndPoints);
+  // console.info(result.typescript);
 
   if (context.modeSingleStep) {
     return context;
@@ -249,6 +253,7 @@ async function updateFile(context: mls.msg.ExecutionContext) {
   const modelsTs = getModel({ folder: folderMemory || '', project: +projectMemory, shortName: fileNameMemory });
   if (!modelsTs || !modelsTs.ts) throw new Error(`[${agentName}] updateFile: Not found models typescript`);
   modelsTs.ts.model?.setValue(result.typescript);
+
 
   return context;
 
@@ -274,6 +279,59 @@ async function getAllActions(project: number, modulePath: string) {
   //const rc = allActions.filter((item) => item.pageOrOrganismName === 'loyaltyDashboard');
 
   return allActions;
+
+}
+
+async function updateAllOrganismsAndPageInStatusMockup(project: number, modulePath: string) {
+
+  const allDefs: mls.cbe.IPath[] = [];
+
+  for (let key of Object.keys(mls.stor.files)) {
+    const storFile = mls.stor.files[key];
+
+    if (storFile.extension !== '.defs.ts' || storFile.project !== project || storFile.folder !== modulePath) continue;
+
+    const keyToImport = storFile.folder ? `_${storFile.project}_${storFile.folder}_${storFile.shortName}` : `./_${storFile.project}_${storFile.shortName}`
+
+    try {
+      const module = await import(`./${keyToImport}.defs.js`);
+      if (!module) continue;
+      const defs = module?.defs;
+      if (!defs || (defs.meta.type !== 'organism' && defs.meta.type !== 'page') || defs.meta.devFidelity !== 'organismMock') continue;
+      module.defs.meta.devFidelity = 'moduleMock';
+      const newDefs = `/// <mls shortName="${storFile.shortName}" project="${storFile.project}" folder="${storFile.folder}" enhancement="_blank" />
+
+export const defs = ${JSON.stringify(module.defs, null, 2)}`;
+
+      let models = getModel({ folder: storFile.folder || '', project: storFile.project, shortName: storFile.shortName });
+      if (!models) {
+        models = await createAllModels(storFile)
+      }
+
+      const serviceSource: ServiceSource100554 = getState(`serviceSource.left.service`);
+
+      if (newDefs && models?.defs && serviceSource) {
+        serviceSource.setValueInModeKeepingUndo(models.defs.model, newDefs.trim(), false);
+      }
+
+
+    } catch (err) {
+      console.error('Error on get defs from file:' + keyToImport)
+      continue;
+    }
+
+  }
+
+  return allDefs;
+}
+
+async function getDefsUpdated(projectMemory: number, shortNameMemory: string, folderMemory: string) {
+  const module = await import(`/_${projectMemory}_${folderMemory ? folderMemory + '/' : ''}${shortNameMemory}.defs.js`);
+  if (!module || !module.defs) return;
+  module.defs.meta.devFidelity = 'moduleMock';
+  return `/// <mls shortName="${shortNameMemory}" project="${projectMemory}" folder="${folderMemory}" enhancement="_blank" />
+
+export const defs = ${JSON.stringify(module.defs, null, 2)}`;
 
 }
 
