@@ -36,6 +36,7 @@ export class Aura {
     }
 
     public async send(url: string, options: any): Promise<Response> {
+        console.info({send: url})
         return new Promise((resolve, reject) => {
 
             if (!this.channel) {
@@ -50,12 +51,12 @@ export class Aura {
 
             const id: string = crypto.randomUUID();
             pendingRequests[id] = resolve;
-
+            const server = url.split('/').shift();
             const opt = {
                 type: "fetch-request",
                 id: id,
                 url,
-                server: 'mdm',
+                server,
                 options: JSON.stringify(options)
 
             }
