@@ -2,10 +2,10 @@
 
 import { html, repeat } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
-import { CollabLitElement } from './_100554_collabLitElement';
-import { DISTFOLDER, buildModule } from './_102020_build';
-import { getProjectConfig } from './_100554_libCommom';
-import './_100554_collabNav4Menu'
+import { CollabLitElement } from '/_100554_/l2/collabLitElement';
+import { DISTFOLDER, buildModule } from '/_102020_/l2/build';
+import { getProjectConfig } from '/_100554_/l2/libCommom';
+import '/_100554_/l2/collabNav4Menu'
 
 interface ITab {
     moduleName: string,
