@@ -1,8 +1,8 @@
 /// <mls shortName="agentUpdateTemporaryEndpoints" project="102020" enhancement="_blank" />
 
-import { IAgent, svg_agent } from './_100554_aiAgentBase';
-import { getPromptByHtml } from './_100554_aiPrompts';
-import { createAllModels } from './_100554_collabLibModel';
+import { IAgent, svg_agent } from '/_100554_/l2/aiAgentBase';
+import { getPromptByHtml } from '/_100554_/l2/aiPrompts';
+import { createAllModels } from '/_100554_/l2/collabLibModel';
 
 import {
   appendLongTermMemory,
@@ -13,14 +13,14 @@ import {
   notifyTaskChange,
   updateStepStatus,
   getNextPendentStep
-} from "./_100554_aiAgentHelper";
+} from "/_100554_/l2/aiAgentHelper";
 
 import {
   startNewInteractionInAiTask,
   startNewAiTask,
   executeNextStep,
   addNewStep
-} from "./_100554_aiAgentOrchestration";
+} from "/_100554_/l2/aiAgentOrchestration";
 
 const agentName = "agentUpdateTemporaryEndpoints";
 const projectAgent = 102020;
