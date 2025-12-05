@@ -1,11 +1,11 @@
 /// <mls shortName="build" project="102020" enhancement="_blank" />
 
-import { createAllModels, readProjectTypescriptAndCompileL1 } from './_100554_collabLibModel';
-import { createStorFile, IReqCreateStorFile } from './_100554_collabLibStor';
-import { getGlobalCss, getTokensCss } from './_100554_designSystemBase';
-import { getDependenciesByHtmlFile } from './_100554_libCompile';
-import { getProjectConfig, getProjectModuleConfig } from './_100554_libCommom';
-import { convertTagToFileName } from './_100554_utilsLit';
+import { createAllModels, readProjectTypescriptAndCompileL1 } from '/_100554_/l2/collabLibModel';
+import { createStorFile, IReqCreateStorFile } from '/_100554_/l2/collabLibStor';
+import { getGlobalCss, getTokensCss } from '/_100554_/l2/designSystemBase';
+import { getDependenciesByHtmlFile } from '/_100554_/l2/libCompile';
+import { getProjectConfig, getProjectModuleConfig } from '/_100554_/l2/libCommom';
+import { convertTagToFileName } from '/_100554_/l2/utilsLit';
 
 let esBuild: any;
 export const DISTFOLDER = 'wwwroot';
