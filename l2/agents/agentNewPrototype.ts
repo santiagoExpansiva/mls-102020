@@ -4,7 +4,7 @@ import { html, TemplateResult } from 'lit';
 import { IAgent, svg_agent } from '/_100554_/l2/aiAgentBase.js';
 import { getPromptByHtml } from '/_100554_/l2/aiPrompts.js';
 import '/_100554_/l2/widgetQuestionsForClarification.js';
-// import '/_100554_/l2/agentGeneratePrototypeFeedback.js';
+import '/_102020_/l2/agents/agentNewPrototypeFeedback.js';
 
 import {
     getNextPendingStepByAgentName,
@@ -85,8 +85,7 @@ const _afterPrompt = async (context: mls.msg.ExecutionContext): Promise<void> =>
 
 const _getFeedBack = async (task: mls.msg.TaskData): Promise<TemplateResult> => {
     if (!task) throw new Error(`[${agentName}](getFeedBack) Invalid task`);
-    // await import('/_100554_/l2/agentGeneratePrototypeFeedback.js');
-    return html`<agent-generate-prototype-feedback-100554 .task=${task}></agent-generate-prototype-feedback-100554>`
+    return html`<agents--agent-new-prototype-feedback-102020 .task=${task}></agents--agent-new-prototype-feedback-102020>`
 }
 
 const _beforeClarification = async (context: mls.msg.ExecutionContext, stepId: number, readOnly: boolean): Promise<HTMLDivElement | null> => {
