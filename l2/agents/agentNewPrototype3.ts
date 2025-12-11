@@ -75,7 +75,7 @@ const _afterPrompt = async (context: mls.msg.ExecutionContext): Promise<void> =>
     if (!stepPendent) throw new Error(`[${agentName}](afterPrompt) Invalid next stepPendent`);
 
     const newStep: mls.msg.AIPayload = {
-        agentName: 'agentGeneratePrototype4',
+        agentName: 'agentNewPrototype4',
         prompt: '0',
         status: 'pending',
         stepId: stepPendent.stepId + 1,
