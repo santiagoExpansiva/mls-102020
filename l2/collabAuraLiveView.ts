@@ -379,7 +379,7 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
             const cacheJs = await mls.stor.cache.getFileFromCache(tabActual.project, folder, pageName, '.js', versionJs);
             const cacheHtml = await mls.stor.cache.getFileFromCache(tabActual.project, folder, pageName, '.html', versionHtml);
             if (!cacheHtml) {
-                const contentHtml = await storFileHTML.getContent();
+                const contentHtml = await storFileHTML?.getContent();
                 if (contentHtml && typeof contentHtml === 'string') {
                     await mls.stor.cache.addIfNeed({
                         project: tabActual.project,
@@ -394,7 +394,7 @@ export class CollabAuraLiveView102020 extends CollabLitElement {
             }
 
             if (!cacheJs) {
-                const contentJs = await storFileJs.getContent();
+                const contentJs = await storFileJs?.getContent();
                 if (contentJs && typeof contentJs === 'string') {
                     await mls.stor.cache.addIfNeed({
                         project: tabActual.project,
