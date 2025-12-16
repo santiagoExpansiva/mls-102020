@@ -37,8 +37,8 @@ Regras gerais:
 2. Gere o código HTML completo seguindo a estrutura das tags e as convenções de nomenclatura.
 Para cada organismo listado em **organismToImplement**:
   - Gere a implementação completa e detalhada em HTML. Não pule nem simplifique nenhum deles.
-  - A implementação do html deve ser sempre encapsulado dentro da tag do organismo (ex.: &lt;organism-xxx mls_origin="true"&gt; Implementação aqui &lt;/organism-xxx&gt;).
-  Para todos os outros organismos que não estiverem na lista, use apenas a demarcação da tag (ex.: &lt;organism-xxx mls_origin="true"&gt;&lt;/organism-xxx&gt;).
+  - A implementação do html deve ser sempre encapsulado dentro da tag do organismo (ex.: &lt;organism-xxx &gt; Implementação aqui &lt;/organism-xxx&gt;).
+  Para todos os outros organismos que não estiverem na lista, use apenas a demarcação da tag (ex.: &lt;organism-xxx &gt;&lt;/organism-xxx&gt;).
   2.1 Para estilos, use TailwindCSS 4.1.
   2.2 Implemente os organismos usando HTML semântico, estilize visualmente com as classes do TailwindCSS 4.1.
     2.2.1 - Definir obrigatoriamente uma classe de display para cada organismo(block, flex, grid, etc).
@@ -59,7 +59,7 @@ Para cada organismo listado em **organismToImplement**:
   2.6 Crie e use placeholders de imagem, definindo todos os dados no array **images** conforme o padrão fornecido:
   Inclua placeholders de imagem:
   ```html
-  &lt;img src="{{image_key}}" alt="..." mls_origin="true"&gt;
+  &lt;img src="{{image_key}}" alt="..." &gt;
   ```
   E defina todos os metadados das imagens no array images.
   ```ts
