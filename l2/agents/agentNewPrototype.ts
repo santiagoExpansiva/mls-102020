@@ -4,7 +4,7 @@ import { html, TemplateResult } from 'lit';
 import { IAgent, svg_agent } from '/_100554_/l2/aiAgentBase.js';
 import { getPromptByHtml } from '/_100554_/l2/aiPrompts.js';
 import '/_100554_/l2/widgetQuestionsForClarification.js';
-import '/_102020_/l2/agents/agentNewPrototypeFeedback.js';
+// import '/_102020_/l2/agents/agentNewPrototypeFeedback.js';
 
 import {
     getNextPendingStepByAgentName,
