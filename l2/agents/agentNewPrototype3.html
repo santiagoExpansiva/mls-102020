@@ -64,7 +64,6 @@ Examples: Stripe (payment), Sentry (error tracking), Google Analytics (usage tra
         "plugins": { "type": "array" },
         "pagesWireframe": { "type": "array" },
         "organism": { "type": "array" },
-        "tokens": { "type": "object" },
         "visualIdentity": { "type": "object" }
       },
       "required": [
@@ -73,8 +72,6 @@ Examples: Stripe (payment), Sentry (error tracking), Google Analytics (usage tra
         "plugins",
         "pagesWireframe",
         "organism",
-        "tokens",
-        "visualIdentity"
       ]
     }
   },
@@ -104,7 +101,7 @@ interface NewModuleAnalysis {
  plugins: PluginDefinition[],
  pagesWireframe: PagesWireframe[],
  organism: Organism[],
-
+ visualIdentity: VisualIdentity,
 }
 
 interface UserRequestsEnhancements { 
@@ -160,14 +157,7 @@ interface Planning {
   description: string; // Description of the planning
   comment?: string; // Optional comment or notes
 }
-interface IDesignSystemTokens {
-    description: string,
-    themeName: string,
-    color: Record&lt;string, string&gt;,
 
-    global: Record&lt;string, string&gt;, // general-purpose tokens (e.g., spacing, radius, shadow, transition)
-    typography: Record&lt;string, string&gt;,
-}
 interface VisualIdentity {
   logoDescription: string; // English description of style and concept used to generate an SVG logo
   fontFamily: string;      // Preferred font family for headings and body
@@ -187,5 +177,4 @@ interface VisualIdentity {
 {{userPrompt}} </promptcustom>  <promptcustom type="ai" group=""> ## Clarification 2
 ```json
 {{resumeClarification}}
-``` </promptcustom> 
-</plugin-agent-playground-100554>
+``` </promptcustom> </plugin-agent-playground-100554>
