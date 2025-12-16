@@ -11,6 +11,7 @@ let esBuild: any;
 export const DISTFOLDER = 'wwwroot';
 
 export async function buildModule(project: number, moduleName: string) {
+
     await loadEsbuild();
 
     const moduleConfig = await getProjectModule(project, moduleName);
@@ -517,10 +518,10 @@ async function getAllPages(project: number, modulePath: string) {
     for (let key of Object.keys(mls.stor.files)) {
         const storFile = mls.stor.files[key];
         if (storFile.extension !== '.defs.ts' || storFile.project !== project || storFile.folder !== modulePath) continue;
-        const keyToImport = storFile.folder ? `_${storFile.project}_${storFile.folder}_${storFile.shortName}` : `./_${storFile.project}_${storFile.shortName}`
+        const keyToImport = storFile.folder ? `_${storFile.project}_/l2/${storFile.folder}_${storFile.shortName}` : `/_${storFile.project}_/l2/${storFile.shortName}`
 
         try {
-            const module = await import(`./${keyToImport}.defs.js`);
+            const module = await import(`/${keyToImport}.defs.js`);
             if (!module) continue;
             const defs = module?.defs;
             if (!defs || defs.meta.type !== 'page') continue;
