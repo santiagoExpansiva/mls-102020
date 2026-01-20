@@ -4,7 +4,7 @@ import { html, LitElement } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
 @customElement('aura-organism-base-102020')
-export class AuraOrganismBase102020 extends LitElement {
+export class AuraOrganismBase extends LitElement {
 
 
 }
