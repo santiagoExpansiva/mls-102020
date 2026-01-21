@@ -10,7 +10,7 @@ import { addModule, configureMasterFrontEnd } from '/_100554_/l2/projectAST';
 import { getPayload3, PayLoad3 } from '/_102020_/l2/agents/agentNewPrototype3';
 import { getGlobalLess } from '/_100554_/l2/designSystemBase.js';
 import { createAllModels } from '/_100554_/l2/collabLibModel.js';
-import { removeTokensFromSource } from '/_100554_/l2/enhancementStyle.js';
+import { removeTokensFromSource } from '/_102027_/l2/libCompileStyle.js';
 
 import {
     getNextPendingStepByAgentName,
@@ -944,7 +944,6 @@ function extractOrganismTagsFromHtml(pageHtml: string[]): mls.l4.DefsWidget[] {
     const arr = widgets.map((tag) => {
         const w: mls.l4.DefsWidget = {
             tag,
-            analysis: undefined,
             bindings: [],
             purpose: '',
             used: true
