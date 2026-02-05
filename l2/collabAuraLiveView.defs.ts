@@ -1,2 +1,2 @@
-/// <mls shortName="collabAuraLiveView" project="102020" enhancement="_blank" folder="" />
+/// <mls fileReference="_102020_/l2/collabAuraLiveView.defs.ts" enhancement="_blank" />
 

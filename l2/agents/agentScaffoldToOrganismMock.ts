@@ -1,4 +1,4 @@
-/// <mls shortName="agentScaffoldToOrganismMock" project="102020" enhancement="_blank" folder="agents" />
+/// <mls fileReference="_102020_/l2/agents/agentScaffoldToOrganismMock.ts" enhancement="_blank" />
 
 /*
  Ordem dos agentes:

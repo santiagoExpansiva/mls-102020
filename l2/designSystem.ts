@@ -1,4 +1,4 @@
-/// <mls shortName="designSystem" project="102020" enhancement="_100554_enhancementLit" groupName="other" />
+/// <mls fileReference="_102020_/l2/designSystem.ts" groupName="other" enhancement="_100554_enhancementLit" />
 
 import { IDesignSystemTokens } from '/_100554_/l2/designSystemBase.js';
 

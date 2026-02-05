@@ -1,4 +1,4 @@
-/// <mls shortName="collabAuraLiveView" project="102020" enhancement="_100554_enhancementLit" />
+/// <mls fileReference="_102020_/l2/collabAuraLiveView.ts" enhancement="_100554_enhancementLit" />
 
 import { html, repeat } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';

@@ -1,4 +1,4 @@
-/// <mls shortName="enhancementAura" project="102020" enhancement="_blank" />
+/// <mls fileReference="_102020_/l2/enhancementAura.ts" enhancement="_blank" />
 
 import { convertFileNameToTag } from '/_102027_/l2/utils.js'
 import { getPropierties } from '/_102027_/l2/propiertiesLit.js'

@@ -1,4 +1,4 @@
-/// <mls shortName="aura" project="102020" enhancement="_blank" />
+/// <mls fileReference="_102020_/l2/aura.ts" enhancement="_blank" />
 
 const pendingRequests: Record<string, any> = {};
 

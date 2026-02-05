@@ -1,2 +1,2 @@
-/// <mls shortName="enhancementAura" project="102020" enhancement="_blank" folder="" />
+/// <mls fileReference="_102020_/l2/enhancementAura.defs.ts" enhancement="_blank" />
 

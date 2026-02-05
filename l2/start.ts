@@ -1,4 +1,4 @@
-/// <mls shortName="start" project="102020" enhancement="_blank" />
+/// <mls fileReference="_102020_/l2/start.ts" enhancement="_blank" />
 
 export function start() {
     console.info('start collab aura');

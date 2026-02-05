@@ -1,4 +1,4 @@
-/// <mls shortName="build" project="102020" enhancement="_blank" />
+/// <mls fileReference="_102020_/l2/build.ts" enhancement="_blank" />
 
 import { createAllModels, readProjectTypescriptAndCompileL1 } from '/_100554_/l2/collabLibModel.js';
 import { createStorFile, IReqCreateStorFile } from '/_100554_/l2/collabLibStor.js';

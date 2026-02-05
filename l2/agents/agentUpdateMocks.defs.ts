@@ -1,2 +1,2 @@
-/// <mls shortName="agentUpdateMocks" project="102020" enhancement="_blank" folder="agents" />
+/// <mls fileReference="_102020_/l2/agents/agentUpdateMocks.defs.ts" enhancement="_blank" />
 
