@@ -1,4 +1,4 @@
-/// <mls shortName="auraOrganismBase" project="102020" enhancement="_100554_enhancementLit" />
+/// <mls fileReference="_102020_/l2/auraOrganismBase.ts" enhancement="_100554_enhancementLit" />
 
 import { html, LitElement } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
