@@ -1,4 +1,4 @@
-/// <mls shortName="agentNewPrototypeFeedback" project="102020" enhancement="_100554_enhancementLit" folder="agents" />
+/// <mls fileReference="_102020_/l2/agents/agentNewPrototypeFeedback.ts" enhancement="_100554_enhancementLit" />
 
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
