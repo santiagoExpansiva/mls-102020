@@ -1,4 +1,4 @@
-/// <mls shortName="agentNewPrototype2" project="102020" enhancement="_blank" folder="agents" />
+/// <mls fileReference="_102020_/l2/agents/agentNewPrototype2.test.ts" enhancement="_blank" />
 
  import { ICANTest, ICANIntegration, ICANSchema  } from '/_100554_/l2/tsTestAST.js';
  export const integrations: ICANIntegration[] = [];
