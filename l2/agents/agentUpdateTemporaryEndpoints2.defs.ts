@@ -1,2 +1,2 @@
-/// <mls shortName="agentUpdateTemporaryEndpoints2" project="102020" enhancement="_blank" folder="agents" />
+/// <mls fileReference="_102020_/l2/agents/agentUpdateTemporaryEndpoints2.defs.ts" enhancement="_blank" />
 
