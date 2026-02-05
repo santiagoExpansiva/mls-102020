@@ -1,2 +1,2 @@
-/// <mls shortName="build" project="102020" enhancement="_blank" folder="" />
+/// <mls fileReference="_102020_/l2/build.defs.ts" enhancement="_blank" />
 
