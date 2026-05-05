@@ -69,7 +69,7 @@ export class WidgetGenoma102020 extends StateLitElement {
             (file) => file.extension === '.html' && file.folder.startsWith('molecules') && file.shortName !== 'index'
         );
 
-        // Group files by folder (without 'molecules/' prefix, lowercased)
+            // Group files by folder (without 'molecules/' prefix, lowercased)
         const folderMap = new Map<string, mls.stor.IFileInfo[]>();
         for (const file of htmlFiles) {
             const folderKey = file.folder.replace(/^molecules\//, '').toLowerCase();
