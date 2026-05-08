@@ -18,25 +18,11 @@ export function createAgent(): IAgentAsync {
         agentFolder: "agents",
         agentDescription: "New agent",
         visibility: "public",
-        beforePromptAtomic,
         beforePromptImplicit,
         beforePromptStep,
         afterPromptStep,
     };
 }
-
-async function beforePromptAtomic(
-    agent: IAgentMeta,
-    context: mls.msg.ExecutionContext,
-    file: mls.stor.IFileInfo,
-    userPrompt: string,
-): Promise<mls.msg.AgentIntent[]> {
-
-    if (userPrompt) throw new Error(`[beforePromptAtomic] invalid args: '${userPrompt}'`);
-
-    return [];
-
-};
 
 async function beforePromptImplicit(
     agent: IAgentMeta,
@@ -45,8 +31,10 @@ async function beforePromptImplicit(
 ): Promise<mls.msg.AgentIntent[]> {
 
     if (!userPrompt || userPrompt.length < 5) throw new Error('invalid prompt');
+
+    const data: { group: string, fileReference: string } = JSON.parse(userPrompt);
     const baseMolecule = await getBaseMolecule();
-    const userPrompt2 = await getSystemUser(context, userPrompt);
+    const userPrompt2 = await getSystemUser(context, data.fileReference);
 
     const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
         type: "add-message-ai",
@@ -68,6 +56,7 @@ async function beforePromptImplicit(
             taskTitle: `Creating molecule`,
             threadId: context.message.threadId,
             userMessage: context.message.content,
+            longTermMemory: { group : data.group }
         }
     };
     return [addMessageAI];
@@ -117,7 +106,7 @@ async function getSystemUser(context: mls.msg.ExecutionContext, fileReference: s
     const data = await getMoleculeSkill(files.defs);
     const skillByGroup = await getGroupSkill(data.group);
     const tagName = convertFileToTag(path);
-    await appendLongTermMemory(context, { 'group': data.group });
+    if(context.task) await appendLongTermMemory(context, { 'group': data.group });
 
     const system2 = `
 
@@ -185,7 +174,7 @@ async function processOutput(context: mls.msg.ExecutionContext, output: Result):
     const parsed = Number(fixCountRaw);
     const fixCount = Number.isNaN(parsed) ? 0 : parsed;
 
-    if (data.hasErrors && fixCount < MaxFixEffort) {
+    if (data.hasErrors && fixCount < MaxFixEffort && !context.isTest) {
 
         console.info('Chamando agent fix');
 
@@ -218,6 +207,8 @@ async function processOutput(context: mls.msg.ExecutionContext, output: Result):
 
     console.info({ ref: data.fileReference, group: group });
 
+    if (context.isTest) return [];
+
     const newStep: mls.msg.AgentIntentAddStep = {
         type: "add-step",
         messageId: context.message.orderAt,
@@ -243,7 +234,7 @@ async function processOutput(context: mls.msg.ExecutionContext, output: Result):
 
 async function updateFiles(context: mls.msg.ExecutionContext, result: Result) {
 
-    const molecule = result.ts;
+    const molecule = result.ts; 
     const fileReference = molecule.trim().split('\n')[0];
     const tripleSlash = mls.common.tripleslash.parseXMLTripleSlash(fileReference);
     let fileInfo = mls.stor.convertFileReferenceToFile(tripleSlash.variables['fileReference']);
