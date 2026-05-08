@@ -28,7 +28,6 @@ async function beforePromptImplicit(
     if (!userPrompt || userPrompt.length < 5) throw new Error('invalid prompt');
 
     const data: { group: string, fileReference: string } = JSON.parse(userPrompt);
-    console.info({ data });
 
     const path = mls.stor.getPathToFile(data.fileReference);
     const files = await mls.stor.getFiles({ ...path, loadContent: false });
@@ -55,6 +54,7 @@ async function beforePromptImplicit(
             taskTitle: `Prepare playground`,
             threadId: context.message.threadId,
             userMessage: context.message.content,
+            longTermMemory: { "group": data.group }
         }
     };
     return [addMessageAI];

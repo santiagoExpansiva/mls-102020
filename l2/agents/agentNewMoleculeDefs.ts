@@ -101,6 +101,8 @@ async function afterPromptStep(
         status
     };
 
+    if(context.isTest) return [updateStatus];
+
     const newStep: mls.msg.AgentIntentAddStep = {
         type: "add-step",
         messageId: context.message.orderAt,
