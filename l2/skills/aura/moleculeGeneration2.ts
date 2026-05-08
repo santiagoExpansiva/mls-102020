@@ -52,7 +52,7 @@ import { html, ...} from 'lit';
 import { customElement, ... } from 'lit/decorators.js';
 
 // Data Binding decorators
-import { propertyDataSource, propertyCompositeDataSource } from '/_102029_/l2/collabDecorators';
+import { propertyDataSource, propertyCompositeDataSource } from '/_102029_/l2/collabDecorators.js';
 
 // Base Class
 import { MoleculeAuraElement } from '/_102033_/l2/moleculeBase.js';
@@ -674,7 +674,7 @@ render() {
 
 import { html, ...(anothers if need) } from 'lit';
 import { customElement ...(anothers if need) } from 'lit/decorators.js';
-import { propertyDataSource } from '/_102029_/l2/collabDecorators';
+import { propertyDataSource } from '/_102029_/l2/collabDecorators.js';
 import { MoleculeAuraElement } from '/_102033_/l2/moleculeBase.js';
 
 /// **collab_i18n_start**
