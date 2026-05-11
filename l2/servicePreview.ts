@@ -2,7 +2,7 @@
 
 import { html, css } from 'lit';
 import { customElement, property, state, query } from 'lit/decorators.js';
-import { globalState, setState, initState, getState } from '/_102027_/l2/collabState.js';
+import { globalState, setState, initState, getState, subscribe } from '/_102027_/l2/collabState.js';
 import { getPath } from '/_102027_/l2/utils.js';
 import { convertFileToTag } from '/_102020_/l2/utils.js';
 import { getTokensCss, getTokensLess, removeTokensFromSource } from '/_102027_/l2/designSystemBase.js';
@@ -89,13 +89,16 @@ export class ServicePreview extends ServiceBase {
 
   get confE() { return `l${this.level}_${this.position}`; }
 
+  get isL3(): boolean { return this.level === 3; }
+
   constructor() {
     super();
     (window as any).preview = {
       editor: undefined,
       iframe: undefined,
+      refresh: undefined
     };
-    initState('preview', { pausePreview: false, service: this });
+    this.initStatesPreview();
   }
 
   public details: IService = {
@@ -105,7 +108,7 @@ export class ServicePreview extends ServiceBase {
     tooltip: 'Aura Preview',
     visible: true,
     widget: '_102020_servicePreview',
-    level: [2]
+    level: [2, 3]
   }
 
   public onClickMain(op: string): void {
@@ -129,7 +132,7 @@ export class ServicePreview extends ServiceBase {
   public onClickTools(op: string) {
 
     if (op === 'watchPreview') this.toogleWatch();
-    else if (op === 'languages') this.changeLanguage();
+    else if (op === 'languages') this.onChangeLanguage();
     else if (op === 'darkLight') this.toggleDarkLight();
   }
 
@@ -184,8 +187,29 @@ export class ServicePreview extends ServiceBase {
   }
 
   private setEvents() {
-    mls.events.addEventListener([2], ['FileAction'], this.onFileAction.bind(this));
-    mls.events.addEventListener([2], ['styleChanged' as any], this.onStyleChanged.bind(this));
+    mls.events.addEventListener([this.level], ['FileAction'], this.onFileAction.bind(this));
+    mls.events.addEventListener([this.level], ['styleChanged' as any], this.onStyleChanged.bind(this));
+  }
+
+  handleIcaStateChange(key: string, value: any) {
+    if (key === 'preview.language') {
+      this.changeLanguagePreview(value);
+    }
+  }
+
+  private initStatesPreview() {
+    initState('preview', { pausePreview: false, service: this, language: 'en' });
+    initState('previewL3', {
+      selectedElement: null,       // selector do elemento selecionado
+      selectedTagName: '',
+      selectedAttributes: {},
+      selectedStyles: {},
+      selectedRect: null,
+      breadcrumb: [],
+      editMode: 'select',          // 'select' | 'text' | 'drag' | 'inspect'
+      hoveredElement: null,
+      panelVisible: true,
+    });
   }
 
   // Implementations
@@ -199,16 +223,14 @@ export class ServicePreview extends ServiceBase {
 
   private toggleDarkLight() {
     this.light = !this.light;
-    if (!mls.actual[2].left || !this.watch) return this.light;
+    if (!mls.actual[this.level].left || !this.watch) return this.light;
 
     const htmlEl: HTMLHtmlElement | undefined = this.getIframePreviewHTML();
     if (htmlEl) {
       if (this.light) {
-        // Light mode: remove both Tailwind class and custom data-theme
         htmlEl.removeAttribute('data-theme');
         htmlEl.classList.remove('dark');
       } else {
-        // Dark mode: add Tailwind class 'dark' + data-theme for custom tokens/less
         htmlEl.setAttribute('data-theme', 'dark');
         htmlEl.classList.add('dark');
       }
@@ -218,18 +240,33 @@ export class ServicePreview extends ServiceBase {
     return this.light;
   }
 
-  private changeLanguage() {
+  private async changeLanguagePreview(lang: string) {
+
+    const hasLang = Object.values(this.languages).findIndex((item) => item.acronym === lang);
+  
+    if (hasLang === -1) {
+      await this.setLanguages();
+    }
+    const htmlEl: HTMLHtmlElement | undefined = this.getIframePreviewHTML();
+    if (htmlEl) htmlEl.lang = lang;
+    this.lang = lang;
+    const variation = Object.values(this.languages).findIndex((item) => item.acronym === lang)
+    globalState.globalVariation = !isNaN(variation) ? variation : 0;
+    this.menu.tools.languages.selected = variation;
+    if (this.menu.refresh) this.menu.refresh('tools');
+    if (window.top) (window.top.window as any).globalVariation = !isNaN(variation) ? variation : 0;
+    this.createPreview();
+
+  }
+
+
+  private onChangeLanguage() {
 
     if (this.menu.tools.languages.selected === undefined) return;
     const opMenu = this.menu.tools.languages.options[this.menu.tools.languages.selected as number].text;
-    const htmlEl: HTMLHtmlElement | undefined = this.getIframePreviewHTML();
-    if (htmlEl) htmlEl.lang = this.languages[opMenu].acronym;
-    this.lang = this.languages[opMenu].acronym;
-    const variation = Object.keys(this.languages).indexOf(opMenu);
+    const lang = this.languages[opMenu].acronym;
 
-    globalState.globalVariation = !isNaN(variation) ? variation : 0;
-    if (window.top) (window.top.window as any).globalVariation = !isNaN(variation) ? variation : 0;
-    this.createPreview();
+    setState('preview.language', lang);
 
     return true;
   }
@@ -259,9 +296,10 @@ export class ServicePreview extends ServiceBase {
 
   private onFileAction(ev: mls.events.IEvent) {
 
-    if (![2].includes(ev.level) || (ev.type !== 'FileAction') || !ev.desc) return;
+
+    if (![2, 3].includes(ev.level) || (ev.type !== 'FileAction') || !ev.desc) return;
     const fileAction = JSON.parse(ev.desc) as mls.events.IFileAction;
-    const eventsValid = ['open', 'openBackground', 'statusOrErrorChanged', 'changed', 'new', 'modeCreated', 'editorChanged', 'openLink'];
+    const eventsValid = ['open', 'openBackground', 'statusOrErrorChanged', 'changed', 'new', 'modeCreated', 'editorChanged', 'openLink', 'editorEvents'];
 
     try {
       if (fileAction.position === this.position || !eventsValid.includes(fileAction.action)) return;
@@ -293,8 +331,8 @@ export class ServicePreview extends ServiceBase {
   private async setActualFileInfos() {
 
     this.setLastOpenedFile();
-    if (!mls.actual[2].left) return;
-    const { project, shortName, folder } = mls.actual[2].left as mls.stor.IFileInfo;
+    if (!mls.actual[this.level].left) return;
+    const { project, shortName, folder } = mls.actual[this.level].left as mls.stor.IFileInfo;
     this.project = project;
     this.shortName = shortName;
     this.folder = folder;
@@ -306,41 +344,69 @@ export class ServicePreview extends ServiceBase {
   }
 
   private setLastOpenedFile() {
-    if (!mls.actual[2].left) {
-      const lastFileOpened = getLastOpenedFiles(mls.actualProject || 0);
+    if (!mls.actual[this.level].left) {
 
-      if (!lastFileOpened || !lastFileOpened['2']) {
-        this.clearPreview();
+      // L3: fallback para o arquivo aberto no L2
+      if (this.isL3 && mls.actual[2]?.left) {
+        const l2Info = mls.actual[2].left as mls.stor.IFileInfo;
+        mls.actual[this.level].setFullName(`_${l2Info.project}_/l2/${l2Info.folder ? l2Info.folder + '/' : ''}${l2Info.shortName}`);
         return;
       }
 
-      const lastFileLeft = (lastFileOpened['2'] as OpenedFileL2).left;
+      const lastFileOpened = getLastOpenedFiles(mls.actualProject || 0);
+
+      // Tenta o level atual, senão fallback pro L2
+      const levelKey = String(this.level);
+      const fallbackKey = this.isL3 ? '2' : levelKey;
+      let targetKey = levelKey;
+
+      if (!lastFileOpened || !lastFileOpened[targetKey as any]) {
+        if (this.isL3 && lastFileOpened && lastFileOpened[fallbackKey as any]) {
+          targetKey = fallbackKey;
+        } else {
+          this.clearPreview();
+          return;
+        }
+      }
+
+      const lastFileLeft = (lastFileOpened[targetKey as any] as OpenedFileL2).left;
       if (!lastFileLeft) {
         this.clearPreview();
         return;
       }
 
-      mls.actual[2].setFullName(lastFileLeft);
+      mls.actual[this.level].setFullName(lastFileLeft);
       const infoLast = getPath(lastFileLeft);
       if (!infoLast) throw new Error('[servicePreview] Not found path:' + lastFileLeft);
 
-      const key = mls.stor.getKeyToFiles(infoLast.project, 2, infoLast.shortName, infoLast.folder, '.ts');
+      const key = mls.stor.getKeyToFiles(infoLast.project, this.level, infoLast.shortName, infoLast.folder, '.ts');
       const file = mls.stor.files[key];
       if (!file) {
-        this.clearPreview();
-        return;
+        // L3: tenta buscar o file no level 2
+        if (this.isL3) {
+          const keyL2 = mls.stor.getKeyToFiles(infoLast.project, 2, infoLast.shortName, infoLast.folder, '.ts');
+          const fileL2 = mls.stor.files[keyL2];
+          if (!fileL2) {
+            this.clearPreview();
+            return;
+          }
+        } else {
+          this.clearPreview();
+          return;
+        }
       }
 
     }
   }
 
   private async setActualFiles(project: number, shortName: string, folder: string) {
+    const storLevel = this.isL3 ? 2 : this.level;
     const files = await mls.stor.getFiles({
       folder,
       project,
       shortName,
       loadContent: true,
-      level: 2
+      level: storLevel
     });
     this.actualFiles = { ...files };
   }
@@ -368,12 +434,13 @@ export class ServicePreview extends ServiceBase {
 
   }
 
-
   private createPreview() {
+
+    this.initStatesPreview();
+    this.clearPreview();
 
     const container = this.querySelector('#preview-container') as HTMLElement;
     if (!container) return;
-
     container.innerHTML = '';
 
     const wrapper = document.createElement('div');
@@ -391,8 +458,10 @@ export class ServicePreview extends ServiceBase {
 
     (window as any).preview.iframe = iframe;
 
-    iframe.addEventListener('load', () => {
-      this.writePreviewContent(iframe);
+    iframe.addEventListener('load', async () => {
+
+      await this.writePreviewContent(iframe);
+      this.loading = false;
 
       // Apply current dark/light state and language to the new iframe
       const htmlEl = iframe.contentDocument?.querySelector('html');
@@ -407,6 +476,7 @@ export class ServicePreview extends ServiceBase {
     });
 
     this.configureTools(true);
+    this.loading = true;
     if (this.actualFiles && this.actualFiles.html) this.setModel(this.actualFiles.html);
 
   }
@@ -424,7 +494,19 @@ export class ServicePreview extends ServiceBase {
 
       const domVirtual = document.createElement('div');
       domVirtual.innerHTML = this.actualFiles.htmlContent;
-      doc.body.innerHTML = domVirtual.innerHTML;
+
+      if (this.isL3) {
+        // L3: wrapa no component editor - toda lógica L3 fica no widget
+        doc.body.innerHTML = `
+          <preview-editor-l3-102020>
+            ${domVirtual.innerHTML}
+          </preview-editor-l3-102020>
+        `;
+      } else {
+        // L2: conteúdo direto
+        doc.body.innerHTML = domVirtual.innerHTML;
+      }
+
       let ret = await getDependenciesByHtml(this.actualFiles.html, this.actualFiles.htmlContent, this.actualTheme, true);
       await this.modeSinglePage(ret, iframe);
 
@@ -435,7 +517,7 @@ export class ServicePreview extends ServiceBase {
 
   private async modeSinglePage(json: IJSONDependence, iframe: HTMLIFrameElement) {
     if (!this.actualFiles || !this.actualFiles.html) return;
-    const c = new PreviewModeAura(json, iframe, '2', false, this.actualFiles.html, this.actualModels);
+    const c = new PreviewModeAura(json, iframe, String(this.level), false, this.actualFiles.html, this.actualModels);
     await c.init();
   }
 
@@ -453,8 +535,15 @@ export class ServicePreview extends ServiceBase {
   }
 
   private clearPreview() {
+
     const container = this.querySelector('#preview-container') as HTMLElement;
     if (!container) return;
+    if ((window as any).preview &&
+      (window as any).preview.iframe &&
+      (window as any).preview.iframe.contentDocument
+    ) {
+      (window as any).preview.iframe.contentDocument.body.innerHTML = '';
+    }
     container.innerHTML = '';
     (window as any).preview.iframe = undefined;
     this.configureTools(false);
@@ -465,6 +554,7 @@ export class ServicePreview extends ServiceBase {
 
   private async setLanguages() {
     const project = mls.actualProject;
+
     if (!project) {
       this.languages = {
         'English': { acronym: 'en', name: 'English' }
@@ -575,7 +665,7 @@ export class ServicePreview extends ServiceBase {
 
     (this.monacoEditor as any)['mlsEditor'] = this._ed1;
     (window as any).preview.editor = this._ed1;
-    
+
   }
 
   private async setModel(storFile: mls.stor.IFileInfo) {
@@ -619,7 +709,7 @@ export class ServicePreview extends ServiceBase {
     }
 
     this.loading = true;
-    const fullName = `_${this.project}_/l2/${this.folder ? this.folder + '/' : ''} ${this.shortName}`;
+    const fullName = `_${this.project}_/l${this.level}/${this.folder ? this.folder + '/' : ''} ${this.shortName}`;
 
     try {
       await this.fireCollab(opt.agentName, JSON.stringify({ fullName, page: this.page, prompt: value, position: 'left' }), fullName);
@@ -720,12 +810,13 @@ export class ServicePreview extends ServiceBase {
     this.createEditor();
     this.setLanguages();
     this.configureTools(false);
+    subscribe('preview.language', this)
     window.addEventListener('task-change', this.onTaskChange);
-
   }
 
   connectedCallback() {
     super.connectedCallback();
+    (window as any).preview.refresh = this.createPreview.bind(this);
     this.setEvents();
   }
 
@@ -733,7 +824,6 @@ export class ServicePreview extends ServiceBase {
     super.disconnectedCallback();
     this.clearPreview();
     window.removeEventListener('task-change', this.onTaskChange);
-
   }
 
   updated(changedProperties: Map<string | number | symbol, unknown>): void {

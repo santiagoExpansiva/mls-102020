@@ -51,6 +51,11 @@ async function getDependencies(storFile: mls.stor.IFileInfo, fileName: string, h
         modules,
     );
 
+    const previewEditorL3Import = '/_102020_/l2/previewEditorL3.js';
+    if (!importsJs.includes(previewEditorL3Import)) {
+        importsJs.push(previewEditorL3Import);
+    }
+
     let tokens: string | undefined = await getTokensCss(project, theme);
     let globalCss: string | undefined = await getGlobalCss(project, theme);
 
