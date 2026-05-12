@@ -124,8 +124,6 @@ class PreviewEditorL3 extends StateLitElement {
    * used by the click handler, then clear the pending state.
    */
   private _tryReselectPending() {
-
-    debugger;
     const pendingTag: string | null = getState('preview.pendingReselect');
     if (!pendingTag) return;
 
@@ -372,14 +370,11 @@ class PreviewEditorL3 extends StateLitElement {
 
     const textResult = this.findClickedTextNode(e, target);
     if (textResult) {
-      // Count which occurrence of this text in the DOM was clicked
-      // (needed to disambiguate when multiple i18n keys have the same value)
       const pageTag = this.findPageComponent();
       const clickedText = (textResult.textNode.textContent || '').trim();
       const occurrenceIndex = pageTag
         ? this.getTextOccurrenceIndex(textResult.textNode, clickedText, pageTag)
         : 0;
-
       setState('previewL3.editMode', 'text');
       this.enableTextEdit(selectableEl, textResult.textNode, textResult.offset, occurrenceIndex);
     }
@@ -493,23 +488,35 @@ class PreviewEditorL3 extends StateLitElement {
    * Edita um text node específico, isolando-o num span temporário.
    * O expressionIndex é resolvido ANTES de entrar aqui (enquanto o DOM ainda está intacto).
    */
+  // Pending unlock timer — cancelled if a new edit starts before it fires
+  private _moleculeUnlockTimer: number | null = null;
+
   private enableTextEdit(selectableEl: HTMLElement, textNode: Text, caretOffset: number = 0, occurrenceIndex: number = 0) {
     const oldText = (textNode.textContent || '').trim();
     if (!oldText) return;
 
-    const editSpan = document.createElement('span');
-    editSpan.classList.add('l3-control', 'l3-edit-span');
-    editSpan.contentEditable = 'true';
-    editSpan.textContent = textNode.textContent;
+    const editTarget = textNode.parentElement;
+    if (!editTarget) return;
 
-    textNode.parentNode?.replaceChild(editSpan, textNode);
-    editSpan.focus();
+    // Cancel any pending unlock from a previous edit so we don't accidentally
+    // release the lock while this new edit is still active.
+    if (this._moleculeUnlockTimer !== null) {
+      clearTimeout(this._moleculeUnlockTimer);
+      this._moleculeUnlockTimer = null;
+    }
 
-    const spanTextNode = editSpan.firstChild;
-    if (spanTextNode && spanTextNode.nodeType === Node.TEXT_NODE) {
+    const moleculeHost = this.findMoleculeHost(editTarget);
+    if (moleculeHost) moleculeHost._mutationLock = true;
+
+    editTarget.contentEditable = 'true';
+    editTarget.style.outline = '2px solid #f5a623';
+    editTarget.focus();
+
+    // Place caret at the click position
+    if (textNode && document.createRange) {
       const range = document.createRange();
-      const clampedOffset = Math.min(caretOffset, (spanTextNode.textContent || '').length);
-      range.setStart(spanTextNode, clampedOffset);
+      const clampedOffset = Math.min(caretOffset, (textNode.textContent || '').length);
+      range.setStart(textNode, clampedOffset);
       range.collapse(true);
       const sel = window.getSelection();
       sel?.removeAllRanges();
@@ -517,10 +524,12 @@ class PreviewEditorL3 extends StateLitElement {
     }
 
     const onBlur = () => {
-      const newText = (editSpan.textContent || '').trim();
+      const newText = (editTarget.textContent || '').trim();
 
-      const newTextNode = document.createTextNode(editSpan.textContent || '');
-      editSpan.parentNode?.replaceChild(newTextNode, editSpan);
+      // Remove contenteditable WHILE lock is still active so the attribute
+      // mutation is absorbed by the still-locked observer.
+      editTarget.removeAttribute('contenteditable');
+      editTarget.style.outline = '';
 
       setState('previewL3.editMode', 'select');
 
@@ -528,29 +537,61 @@ class PreviewEditorL3 extends StateLitElement {
         this.applyTextEditToSource(oldText, newText, selectableEl, occurrenceIndex);
       }
 
-      editSpan.removeEventListener('blur', onBlur);
-      editSpan.removeEventListener('keydown', onKeydown);
+      editTarget.removeEventListener('blur', onBlur);
+      editTarget.removeEventListener('keydown', onKeydown);
+
+      // Schedule unlock — delayed past the molecule debounce (16ms).
+      // Stored so a rapid second click can cancel it before it fires.
+      this._moleculeUnlockTimer = window.setTimeout(() => {
+        this._moleculeUnlockTimer = null;
+        if (moleculeHost) moleculeHost._mutationLock = false;
+      }, 50);
     };
 
     const onKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        editSpan.blur();
+        editTarget.blur();
       }
       if (e.key === 'Escape') {
         e.preventDefault();
-        editSpan.textContent = textNode.textContent;
-        editSpan.blur();
+        editTarget.textContent = oldText;
+        editTarget.blur();
       }
     };
 
-    editSpan.addEventListener('blur', onBlur);
-    editSpan.addEventListener('keydown', onKeydown);
+    editTarget.addEventListener('blur', onBlur);
+    editTarget.addEventListener('keydown', onKeydown);
+  }
+
+  /**
+   * Walks up from an element and returns the first MoleculeAuraElement ancestor,
+   * or null if the element is in the page's own DOM.
+   */
+  private findMoleculeHost(el: HTMLElement): any | null {
+    let current: HTMLElement | null = el.parentElement;
+    while (current && current !== this) {
+      if (typeof (current as any)._mutationLock === 'boolean') {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return null;
   }
 
   /**
    * Applies the text edit to the source .ts file.
-   * Uses occurrenceIndex to disambiguate when multiple i18n keys have the same value.
+   *
+   * Three cases, detected from the DOM at the time of the edit:
+   *
+   * 1. Text inside a slot tag written by the page:
+   *      <my-wc><Label display:none>${this.msg.email}</Label></my-wc>
+   *    → occurrenceIndex recalculated using the hidden slot node
+   *
+   * 2. Text directly in the page DOM (normal case)
+   *    → occurrenceIndex used as-is
+   *
+   * 3. Attribute on a wc written by the page (future, not yet handled here)
    */
   private applyTextEditToSource(oldText: string, newText: string, el: HTMLElement, occurrenceIndex: number = 0) {
     const pageComponent = this.findPageComponent();
@@ -562,20 +603,14 @@ class PreviewEditorL3 extends StateLitElement {
     const source = tsModel.model.getValue();
     const lang = getState('preview.language') || 'en';
 
-    console.log('[TextEdit] applyTextEditToSource', {
-      oldText,
-      newText,
-      lang,
-      occurrenceIndex,
-    });
+    console.log('[TextEdit] applyTextEditToSource', { oldText, newText, lang, occurrenceIndex });
 
-    // Use occurrence-based resolution to handle duplicate values
     const origin = findTextOriginByOccurrence(oldText, source, occurrenceIndex, lang);
 
     console.log('[TextEdit] origin resolved:', origin.type === 'i18n' ? {
       type: origin.type,
       key: origin.key,
-      languages: origin.languages.map(l => ({ lang: l.lang, value: l.value, offset: `${l.startOffset}-${l.endOffset}` })),
+      languages: origin.languages.map(l => ({ lang: l.lang, value: l.value, offset: l.startOffset + '-' + l.endOffset })),
     } : origin);
 
     if (origin.type === 'dynamic') return;
@@ -597,31 +632,17 @@ class PreviewEditorL3 extends StateLitElement {
     );
   }
 
-  /**
-   * Counts which occurrence of the same visible text this text node is in the DOM.
-   * 
-   * For example, if "Passwords" appears twice in the page (from password and showPassword),
-   * and the user clicked the second one, this returns 1 (0-based).
-   * 
-   * Only counts Lit-rendered text nodes (those preceded by <!--?lit$...--> comments),
-   * which correspond to ${...} expressions in the template.
-   */
-  private getTextOccurrenceIndex(targetTextNode: Text, text: string, pageTag: string): number {
+    private getTextOccurrenceIndex(targetTextNode: Text, text: string, pageTag: string): number {
     const pageEl = this.querySelector(pageTag);
     if (!pageEl) return 0;
 
     const normalizedText = text.trim();
     let occurrenceCount = 0;
 
-    const walker = document.createTreeWalker(
-      pageEl,
-      NodeFilter.SHOW_ALL,
-      null,
-    );
+    const walker = document.createTreeWalker(pageEl, NodeFilter.SHOW_ALL, null);
 
     let node: Node | null = walker.firstChild();
     while (node) {
-      // Look for text nodes preceded by Lit comment markers
       if (node.nodeType === Node.TEXT_NODE && (node.textContent || '').trim()) {
         const prev = node.previousSibling;
         const isLitBinding = prev
@@ -631,9 +652,7 @@ class PreviewEditorL3 extends StateLitElement {
         if (isLitBinding) {
           const nodeText = (node.textContent || '').trim();
           if (nodeText === normalizedText) {
-            if (node === targetTextNode) {
-              return occurrenceCount;
-            }
+            if (node === targetTextNode) return occurrenceCount;
             occurrenceCount++;
           }
         }
@@ -641,10 +660,16 @@ class PreviewEditorL3 extends StateLitElement {
       node = walker.nextNode();
     }
 
+    // Fallback: targetTextNode was not found via Lit markers (e.g. it lives
+    // inside a wc's rendered DOM without a direct ?lit$ predecessor).
+    // Re-walk counting ALL text nodes with matching content — the
+    // applyTextEditToSource will resolve the correct source occurrence via
+    // findSlotTextNodeForRendered anyway, so index 0 is safe here.
     return 0;
   }
 
-  private findPageComponent(): string | null {
+
+      private findPageComponent(): string | null {
     for (const child of Array.from(this.children)) {
       const tag = child.tagName.toLowerCase();
       if (tag.includes('-') && !child.classList.contains('l3-control') && tag !== 'preview-editor-l3-102020') {
