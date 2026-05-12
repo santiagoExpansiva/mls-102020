@@ -15,7 +15,6 @@ import { skills as listOfGroups } from '/_102020_/l2/skills/molecules/index.js';
 import { replaceComponentTag } from '/_102020_/l2/previewTextEditor.js';
 import { convertFileToTag } from '/_102020_/l2/utils.js';
 
-
 import '/_102027_/l2/collabSelectKnob.js';
 
 
@@ -62,6 +61,11 @@ const message_en = {
     molSelectedOnly: 'Selected only',
     molAllOccurrences: 'All occurrences',
     inDevelopment: 'In development',
+    langRemoveTitle: 'Remove language',
+    langRemoveBtn: 'Remove',
+    langRemoving: 'Removing language...',
+    langRemoveSuccess: 'Language removed successfully!',
+    langRemoveError: 'Error removing language.',
 };
 type MessageType = typeof message_en;
 const messages: Record<string, MessageType> = {
@@ -107,6 +111,11 @@ const messages: Record<string, MessageType> = {
         molSelectedOnly: 'Somente selecionado',
         molAllOccurrences: 'Todas ocorrências',
         inDevelopment: 'Em desenvolvimento',
+        langRemoveTitle: 'Remover idioma',
+        langRemoveBtn: 'Remover',
+        langRemoving: 'Removendo idioma...',
+        langRemoveSuccess: 'Idioma removido com sucesso!',
+        langRemoveError: 'Erro ao remover idioma.',
     },
     es: {
         svcTitle: 'Genome',
@@ -149,6 +158,11 @@ const messages: Record<string, MessageType> = {
         molSelectedOnly: 'Solo seleccionado',
         molAllOccurrences: 'Todas las ocurrencias',
         inDevelopment: 'En desarrollo',
+        langRemoveTitle: 'Eliminar idioma',
+        langRemoveBtn: 'Eliminar',
+        langRemoving: 'Eliminando idioma...',
+        langRemoveSuccess: '¡Idioma eliminado con éxito!',
+        langRemoveError: 'Error al eliminar idioma.',
     },
 };
 /// **collab_i18n_end**
@@ -290,6 +304,9 @@ export class ServiceGenome100554 extends ServiceBase {
     @state() private _customLangApplyAll: boolean = false;
     @state() private _customLangSearch: string = '';
     @state() private _customLangDropdownOpen: boolean = false;
+
+    // remove language scope state
+    @state() private _removeLangApplyAll: boolean = false;
 
     // molecules dynamic config (loaded from context)
     @state() private _moleculesConfig: IKnobConfig = {
@@ -725,6 +742,15 @@ export class ServiceGenome100554 extends ServiceBase {
             return;
         }
 
+        // Also check if a remove task is running
+        const removeTaskKey = `remove-language:${langLabel}`;
+        const removeTask = this._pendingTasks.get(removeTaskKey);
+        if (removeTask && removeTask.status === 'running') {
+            this._languageStatus = { state: 'applied', lang: langLabel };
+            this.requestUpdate();
+            return;
+        }
+
         const exists = await this.checkHasLanguageInActualPage(langLabel);
 
         if (exists) {
@@ -893,11 +919,86 @@ export class ServiceGenome100554 extends ServiceBase {
         this.requestUpdate();
     }
 
+    // ─── Remove Language ──────────────────────────────────────────────
+
+    private async removeLanguage(lang: string, applyAll: boolean) {
+        console.log('[ServiceGenome] removeLanguage:', lang, 'applyAll:', applyAll);
+
+        const taskKey = `remove-language:${lang}`;
+
+        const existing = this._pendingTasks.get(taskKey);
+        if (existing && existing.status === 'running') {
+            console.log('[ServiceGenome] Remove agent already running for:', taskKey);
+            return;
+        }
+
+        if (!this._actualPage) return;
+
+        this._pendingTasks.set(taskKey, { status: 'running', startedAt: Date.now() });
+        this.requestUpdate();
+
+        try {
+            const data: { languages: string[]; fileReference: string }[] = [];
+
+            if (applyAll && this._actualPages.length > 0) {
+                for (const fileInfo of this._actualPages) {
+                    const { project, shortName, folder, extension } = fileInfo;
+                    data.push({
+                        languages: [lang],
+                        fileReference: `_${project}_/l2/${folder ? folder + '/' : ''}${shortName}${extension}`,
+                    });
+                }
+            } else {
+                const { project, shortName, folder, extension } = this._actualPage.storFile;
+                data.push({
+                    languages: [lang],
+                    fileReference: `_${project}_/l2/${folder ? folder + '/' : ''}${shortName}${extension}`,
+                });
+            }
+
+            await this.executeAgent('agentRemoveLanguage', JSON.stringify(data));
+
+            const stillExists = await this.checkHasLanguageInActualPage(lang);
+
+            if (!stillExists) {
+                this._pendingTasks.set(taskKey, { status: 'done', startedAt: Date.now() });
+
+                if (this._languageName === lang) {
+                    this._languageStatus = { state: 'not-in-page', lang };
+                }
+            } else {
+                this._pendingTasks.set(taskKey, { status: 'error', startedAt: Date.now(), message: this.msg.langRemoveError });
+            }
+
+            setTimeout(() => {
+                this._pendingTasks.delete(taskKey);
+                this.requestUpdate();
+            }, 3000);
+
+        } catch (err) {
+            console.error('[ServiceGenome] removeLanguage error:', err);
+            this._pendingTasks.set(taskKey, { status: 'error', startedAt: Date.now(), message: this.msg.langRemoveError });
+
+            setTimeout(() => {
+                this._pendingTasks.delete(taskKey);
+                this.requestUpdate();
+            }, 3000);
+        }
+
+        this.requestUpdate();
+    }
+
     // ─── Language event handlers ──────────────────────────────────────
 
     private _onGenerateLanguageForPage() {
         if (this._languageStatus.state === 'not-in-page') {
             this.generateLanguage(this._languageStatus.lang, false);
+        }
+    }
+
+    private _onRemoveLanguageClick() {
+        if (this._languageStatus.state === 'applied') {
+            this.removeLanguage(this._languageStatus.lang, this._removeLangApplyAll);
         }
     }
 
@@ -1467,9 +1568,75 @@ export class ServiceGenome100554 extends ServiceBase {
         const currentLang = this._languageStatus.state === 'not-in-page' || this._languageStatus.state === 'applied'
             ? this._languageStatus.lang
             : null;
+
+        // Check for add-language pending task
         const taskKey = currentLang ? `language:${currentLang}` : null;
         const task = taskKey ? this._pendingTasks.get(taskKey) : null;
 
+        // Check for remove-language pending task
+        const removeTaskKey = currentLang ? `remove-language:${currentLang}` : null;
+        const removeTask = removeTaskKey ? this._pendingTasks.get(removeTaskKey) : null;
+
+        // Show remove task status if active
+        if (removeTask) {
+            switch (removeTask.status) {
+                case 'running':
+                    return html`
+                        <div class="
+                            flex items-center gap-3 px-3 py-3 rounded-lg
+                            bg-red-50 dark:bg-red-900/20
+                            border border-red-200 dark:border-red-800
+                        ">
+                            <svg class="w-4 h-4 animate-spin text-red-600 dark:text-red-400" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                    style="opacity:0.25"></circle>
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
+                            </svg>
+                            <div class="flex flex-col gap-0.5">
+                                <span class="text-xs text-red-700 dark:text-red-400 font-medium">
+                                    ${this.msg.langRemoving}
+                                </span>
+                                <span class="text-[10px] font-mono text-red-500 dark:text-red-500">
+                                    ${currentLang}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+
+                case 'done':
+                    return html`
+                        <div class="
+                            flex items-center gap-2 px-3 py-2 rounded-lg
+                            bg-emerald-50 dark:bg-emerald-900/20
+                            border border-emerald-200 dark:border-emerald-800
+                        ">
+                            <span class="text-sm">✓</span>
+                            <span class="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                                ${this.msg.langRemoveSuccess}
+                            </span>
+                            <span class="text-xs text-emerald-600 dark:text-emerald-300 font-semibold">
+                                ${currentLang}
+                            </span>
+                        </div>
+                    `;
+
+                case 'error':
+                    return html`
+                        <div class="
+                            flex items-center gap-2 px-3 py-2 rounded-lg
+                            bg-red-50 dark:bg-red-900/20
+                            border border-red-200 dark:border-red-800
+                        ">
+                            <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                            <span class="text-xs text-red-700 dark:text-red-400 font-medium">
+                                ${removeTask.message || this.msg.langRemoveError}
+                            </span>
+                        </div>
+                    `;
+            }
+        }
+
+        // Show add task status if active
         if (task) {
             switch (task.status) {
                 case 'running':
@@ -1544,6 +1711,99 @@ export class ServiceGenome100554 extends ServiceBase {
                         <span class="text-xs text-emerald-600 dark:text-emerald-300 font-semibold">
                             ${this._languageStatus.lang}
                         </span>
+                    </div>
+
+                    <!-- Remove language section -->
+                    <div class="
+                        flex flex-col gap-3 px-3 py-3 rounded-lg
+                        bg-red-50 dark:bg-red-900/20
+                        border border-red-200 dark:border-red-800
+                    ">
+                        <div class="flex items-start gap-2">
+                            <span class="text-sm mt-0.5">🗑</span>
+                            <div class="flex flex-col gap-0.5">
+                                <span class="text-xs font-medium text-red-700 dark:text-red-400">
+                                    ${this.msg.langRemoveTitle}
+                                </span>
+                                <span class="
+                                    text-[10px] font-mono px-1.5 py-0.5 rounded inline-block w-fit
+                                    bg-red-100 dark:bg-red-800/40
+                                    text-red-700 dark:text-red-300
+                                ">
+                                    ${this._languageStatus.lang}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-4">
+                            <label class="
+                                inline-flex items-center gap-1.5 cursor-pointer
+                                text-[11px] text-gray-500 dark:text-gray-400
+                            ">
+                                <input
+                                    type="radio"
+                                    name="removeLangScope"
+                                    .checked=${!this._removeLangApplyAll}
+                                    @change=${() => { this._removeLangApplyAll = false; this.requestUpdate(); }}
+                                    class="w-3 h-3 accent-red-600"
+                                />
+                                ${this.msg.langApplyOnly}
+                            </label>
+                            <label class="
+                                inline-flex items-center gap-1.5 cursor-pointer
+                                text-[11px] text-gray-500 dark:text-gray-400
+                            ">
+                                <input
+                                    type="radio"
+                                    name="removeLangScope"
+                                    .checked=${this._removeLangApplyAll}
+                                    @change=${() => { this._removeLangApplyAll = true; this.requestUpdate(); }}
+                                    class="w-3 h-3 accent-red-600"
+                                />
+                                ${this.msg.langApplyAll}
+                            </label>
+                        </div>
+
+                        ${this._removeLangApplyAll && this._actualPages.length > 0
+                            ? html`
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-[10px] font-medium text-gray-400 dark:text-gray-600 uppercase tracking-wider">
+                                        ${this.msg.langAffectedPages} (${this._actualPages.length})
+                                    </span>
+                                    <div class="
+                                        flex flex-col gap-0.5
+                                        max-h-24 overflow-y-auto
+                                        px-2 py-1.5 rounded
+                                        bg-white dark:bg-gray-800
+                                        border border-gray-200 dark:border-gray-700
+                                    ">
+                                        ${this._actualPages.map(f => html`
+                                            <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 truncate">
+                                                ${f.shortName}${f.extension}
+                                            </span>
+                                        `)}
+                                    </div>
+                                </div>
+                            `
+                            : nothing}
+
+                        <div class="flex justify-end">
+                            <button
+                                class="
+                                    inline-flex items-center gap-1.5
+                                    px-3 py-1.5 rounded-lg
+                                    text-xs font-medium cursor-pointer
+                                    bg-red-600 text-white
+                                    hover:bg-red-700
+                                    dark:bg-red-500 dark:hover:bg-red-600
+                                    transition-colors duration-150 shadow-sm
+                                "
+                                @click=${this._onRemoveLanguageClick}
+                            >
+                                <span>🗑</span>
+                                ${this.msg.langRemoveBtn}
+                            </button>
+                        </div>
                     </div>
                 `;
 
