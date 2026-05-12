@@ -5,6 +5,7 @@ import { customElement, property, state, query } from 'lit/decorators.js';
 import { globalState, setState, initState, getState, subscribe, unsubscribe } from '/_102027_/l2/collabState.js';
 import { findTextOrigin, findTextOriginByIndex, findTextOriginByOccurrence, buildTemplateMap, applyTextEdit } from '/_102020_/l2/previewTextEditor.js';
 
+
 /// **collab_i18n_start**
 const message_pt = {
   attributes: 'Atributos',
@@ -100,6 +101,9 @@ class PreviewEditorL3 extends StateLitElement {
 
     window.addEventListener('scroll', this.onScrollResize);
     window.addEventListener('resize', this.onScrollResize);
+
+    // Re-select the molecule element that was swapped before the iframe repainted
+    this._tryReselectPending();
   }
 
   // --- Idioma ---
@@ -107,6 +111,60 @@ class PreviewEditorL3 extends StateLitElement {
   private setLanguage() {
     const lang = getState('preview.language') || 'en';
     this.msg = messages[lang] || messages['en'];
+  }
+
+  // --- Reselect after molecule swap ---
+
+  /**
+   * After a molecule tag swap the preview rebuilds the iframe, losing the
+   * selection.  serviceGenome stores the new tag in 'preview.pendingReselect'
+   * before triggering forceModelUpdate.  Here (first render of the fresh
+   * previewEditorL3 instance) we read that tag, find the first matching
+   * element in the DOM and programmatically fire the same selection logic
+   * used by the click handler, then clear the pending state.
+   */
+  private _tryReselectPending() {
+
+    debugger;
+    const pendingTag: string | null = getState('preview.pendingReselect');
+    if (!pendingTag) return;
+
+    // Clear immediately so a later re-render doesn't re-trigger
+    setState('preview.pendingReselect', null);
+
+    // The child components may not be upgraded yet — wait two animation frames
+    // so Lit finishes rendering the page component before we query the DOM.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this._reselectTag(pendingTag);
+      });
+    });
+  }
+
+  private _reselectTag(tag: string) {
+    // Find the element inside ourselves (excluding our own control overlays)
+    const el = this.querySelector(tag) as HTMLElement | null;
+    if (!el) {
+      console.log('[PreviewEditorL3] pendingReselect: element not found for tag:', tag);
+      return;
+    }
+
+    console.log('[PreviewEditorL3] pendingReselect: reselecting', tag, el);
+
+    const selectableEl = this.resolveSelectableElement(el);
+    this.selectedElementRef = selectableEl;
+    const selector = this.buildSelector(selectableEl);
+
+    setState('previewL3.selectedElement', selector);
+    setState('previewL3.selectedTagName', selectableEl.tagName.toLowerCase());
+    setState('previewL3.selectedAttributes', this.getAttributes(selectableEl));
+    setState('previewL3.selectedStyles', this.getRelevantStyles(selectableEl));
+    setState('previewL3.selectedRect', selectableEl.getBoundingClientRect());
+    setState('previewL3.breadcrumb', this.buildBreadcrumb(selectableEl));
+
+    this.updateBreadcrumb();
+    this.showPropertiesPanel();
+    this.notifyHost('element-select', selectableEl);
   }
 
   // --- Estilos base ---

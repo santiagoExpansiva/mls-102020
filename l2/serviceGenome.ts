@@ -15,6 +15,7 @@ import { skills as listOfGroups } from '/_102020_/l2/skills/molecules/index.js';
 import { replaceComponentTag } from '/_102020_/l2/previewTextEditor.js';
 import { convertFileToTag } from '/_102020_/l2/utils.js';
 
+
 import '/_102027_/l2/collabSelectKnob.js';
 
 
@@ -670,11 +671,10 @@ export class ServiceGenome100554 extends ServiceBase {
         // Update old tag so next swap works correctly
         this._oldSelectedTag = newTag;
 
-        mls.editor.forceModelUpdate(tsModel.model)
+        // Signal the preview editor to re-select this tag after the iframe repaints
+        setState('preview.pendingReselect', newTag);
 
-        setTimeout(() => {
-            // if ((window as any).preview.refresh) (window as any).preview.refresh();
-        }, 5000);
+        mls.editor.forceModelUpdate(tsModel.model)
 
 
     }

@@ -199,7 +199,8 @@ export class ServicePreview extends ServiceBase {
   }
 
   private initStatesPreview() {
-    initState('preview', { pausePreview: !this.watch, service: this, language: this.lang });
+    const pendingReselect = getState('preview.pendingReselect')
+    initState('preview', { pausePreview: !this.watch, service: this, language: this.lang, pendingReselect });
   }
 
   private initStatesPreviewL3() {
