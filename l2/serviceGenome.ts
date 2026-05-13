@@ -6,7 +6,6 @@ import { ServiceBase, IService, IToolbarContent, IServiceMenu, IOptions } from '
 import { getConfigProject, updateConfigProject } from '/_102027_/l2/libProjectConfig.js';
 import { globalState, setState, initState, getState, subscribe, unsubscribe } from '/_102027_/l2/collabState.js';
 import { executeBeforePrompt, loadAgent } from '/_102027_/l2/aiAgentOrchestration.js'
-
 import { createThread, getUserId } from '/_102025_/l2/collabMessagesHelper.js';
 import { getThreadByName } from '/_102025_/l2/collabMessagesIndexedDB.js';
 import { getTemporaryContext } from '/_102027_/l2/aiAgentHelper.js';
@@ -14,7 +13,6 @@ import { languages as allLanguages, ICollabLanguage } from '/_102027_/l2/collabL
 import { skills as listOfGroups } from '/_102020_/l2/skills/molecules/index.js';
 import { replaceComponentTag } from '/_102020_/l2/previewTextEditor.js';
 import { convertFileToTag } from '/_102020_/l2/utils.js';
-
 
 import '/_102027_/l2/collabSelectKnob.js';
 
@@ -800,6 +798,22 @@ export class ServiceGenome100554 extends ServiceBase {
 
     // ─── External functions ───────────────────────────────────────────
 
+    private _getSharedFolder(folder: string): string {
+        const parts = folder.split('/');
+        parts[parts.length - 1] = 'shared';
+        return parts.join('/');
+    }
+
+    private _getSharedStorFile(fileInfo: mls.stor.IFileInfo): mls.stor.IFileInfo | undefined {
+        const sharedFolder = this._getSharedFolder(fileInfo.folder);
+        return Object.values(mls.stor.files).find(
+            (f) => f.project === fileInfo.project
+                && f.folder === sharedFolder
+                && f.shortName === fileInfo.shortName
+                && f.extension === fileInfo.extension
+        );
+    }
+
     private async getLanguagesInProject(): Promise<string[]> {
         const project = mls.actualProject;
         if (!project) return [];
@@ -811,6 +825,12 @@ export class ServiceGenome100554 extends ServiceBase {
 
     private async checkHasLanguageInActualPage(lang: string): Promise<boolean> {
         if (!this._actualPage) return false;
+        const sharedFile = this._getSharedStorFile(this._actualPage.storFile);
+        if (sharedFile) {
+            const modelKey = `_${sharedFile.project}_${sharedFile.folder}_${sharedFile.shortName}`;
+            const model = (mls.editor.models as any)[modelKey]?.ts?.model;
+            if (model) return this._hasLanguageInI18nBlock(model.getValue(), lang);
+        }
         const value = this._actualPage.model.getValue();
         return this._hasLanguageInI18nBlock(value, lang);
     }
@@ -863,28 +883,34 @@ export class ServiceGenome100554 extends ServiceBase {
             const data: { languages: string[]; fileReference: string }[] = [];
 
             if (applyAll && this._actualPages.length > 0) {
+                const seen = new Set<string>();
                 for (const fileInfo of this._actualPages) {
-                    const { project, shortName, folder, extension } = fileInfo;
+                    const target = this._getSharedStorFile(fileInfo) ?? fileInfo;
+                    const dedupeKey = `${target.folder}/${target.shortName}`;
+                    if (seen.has(dedupeKey)) continue;
+                    seen.add(dedupeKey);
+                    const { project, shortName, folder, extension } = target;
                     data.push({
                         languages: [lang],
                         fileReference: `_${project}_/l2/${folder ? folder + '/' : ''}${shortName}${extension}`,
                     });
                 }
             } else {
-                const { project, shortName, folder, extension } = this._actualPage.storFile;
+                const target = this._getSharedStorFile(this._actualPage.storFile) ?? this._actualPage.storFile;
+                const { project, shortName, folder, extension } = target;
                 data.push({
                     languages: [lang],
                     fileReference: `_${project}_/l2/${folder ? folder + '/' : ''}${shortName}${extension}`,
                 });
             }
 
-            await this.executeAgent('agentAddLanguage', JSON.stringify(data));
 
+
+            await this.executeAgent('agentAddLanguage', JSON.stringify(data));
             const exists = await this.checkHasLanguageInActualPage(lang);
 
             if (exists) {
                 this._pendingTasks.set(taskKey, { status: 'done', startedAt: Date.now() });
-
                 if (this._languageName === lang) {
                     this.changeActualLanguageInPreview(lang);
                     this._languageStatus = { state: 'applied', lang };
@@ -919,6 +945,7 @@ export class ServiceGenome100554 extends ServiceBase {
         this.requestUpdate();
     }
 
+
     // ─── Remove Language ──────────────────────────────────────────────
 
     private async removeLanguage(lang: string, applyAll: boolean) {
@@ -941,15 +968,21 @@ export class ServiceGenome100554 extends ServiceBase {
             const data: { languages: string[]; fileReference: string }[] = [];
 
             if (applyAll && this._actualPages.length > 0) {
+                const seen = new Set<string>();
                 for (const fileInfo of this._actualPages) {
-                    const { project, shortName, folder, extension } = fileInfo;
+                    const target = this._getSharedStorFile(fileInfo) ?? fileInfo;
+                    const dedupeKey = `${target.folder}/${target.shortName}`;
+                    if (seen.has(dedupeKey)) continue;
+                    seen.add(dedupeKey);
+                    const { project, shortName, folder, extension } = target;
                     data.push({
                         languages: [lang],
                         fileReference: `_${project}_/l2/${folder ? folder + '/' : ''}${shortName}${extension}`,
                     });
                 }
             } else {
-                const { project, shortName, folder, extension } = this._actualPage.storFile;
+                const target = this._getSharedStorFile(this._actualPage.storFile) ?? this._actualPage.storFile;
+                const { project, shortName, folder, extension } = target;
                 data.push({
                     languages: [lang],
                     fileReference: `_${project}_/l2/${folder ? folder + '/' : ''}${shortName}${extension}`,
@@ -962,13 +995,14 @@ export class ServiceGenome100554 extends ServiceBase {
 
             if (!stillExists) {
                 this._pendingTasks.set(taskKey, { status: 'done', startedAt: Date.now() });
-
                 if (this._languageName === lang) {
                     this._languageStatus = { state: 'not-in-page', lang };
                 }
             } else {
                 this._pendingTasks.set(taskKey, { status: 'error', startedAt: Date.now(), message: this.msg.langRemoveError });
             }
+
+            this.changeActualLanguageInPreview(lang);
 
             setTimeout(() => {
                 this._pendingTasks.delete(taskKey);
@@ -1774,7 +1808,7 @@ export class ServiceGenome100554 extends ServiceBase {
                         </div>
 
                         ${this._removeLangApplyAll && this._actualPages.length > 0
-                            ? html`
+                        ? html`
                                 <div class="flex flex-col gap-1">
                                     <span class="text-[10px] font-medium text-gray-400 dark:text-gray-600 uppercase tracking-wider">
                                         ${this.msg.langAffectedPages} (${this._actualPages.length})
@@ -1794,7 +1828,7 @@ export class ServiceGenome100554 extends ServiceBase {
                                     </div>
                                 </div>
                             `
-                            : nothing}
+                        : nothing}
 
                         <div class="flex justify-end">
                             <button
@@ -2090,6 +2124,7 @@ export class ServiceGenome100554 extends ServiceBase {
             </div>
         `;
     }
+
 
     // ─── Detail Badge helper ──────────────────────────────────────────
 

@@ -2,6 +2,7 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { skill as skilli18n } from '/_102020_/l2/skills/aura/language.js';
+import { waitModelIdle } from '/_102027_/l2/libModel.js';
 
 export function createAgent(): IAgentAsync {
     return {
@@ -153,7 +154,7 @@ async function processOutput(context: mls.msg.ExecutionContext, newi18n: string,
     const modelTS = await files.ts.getOrCreateModel();
     if (!modelTS) throw new Error(`[geti18nByFile] invalid models`);
     const source = modelTS.model.getValue();
-    const newValue = replaceI18nBlock(source, newi18n)
+    const newValue = replaceI18nBlock(source, newi18n);
     const paramsTs = { ...fileInfo, content: newValue, versionRef: new Date().toISOString(), extension: ".ts" };
     await updateStorFile(paramsTs);
     return [];
@@ -171,9 +172,18 @@ async function updateStorFile(params: { project: number, shortName: string, leve
 
     const file = await mls.stor.addOrUpdateFile(params);
     if (!file) throw new Error('[agentNewMolecule] Invalid storFile');
-    const path = mls.stor.getKeyToFile(params);
     const models = await file.getOrCreateModel();
-    models.model.setValue(params.content);
+    models.model.pushEditOperations(
+        [],
+        [{
+            range: models.model.getFullModelRange(),
+            text: params.content,
+        }],
+        () => null,
+    );
+
+    mls.editor.forceModelUpdate(models.model);
+    await waitModelIdle(models);
     return models;
 
 }
