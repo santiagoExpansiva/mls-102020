@@ -1,5 +1,6 @@
 /// <mls fileReference="_102020_/l2/serviceGenome.ts" enhancement="_102027_/l2/enhancementLit"/>
 
+
 import { html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { ServiceBase, IService, IToolbarContent, IServiceMenu, IOptions } from '/_102027_/l2/serviceBase.js';
@@ -43,7 +44,7 @@ const message_en = {
     langGenerateFor: 'Generate language for this page',
     langCustomTitle: 'Add custom language',
     langCustomCode: 'Language code',
-    langCustomCodePlaceholder: 'e.g. fr, de, ja',
+    langCustomCodePlaceholder: 'e.g. fr',
     langApplyAll: 'Apply to all pages',
     langApplyOnly: 'Only this page',
     langCustomGenerate: 'Generate language',
@@ -60,6 +61,13 @@ const message_en = {
     molSelectedOnly: 'Selected only',
     molAllOccurrences: 'All occurrences',
     inDevelopment: 'In development',
+    deviceNoModule: 'No module selected',
+    deviceModuleFound: 'Selected module',
+    deviceModuleMissing: 'Module not found',
+    devicePageMissing: 'Page not found in module',
+    deviceCreatePage: 'Create page',
+    deviceCreateModule: 'Create module',
+    devicePages: 'pages',
     langRemoveTitle: 'Remove language',
     langRemoveBtn: 'Remove',
     langRemoving: 'Removing language...',
@@ -93,7 +101,7 @@ const messages: Record<string, MessageType> = {
         langGenerateFor: 'Gerar idioma para essa página',
         langCustomTitle: 'Adicionar idioma customizado',
         langCustomCode: 'Código do idioma',
-        langCustomCodePlaceholder: 'ex: fr, de, ja',
+        langCustomCodePlaceholder: 'ex: fr',
         langApplyAll: 'Aplicar em todas as páginas',
         langApplyOnly: 'Somente nesta página',
         langCustomGenerate: 'Gerar idioma',
@@ -110,6 +118,13 @@ const messages: Record<string, MessageType> = {
         molSelectedOnly: 'Somente selecionado',
         molAllOccurrences: 'Todas ocorrências',
         inDevelopment: 'Em desenvolvimento',
+        deviceNoModule: 'Nenhum módulo selecionado',
+        deviceModuleFound: 'Módulo selecionado',
+        deviceModuleMissing: 'Módulo não encontrado',
+        devicePageMissing: 'Página não encontrada no módulo',
+        deviceCreatePage: 'Criar página',
+        deviceCreateModule: 'Criar módulo',
+        devicePages: 'páginas',
         langRemoveTitle: 'Remover idioma',
         langRemoveBtn: 'Remover',
         langRemoving: 'Removendo idioma...',
@@ -140,7 +155,7 @@ const messages: Record<string, MessageType> = {
         langGenerateFor: 'Generar idioma para esta página',
         langCustomTitle: 'Agregar idioma personalizado',
         langCustomCode: 'Código del idioma',
-        langCustomCodePlaceholder: 'ej: fr, de, ja',
+        langCustomCodePlaceholder: 'ej: fr',
         langApplyAll: 'Aplicar en todas las páginas',
         langApplyOnly: 'Solo en esta página',
         langCustomGenerate: 'Generar idioma',
@@ -157,6 +172,13 @@ const messages: Record<string, MessageType> = {
         molSelectedOnly: 'Solo seleccionado',
         molAllOccurrences: 'Todas las ocurrencias',
         inDevelopment: 'En desarrollo',
+        deviceNoModule: 'Ningún módulo seleccionado',
+        deviceModuleFound: 'Módulo seleccionado',
+        deviceModuleMissing: 'Módulo no encontrado',
+        devicePageMissing: 'Página no encontrada en el módulo',
+        deviceCreatePage: 'Crear página',
+        deviceCreateModule: 'Crear módulo',
+        devicePages: 'páginas',
         langRemoveTitle: 'Eliminar idioma',
         langRemoveBtn: 'Eliminar',
         langRemoving: 'Eliminando idioma...',
@@ -183,6 +205,12 @@ type LanguageStatus =
     | { state: 'applied'; lang: string }
     | { state: 'not-in-page'; lang: string }
     | { state: 'custom' };
+
+type DeviceStatus =
+    | { state: 'idle' }
+    | { state: 'page-found'; files: any[] }
+    | { state: 'module-found'; shortName: string; files: any[] }
+    | { state: 'module-missing'; targetPath: string };
 
 // ─── Pending agent tasks (generic for all knob types) ────────────────
 
@@ -311,6 +339,10 @@ export class ServiceGenome100554 extends ServiceBase {
     @state() private _moleculesConfig: IKnobConfig = {
         key: 'molecules', min: 1, max: 1, labels: {}, disabled: true,
     };
+
+    // device scenario status
+    @state() private _deviceStatus: DeviceStatus = { state: 'idle' };
+    @state() private _actualModule: string = '';
 
     // molecules replace mode: selected only or all occurrences
     @state() private _moleculeReplaceMode: 'selected' | 'all' = 'selected';
@@ -798,6 +830,29 @@ export class ServiceGenome100554 extends ServiceBase {
 
     // ─── External functions ───────────────────────────────────────────
 
+    private _computeDeviceStatus(): void {
+        if (!this._actualPage || !this._actualModule) {
+            this._deviceStatus = { state: 'idle' };
+            return;
+        }
+        const { project, shortName } = this._actualPage.storFile;
+        const targetFolder = `${this._actualModule}/${this._devicePath}/${this._pageCode}`;
+
+        const moduleFiles = (Object.values(mls.stor.files) as mls.stor.IFileInfo[]).filter((f) =>
+            f.project === project &&
+            f.folder === targetFolder &&
+            f.extension === '.ts'
+        );
+
+        if (moduleFiles.length === 0) {
+            this._deviceStatus = { state: 'module-missing', targetPath: targetFolder };
+        } else if (moduleFiles.some((f) => f.shortName === shortName)) {
+            this._deviceStatus = { state: 'page-found', files: moduleFiles };
+        } else {
+            this._deviceStatus = { state: 'module-found', shortName, files: moduleFiles };
+        }
+    }
+
     private _getSharedFolder(folder: string): string {
         const parts = folder.split('/');
         parts[parts.length - 1] = 'shared';
@@ -823,16 +878,20 @@ export class ServiceGenome100554 extends ServiceBase {
         return lg;
     }
 
-    private async checkHasLanguageInActualPage(lang: string): Promise<boolean> {
-        if (!this._actualPage) return false;
+    private get _pageI18nSource(): string {
+        if (!this._actualPage) return '';
         const sharedFile = this._getSharedStorFile(this._actualPage.storFile);
         if (sharedFile) {
             const modelKey = `_${sharedFile.project}_${sharedFile.folder}_${sharedFile.shortName}`;
             const model = (mls.editor.models as any)[modelKey]?.ts?.model;
-            if (model) return this._hasLanguageInI18nBlock(model.getValue(), lang);
+            if (model) return model.getValue();
         }
-        const value = this._actualPage.model.getValue();
-        return this._hasLanguageInI18nBlock(value, lang);
+        return this._actualPage.model.getValue();
+    }
+
+    private async checkHasLanguageInActualPage(lang: string): Promise<boolean> {
+        if (!this._actualPage) return false;
+        return this._hasLanguageInI18nBlock(this._pageI18nSource, lang);
     }
 
     private _hasLanguageInI18nBlock(source: string, lang: string): boolean {
@@ -911,6 +970,8 @@ export class ServiceGenome100554 extends ServiceBase {
 
             if (exists) {
                 this._pendingTasks.set(taskKey, { status: 'done', startedAt: Date.now() });
+                mls.editor.forceModelUpdate(this._actualPage.model);
+
                 if (this._languageName === lang) {
                     this.changeActualLanguageInPreview(lang);
                     this._languageStatus = { state: 'applied', lang };
@@ -995,14 +1056,18 @@ export class ServiceGenome100554 extends ServiceBase {
 
             if (!stillExists) {
                 this._pendingTasks.set(taskKey, { status: 'done', startedAt: Date.now() });
+                mls.editor.forceModelUpdate(this._actualPage.model);
+
+                const firstRemaining = Object.values(this._languageConfig?.labels ?? {})
+                    .find((l) => l !== 'Custom' && l !== lang);
+                if (firstRemaining) this.changeActualLanguageInPreview(firstRemaining);
+
                 if (this._languageName === lang) {
                     this._languageStatus = { state: 'not-in-page', lang };
                 }
             } else {
                 this._pendingTasks.set(taskKey, { status: 'error', startedAt: Date.now(), message: this.msg.langRemoveError });
             }
-
-            this.changeActualLanguageInPreview(lang);
 
             setTimeout(() => {
                 this._pendingTasks.delete(taskKey);
@@ -1030,10 +1095,17 @@ export class ServiceGenome100554 extends ServiceBase {
         }
     }
 
+    private get _hasOnlyOneLanguage(): boolean {
+        const source = this._pageI18nSource;
+        const projectLangs = Object.values(this._languageConfig?.labels ?? {})
+            .filter((l) => l !== 'Custom');
+        return projectLangs.filter((l) => this._hasLanguageInI18nBlock(source, l)).length <= 1;
+    }
+
     private _onRemoveLanguageClick() {
-        if (this._languageStatus.state === 'applied') {
-            this.removeLanguage(this._languageStatus.lang, this._removeLangApplyAll);
-        }
+        if (this._languageStatus.state !== 'applied') return;
+        if (this._hasOnlyOneLanguage) return;
+        this.removeLanguage(this._languageStatus.lang, this._removeLangApplyAll);
     }
 
     private _onCustomLangSearchInput(e: Event) {
@@ -1162,12 +1234,14 @@ export class ServiceGenome100554 extends ServiceBase {
 
     private setActualPage(): void {
         this._actualPage = mls.editor.models['_102020_pizzaria/web/desktop/page11_login'].ts;
+        this._actualModule = mls.actualModule ?? 'pizzaria';
     }
 
     // ─── Pages Context ────────────────────────────────────────────────
 
     private async _refreshPagesContext() {
         this._actualPages = await this.getAllPagesInActualContext();
+        this._computeDeviceStatus();
         this.requestUpdate();
     }
 
@@ -1195,7 +1269,7 @@ export class ServiceGenome100554 extends ServiceBase {
         return html`
             <div class="flex flex-col min-h-full bg-white dark:bg-gray-950 text-gray-800 dark:text-gray-200">
                 ${this._renderKnobRow()}
-                ${this._renderPreferencesRow()}
+                ${this._actualModule ? this._renderPreferencesRow() : nothing}
                 ${this._renderDetailsRow()}
             </div>
         `;
@@ -1242,7 +1316,7 @@ export class ServiceGenome100554 extends ServiceBase {
         const config = this._getKnobConfig(key);
         const value = this._knobValues[key];
         const isContext = this._selectedKnob === key;
-        const isDisabled = config.disabled ?? false;
+        const isDisabled = (config.disabled ?? false) || !this._actualModule;
         const label = this.msg[key as keyof MessageType] || key;
 
         return html`
@@ -1448,7 +1522,7 @@ export class ServiceGenome100554 extends ServiceBase {
                 `;
 
             case 'device':
-                return this._renderInDevelopment(this.msg.device);
+                return this._renderDeviceScenario();
 
             case 'layout':
                 return this._renderInDevelopment(this.msg.layout);
@@ -1465,6 +1539,94 @@ export class ServiceGenome100554 extends ServiceBase {
             default:
                 return nothing;
         }
+    }
+
+    // ─── Device scenario ──────────────────────────────────────────────
+
+    private _renderDeviceScenario() {
+        const status = this._deviceStatus;
+
+        if (status.state === 'idle') return html`
+            <div class="
+                flex items-center gap-2 px-3 py-2.5 rounded-lg
+                bg-gray-100 dark:bg-gray-900
+                border border-dashed border-gray-300 dark:border-gray-700
+            ">
+                <span class="text-xs text-gray-400 dark:text-gray-500">
+                    ${this.msg.deviceNoModule}
+                </span>
+            </div>
+        `;
+
+        const variationFound = status.state === 'page-found';
+
+        return html`
+            <div class="flex flex-col gap-2">
+
+                <!-- Module header — always shown -->
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                    <span class="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        ${this.msg.deviceModuleFound}:
+                        <span class="font-semibold capitalize">${this._actualModule}</span>
+                    </span>
+                </div>
+
+                <!-- Variation status -->
+                <div class="flex items-center gap-2">
+                    <span class="
+                        w-2 h-2 rounded-full shrink-0
+                        ${variationFound ? 'bg-emerald-500' : 'bg-red-500'}
+                    "></span>
+                    <span class="
+                        text-xs font-medium
+                        ${variationFound
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-red-700 dark:text-red-400'}
+                    ">
+                        ${variationFound ? this.msg.variationExists : this.msg.variationMissing}
+                    </span>
+                </div>
+
+                ${variationFound ? html`
+                    <!-- File list -->
+                    <div class="
+                        flex flex-col gap-0.5 px-2 py-1.5 rounded-lg
+                        bg-gray-50 dark:bg-gray-900
+                        border border-gray-200 dark:border-gray-700
+                    ">
+                        <span class="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-0.5">
+                            ${status.files.length} ${this.msg.devicePages}
+                        </span>
+                        ${status.files.map((f: any) => html`
+                            <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 truncate">
+                                ${f.shortName}${f.extension}
+                            </span>
+                        `)}
+                    </div>
+                ` : html`
+                    <!-- Create button -->
+                    <div class="flex justify-end">
+                        <button
+                            class="
+                                inline-flex items-center gap-1.5
+                                px-3 py-1.5 rounded-lg
+                                text-xs font-medium cursor-pointer
+                                bg-indigo-600 text-white
+                                hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600
+                                transition-colors duration-150
+                            "
+                            @click=${() => { /* TODO: call agent */ }}
+                        >
+                            ${status.state === 'module-missing'
+                                ? this.msg.deviceCreateModule
+                                : this.msg.deviceCreatePage}
+                        </button>
+                    </div>
+                `}
+
+            </div>
+        `;
     }
 
     // ─── In Development placeholder ───────────────────────────────────
@@ -1757,94 +1919,90 @@ export class ServiceGenome100554 extends ServiceBase {
                     </div>
 
                     <!-- Remove language section -->
-                    <div class="
-                        flex flex-col gap-3 px-3 py-3 rounded-lg
-                        bg-red-50 dark:bg-red-900/20
-                        border border-red-200 dark:border-red-800
+                    <fieldset class="
+                        border border-gray-200 dark:border-gray-700
+                        rounded-lg px-3 pt-1 pb-3
                     ">
-                        <div class="flex items-start gap-2">
-                            <span class="text-sm mt-0.5">🗑</span>
-                            <div class="flex flex-col gap-0.5">
-                                <span class="text-xs font-medium text-red-700 dark:text-red-400">
-                                    ${this.msg.langRemoveTitle}
-                                </span>
-                                <span class="
-                                    text-[10px] font-mono px-1.5 py-0.5 rounded inline-block w-fit
-                                    bg-red-100 dark:bg-red-800/40
-                                    text-red-700 dark:text-red-300
+                        <legend class="
+                            text-[10px] font-medium px-1
+                            text-gray-400 dark:text-gray-500
+                        ">${this.msg.langRemoveTitle}</legend>
+
+                        <div class="flex flex-col gap-2">
+                            <span class="
+                                text-[10px] font-mono px-1.5 py-0.5 rounded inline-block w-fit
+                                bg-gray-100 dark:bg-gray-800
+                                text-gray-600 dark:text-gray-300
+                            ">${this._languageStatus.lang}</span>
+
+                            <div class="flex items-center gap-4">
+                                <label class="
+                                    inline-flex items-center gap-1.5 cursor-pointer
+                                    text-[11px] text-gray-500 dark:text-gray-400
                                 ">
-                                    ${this._languageStatus.lang}
-                                </span>
+                                    <input
+                                        type="radio"
+                                        name="removeLangScope"
+                                        .checked=${!this._removeLangApplyAll}
+                                        @change=${() => { this._removeLangApplyAll = false; this.requestUpdate(); }}
+                                        class="w-3 h-3 accent-indigo-600"
+                                    />
+                                    ${this.msg.langApplyOnly}
+                                </label>
+                                <label class="
+                                    inline-flex items-center gap-1.5 cursor-pointer
+                                    text-[11px] text-gray-500 dark:text-gray-400
+                                ">
+                                    <input
+                                        type="radio"
+                                        name="removeLangScope"
+                                        .checked=${this._removeLangApplyAll}
+                                        @change=${() => { this._removeLangApplyAll = true; this.requestUpdate(); }}
+                                        class="w-3 h-3 accent-indigo-600"
+                                    />
+                                    ${this.msg.langApplyAll}
+                                </label>
                             </div>
-                        </div>
 
-                        <div class="flex items-center gap-4">
-                            <label class="
-                                inline-flex items-center gap-1.5 cursor-pointer
-                                text-[11px] text-gray-500 dark:text-gray-400
-                            ">
-                                <input
-                                    type="radio"
-                                    name="removeLangScope"
-                                    .checked=${!this._removeLangApplyAll}
-                                    @change=${() => { this._removeLangApplyAll = false; this.requestUpdate(); }}
-                                    class="w-3 h-3 accent-red-600"
-                                />
-                                ${this.msg.langApplyOnly}
-                            </label>
-                            <label class="
-                                inline-flex items-center gap-1.5 cursor-pointer
-                                text-[11px] text-gray-500 dark:text-gray-400
-                            ">
-                                <input
-                                    type="radio"
-                                    name="removeLangScope"
-                                    .checked=${this._removeLangApplyAll}
-                                    @change=${() => { this._removeLangApplyAll = true; this.requestUpdate(); }}
-                                    class="w-3 h-3 accent-red-600"
-                                />
-                                ${this.msg.langApplyAll}
-                            </label>
-                        </div>
-
-                        ${this._removeLangApplyAll && this._actualPages.length > 0
-                        ? html`
-                                <div class="flex flex-col gap-1">
-                                    <span class="text-[10px] font-medium text-gray-400 dark:text-gray-600 uppercase tracking-wider">
-                                        ${this.msg.langAffectedPages} (${this._actualPages.length})
-                                    </span>
-                                    <div class="
-                                        flex flex-col gap-0.5
-                                        max-h-24 overflow-y-auto
-                                        px-2 py-1.5 rounded
-                                        bg-white dark:bg-gray-800
-                                        border border-gray-200 dark:border-gray-700
-                                    ">
-                                        ${this._actualPages.map(f => html`
-                                            <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 truncate">
-                                                ${f.shortName}${f.extension}
-                                            </span>
-                                        `)}
+                            ${this._removeLangApplyAll && this._actualPages.length > 0
+                            ? html`
+                                    <div class="flex flex-col gap-1">
+                                        <span class="text-[10px] font-medium text-gray-400 dark:text-gray-600 uppercase tracking-wider">
+                                            ${this.msg.langAffectedPages} (${this._actualPages.length})
+                                        </span>
+                                        <div class="
+                                            flex flex-col gap-0.5
+                                            max-h-24 overflow-y-auto
+                                            px-2 py-1.5 rounded
+                                            bg-white dark:bg-gray-800
+                                            border border-gray-200 dark:border-gray-700
+                                        ">
+                                            ${this._actualPages.map(f => html`
+                                                <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 truncate">
+                                                    ${f.shortName}${f.extension}
+                                                </span>
+                                            `)}
+                                        </div>
                                     </div>
-                                </div>
-                            `
-                        : nothing}
+                                `
+                            : nothing}
 
-                        <div class="flex justify-end">
-                            <button
-                                class="
-                                    inline-flex items-center gap-1.5
-                                    px-3 py-1.5 rounded-lg
-                                    text-xs font-medium cursor-pointer
-                                    bg-red-600 text-white
-                                    hover:bg-red-700
-                                    dark:bg-red-500 dark:hover:bg-red-600
-                                    transition-colors duration-150 shadow-sm
-                                "
-                                @click=${this._onRemoveLanguageClick}
-                            >
-                                <span>🗑</span>
-                                ${this.msg.langRemoveBtn}
+                            <div class="flex justify-end">
+                                <button
+                                    class="
+                                        inline-flex items-center gap-1.5
+                                        px-3 py-1.5 rounded-lg
+                                        text-xs font-medium
+                                        transition-colors duration-150 shadow-sm
+                                        ${this._hasOnlyOneLanguage
+                                            ? 'bg-gray-300 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                            : 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 cursor-pointer'}
+                                    "
+                                    ?disabled=${this._hasOnlyOneLanguage}
+                                    @click=${this._onRemoveLanguageClick}
+                                >
+                                    <span>🗑</span>
+                                    ${this.msg.langRemoveBtn}
                             </button>
                         </div>
                     </div>
@@ -2124,7 +2282,6 @@ export class ServiceGenome100554 extends ServiceBase {
             </div>
         `;
     }
-
 
     // ─── Detail Badge helper ──────────────────────────────────────────
 
