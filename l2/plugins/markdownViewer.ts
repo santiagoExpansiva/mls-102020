@@ -53,13 +53,22 @@ export class PluginMarkdownViewer extends StateLitElement {
     createRenderRoot() { return this; }
 
     updated() {
-        if (!this._editing) {
+        if (this._editing) {
+            this._resizeTextarea();
+        } else {
             const el = this.querySelector('[data-md]') as HTMLElement | null;
             if (!el) return;
             el.innerHTML = (_markedFn && this.text?.trim())
                 ? _markedFn(this.text)
                 : '<span style="font-style:italic;opacity:0.4">—</span>';
         }
+    }
+
+    private _resizeTextarea() {
+        const ta = this.querySelector('textarea') as HTMLTextAreaElement | null;
+        if (!ta) return;
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
     }
 
     render() {
@@ -92,16 +101,18 @@ export class PluginMarkdownViewer extends StateLitElement {
         return html`
             <textarea
                 class="
-                    w-full text-xs font-mono leading-relaxed resize-none
+                    w-full text-xs font-mono leading-relaxed resize-none overflow-hidden
                     bg-white dark:bg-gray-900
                     border border-gray-300 dark:border-gray-700 rounded-md
                     px-2.5 py-2
                     text-gray-700 dark:text-gray-300
                     focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-600
                 "
-                rows="6"
                 .value=${this._editText}
-                @input=${(e: Event) => { this._editText = (e.target as HTMLTextAreaElement).value; }}
+                @input=${(e: Event) => {
+                    this._editText = (e.target as HTMLTextAreaElement).value;
+                    this._resizeTextarea();
+                }}
             ></textarea>
             <div class="flex justify-end gap-2 mt-2">
                 <button
