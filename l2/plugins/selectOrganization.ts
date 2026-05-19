@@ -118,13 +118,16 @@ export class PluginSelectOrganization extends StateLitElement {
         const org = this._selectedOrg;
         return html`
             <div class="flex flex-col gap-3">
-                <button
-                    class="self-start flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                    @click=${() => this._dispatchSelect(0)}
-                >
-                    <span>&#8249;</span>
-                    <span>${this.msg.title}</span>
-                </button>
+                <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <button
+                            class="text-gray-400 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-300 transition-colors text-xl leading-none"
+                            @click=${() => this._dispatchSelect(0)}
+                        >&#8249;</button>
+                        <span class="text-lg font-semibold text-gray-700 dark:text-gray-200">${this.msg.title}</span>
+                    </div>
+                    <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">${this.msg.desc}</span>
+                </div>
                 ${org ? this._renderSelectedOrgDetail(org) : nothing}
             </div>
         `;
