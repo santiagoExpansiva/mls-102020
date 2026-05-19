@@ -228,7 +228,7 @@ export class PluginSelectProject extends StateLitElement {
         const q = this._search.toLowerCase();
         const filtered = org.projects
             .map((p, i) => ({ p, selectValue: i + 1 }))
-            .filter(({ p }) => !q || p.name.toLowerCase().includes(q));
+            .filter(({ p }) => !q || p.name.toLowerCase().includes(q) || String(p.project).includes(q));
 
         return html`
             <div class="flex flex-col gap-3">
@@ -333,6 +333,7 @@ export class PluginSelectProject extends StateLitElement {
                 <span class="text-[10px] text-gray-400 dark:text-gray-600 font-mono">${org.name}</span>
                 <span class="text-gray-300 dark:text-gray-700">/</span>
                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">${project.name}</span>
+                <span class="ml-auto text-[10px] font-mono text-gray-400 dark:text-gray-600">#${project.project}</span>
             </div>
         `;
     }
