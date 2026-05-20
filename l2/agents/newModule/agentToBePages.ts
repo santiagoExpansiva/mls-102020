@@ -1,8 +1,10 @@
 /// <mls fileReference="_102020_/l2/agents/newModule/agentToBePages.ts" enhancement="_102027_/l2/enhancementAgent" />
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
-import { getAgentStepByAgentName, getTemporaryContext } from '/_102027_/l2/aiAgentHelper.js';
+import { getAgentStepByAgentName, getTemporaryContext, findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
 import { addMessage } from '/_102025_/l2/collabMessagesHelper.js';
+import { updateVariableJson } from '/_102027_/l2/defsAST.js';
+import { createStorFile, IReqCreateStorFile } from '/_102027_/l2/libStor.js';
 
 export function createAgent(): IAgentAsync {
         return {
@@ -57,9 +59,7 @@ async function beforePromptStep(
 ): Promise<mls.msg.AgentIntent[]> {
 
         if (!args) throw new Error(`(${agent.agentName})[beforePromptStep] args invalid`);
-        console.info('-----------------------------------------');
-        console.info(args);
-        console.info('-----------------------------------------');
+
         const continueIntent: mls.msg.AgentIntentPromptReady = {
                 type: "prompt_ready",
                 args,
@@ -114,7 +114,51 @@ async function processOutputToBePages(context: mls.msg.ExecutionContext, toBePag
 
         if (context.isTest) return [];
 
-        const paths = toBePages.pages.map((page) => page.pageName)//.slice(0, 1);
+        let module = context.task?.iaCompressed?.longMemory['moduleName'];
+        if (!module) throw new Error('[ToBePages]: Not found moduleName');
+
+        const pages = toBePages.pages;//.slice(0, 3)
+        for (const page of pages) {
+
+                (page as any).status = 'draft';
+
+                const refDef = `_${mls.actualProject || 0}_/l2/${module}/${page.pageName}.defs.ts`;
+                const srcDefs = updateVariableJson('/// <mls fileReference="' + refDef + '"  enhancement="_blank"/>\n\n', 'definition', page);
+
+                await saveFile(refDef, srcDefs);
+
+        }
+
+        const key = mls.stor.getKeyToFile({ project: mls.actualProject || 0, level: 2, shortName: 'module', folder: module, extension: '.defs.ts' });
+
+        if (!mls.stor.files[key]) throw new Error("[agentTobePages] Not found ontology");
+
+        const src = await mls.stor.files[key].getContent() as string;
+
+        const stepOri = context.task ? (findPreviousAgentStep(context.task, parentStep.stepId))?.stepId : parentStep.stepId;
+          
+        const newStep: mls.msg.AgentIntentAddStep = {
+                type: "add-step",
+                messageId: context.message.orderAt,
+                threadId: context.message.threadId,
+                taskId: context.task?.PK || '',
+                parentStepId: stepOri || parentStep.stepId,
+                step:
+                {
+                        type: 'agent',
+                        stepId: 0,
+                        interaction: null,
+                        status: 'waiting_human_input',
+                        nextSteps: [],
+                        agentName: 'agentInterfaceOntology',
+                        prompt: src,
+                        rags: [],
+                }
+        };
+
+        return [newStep];
+
+        /*const paths = toBePages.pages.map((page) => page.pageName)//.slice(0, 1);
 
         const newStep: mls.msg.AgentIntentAddStep = {
                 type: "add-step",
@@ -141,9 +185,33 @@ async function processOutputToBePages(context: mls.msg.ExecutionContext, toBePag
                 }
         };
 
-        return [newStep];
+        return [newStep];*/
 
 
+}
+
+async function saveFile(ref: string, src: string) {
+
+        const info = mls.stor.convertFileReferenceToFile(ref);
+        const k = mls.stor.getKeyToFile(info);
+        let sf = mls.stor.files[k];
+
+        if (!sf) {
+                const param: IReqCreateStorFile = {
+                        ...info,
+                        source: src
+                }
+
+                sf = await createStorFile(param, true, true, true);
+
+        } else {
+
+                const m = await sf.getOrCreateModel();
+                if (m && m.model) m.model.setValue(src);
+
+        }
+
+        await mls.stor.localStor.setContent(sf, { contentType: 'string', content: src });
 }
 
 

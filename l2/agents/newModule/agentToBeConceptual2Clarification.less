@@ -1,0 +1,310 @@
+/// <mls fileReference="_102020_/l2/agents/newModule/agentToBeConceptual2Clarification.less" enhancement="_blank"/>
+
+agents--new-module--agent-to-be-conceptual2-clarification-102020 {
+ 
+    display: block;
+    font-family: @font-family-primary;
+    overflow: hidden;
+    height: 100%;
+
+    .container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: @bg-primary-color;
+        min-height: 0;
+        overflow: hidden;
+        container-type: inline-size;
+    }
+
+    /* ========================= Tabs ========================= */
+
+    @container (max-width: 700px) {
+
+        .tabs {
+            flex-direction: column;
+            align-items: stretch;
+            padding: 0;
+        }
+
+        .tab {
+            width: 100%;
+            justify-content: flex-start;
+            border-bottom: none;
+            border-left: 3px solid transparent;
+        }
+
+        .tab.active {
+            border: 1px solid @text-secondary-color;
+            background: @bg-secondary-color;
+        }
+    }
+
+    .tabs {
+        display: flex;
+        gap: @space-8;
+        border-bottom: 1px solid @grey-color;
+        padding: 0 @space-16;
+        flex-shrink: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        position: relative;
+        flex-wrap: wrap; // ⭐ permite quebrar
+    }
+
+    .tab {
+        display: flex;
+        align-items: center;
+        gap: @space-8;
+
+        background: none;
+        border: none;
+        padding: @space-16 @space-24;
+        cursor: pointer;
+
+        font-size: @font-size-16;
+        color: @text-primary-color-lighter;
+
+        transition: all @transition-normal;
+
+        &:hover {
+            color: @text-primary-color;
+        }
+
+        &.active {
+            color: @text-secondary-color;
+            font-weight: @font-weight-bold;
+            border-bottom: 2px solid @text-secondary-color;
+        }
+
+        .selected-info {
+            margin-left: @space-8;
+            font-size: @font-size-12;
+            color: @text-primary-color-lighter;
+        }
+    }
+
+    /* ========================= Badge ========================= */
+
+    .badge {
+        background: @grey-color-light;
+        color: @text-primary-color;
+        font-size: @font-size-12;
+        padding: 0 @space-8;
+        border-radius: 999px;
+        line-height: 18px;
+        min-width: 18px;
+        text-align: center;
+        transition: transform 120ms ease;
+
+    }
+
+    .badge.pop {
+        animation: badge-pop 180ms ease;
+    }
+
+    @keyframes badge-pop {
+        0% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.25);
+        }
+
+        100% {
+            transform: scale(1);
+        }
+    }
+
+    /* ========================= Content ========================= */
+
+    .content {
+        position: relative;
+        flex: 1;
+        overflow: auto;
+
+        &:has(.editorEntities),
+        &:has(.editorRules),
+        &:has(.editorCapabilities) {
+            display: flex;
+            min-height: 0;
+        }
+
+        .suggestions {
+            padding: 1rem;
+            // width: 100%;
+        }
+    }
+
+    /* ========================= Lazy Panels + Animation ========================= */
+
+    .panel {
+        flex: 1;
+        min-height: 0;
+        display: none;
+    }
+
+    .panel.show {
+        display: block;
+    }
+
+    .panel:not(:has(.suggestions)).show {
+        display: flex; // ⭐ importante (não block)
+    }
+
+    .editorEntities,
+    .editorRules,
+    .editorCapabilities {
+        flex: 1;
+        min-height: 0;
+    }
+
+
+    .suggestions {
+        display: flex;
+        flex-direction: column;
+        gap: @space-16;
+    }
+
+    /* ======================== Card ========================= */
+
+    .card {
+        display: flex;
+        position: relative;
+        gap: @space-16;
+        padding: @space-16;
+        border-radius: 10px;
+        background: @bg-primary-color-darker;
+        border: 1px solid @grey-color;
+        transition: all @transition-normal;
+        cursor: pointer;
+
+        &:hover {
+            background: @bg-primary-color-hover;
+        }
+
+        &.selected {
+            border-color: @active-color;
+        }
+    }
+
+    .body {
+        display: flex;
+        flex-direction: column;
+        gap: @space-8;
+    }
+
+    .title {
+        font-weight: @font-weight-bold;
+    }
+
+    .desc {
+        font-size: @font-size-12;
+        color: @text-primary-color-lighter;
+    }
+
+    /* =========================Meta========================= */
+
+    .meta {
+        display: flex;
+        gap: @space-8;
+        flex-wrap: wrap;
+    }
+
+    .tag {
+        background: @grey-color-light;
+        padding: 2px @space-8;
+        border-radius: 999px;
+        font-size: @font-size-12;
+    }
+
+    .yagni {
+        padding: 2px @space-8;
+        border-radius: 999px;
+        font-size: @font-size-12;
+
+        &.now {
+            background: @success-color;
+        }
+
+        &.soon {
+            background: @warning-color;
+        }
+
+        &.later {
+            background: @grey-color;
+        }
+    }
+
+    /* ========================= Add========================= */
+
+    .add-btn {
+        background: none;
+        border: 1px dashed @grey-color-darker;
+        padding: @space-16;
+        cursor: pointer;
+        color: @text-primary-color;
+    }
+
+    .add-input {
+        padding: @space-16;
+        border: 1px solid @grey-color;
+    }
+
+    .remove {
+        margin-left: auto;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        color: @text-primary-color-lighter;
+        transition: opacity @transition-normal;
+
+        &:hover {
+            color: @error-color;
+        }
+    }
+
+    /* ========================= Actions ========================= */
+    .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: @space-16;
+        margin-top: @space-16;
+
+        .action-btn {
+            min-width: 120px;
+            font-size: @font-size-16;
+            font-weight: 500;
+            border-radius: @space-8;
+            padding: @space-8;
+            border: none;
+            cursor: pointer;
+            transition: background @transition-slow, color @transition-slow;
+            outline: none;
+
+            &.cancel {
+                background: @bg-secondary-color;
+                color: @text-primary-color;
+
+                &:hover {
+                    background: @bg-secondary-color-hover;
+                }
+            }
+
+            &.continue {
+                background: @active-color;
+                color: #fff;
+
+                &:hover {
+                    background: @active-color-hover;
+                }
+            }
+        }
+
+    }
+
+}
+
+
