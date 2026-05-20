@@ -125,13 +125,13 @@ export class ServiceProject102020 extends ServiceBase {
 
     @state() private _moduleValue: number | null = null;
     @state() private _dsValue: number | null = 1;
-    @state() private _deviceValue: number | null = 1;
+    @state() private _deviceValue: number | null = null;
     @state() private _assetsValue: number | null = 1;
 
     @state() private _selectedKnob: string = 'module';
 
     @state() private _dsConfig: IKnobConfig = { ...DS_CONFIG };
-    @state() private _deviceConfig: IKnobConfig = { ...DEVICE_CONFIG };
+    @state() private _deviceConfig: IKnobConfig = DISABLED_CONFIG('device');
     @state() private _assetsConfig: IKnobConfig = { ...ASSETS_CONFIG };
 
     // ─── Module Loading ───────────────────────────────────────────────
@@ -188,7 +188,13 @@ export class ServiceProject102020 extends ServiceBase {
 
     private _setKnobValue(key: string, value: number | null) {
         switch (key) {
-            case 'module': this._moduleValue = value; break;
+            case 'module': {
+                this._moduleValue = value;
+                const isReal = value !== null && value > 0 && value <= this._modules.length;
+                this._deviceConfig = isReal ? { ...DEVICE_CONFIG } : DISABLED_CONFIG('device');
+                if (!isReal) this._deviceValue = null;
+                break;
+            }
             case 'designSystem': this._dsValue = value; break;
             case 'device': this._deviceValue = value; break;
             case 'assets': this._assetsValue = value; break;
@@ -328,6 +334,7 @@ export class ServiceProject102020 extends ServiceBase {
                 return html`
                     <plugins--select-device-102020
                         .value=${this._deviceValue}
+                        .selectedModule=${this._selectedModule}
                         @select-device=${(e: CustomEvent) => this._setKnobValue('device', e.detail.value)}
                     ></plugins--select-device-102020>
                 `;

@@ -290,7 +290,7 @@ export class PluginSelectProject extends StateLitElement {
 
     private _renderHeader(title: string, description: string) {
         return html`
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-1 border-b border-gray-200 dark:border-gray-700 pb-4">
                 <span class="text-lg font-semibold text-gray-700 dark:text-gray-200">${title}</span>
                 <span class="text-sm text-gray-400 dark:text-gray-500 leading-relaxed">
                     ${description}
@@ -313,7 +313,7 @@ export class PluginSelectProject extends StateLitElement {
             >${label}</button>
         `;
         return html`
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-1 border-b border-gray-200 dark:border-gray-700 pb-4">
                 <div class="flex items-center">
                     <div class="flex items-center gap-0.5">
                         ${navBtn('«', min, atMin)}

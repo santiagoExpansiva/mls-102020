@@ -59,7 +59,7 @@ export class PluginSelectDesignSystem extends StateLitElement {
 
     private _renderHeader(title: string, badge: string | null, description: string) {
         return html`
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-1 border-b border-gray-200 dark:border-gray-700 pb-4">
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-lg font-semibold text-gray-700 dark:text-gray-200">${title}</span>
                     ${badge ? html`
