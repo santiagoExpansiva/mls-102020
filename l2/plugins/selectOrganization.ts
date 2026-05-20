@@ -254,7 +254,7 @@ export class PluginSelectOrganization extends StateLitElement {
                         ${navBtn('»', max, atMax)}
                     </div>
                 </div>
-                <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">${desc}</span>
+                <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed text-center">${desc}</span>
             </div>
         `;
     }

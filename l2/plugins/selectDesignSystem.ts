@@ -70,7 +70,7 @@ export class PluginSelectDesignSystem extends StateLitElement {
                         ">${badge}</span>
                     ` : nothing}
                 </div>
-                <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+                <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed text-center">
                     ${description}
                 </span>
             </div>

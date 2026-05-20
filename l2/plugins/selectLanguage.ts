@@ -4,7 +4,7 @@ import { html } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { customElement, property, state } from 'lit/decorators.js';
 import { StateLitElement } from '/_102027_/l2/stateLitElement.js';
-import { getConfigProject } from '/_102027_/l2/libProjectConfig.js';
+import { getConfigProject, updateConfigProject } from '/_102027_/l2/libProjectConfig.js';
 import { languages as allLanguages, ICollabLanguage } from '/_102027_/l2/collabLanguages.js';
 import { executeBeforePrompt, loadAgent } from '/_102027_/l2/aiAgentOrchestration.js';
 import { createThread, getUserId } from '/_102025_/l2/collabMessagesHelper.js';
@@ -180,6 +180,15 @@ export class PluginSelectLanguage extends StateLitElement {
 
         try {
             await this.executeAgent('agentRemoveLanguage', prompt);
+            if (this.config && this.selectedProject) {
+                const existing: any[] = (this.config as any).languages ?? [];
+                const updated = { ...(this.config as any), languages: existing.filter((i: any) => i.language !== lang) };
+                await updateConfigProject(this.selectedProject.project, updated);
+                this.config = updated as any;
+                this._languages = updated.languages.map((i: any) => i.language);
+                this._dispatchConfig();
+                this._dispatchSelect(0);
+            }
             this._pendingTasks = new Map(this._pendingTasks).set(taskKey, { ...this._pendingTasks.get(taskKey)!, status: 'done' });
         } catch (e: any) {
             this._pendingTasks = new Map(this._pendingTasks).set(taskKey, { ...this._pendingTasks.get(taskKey)!, status: 'error', message: e?.message });
@@ -233,6 +242,20 @@ export class PluginSelectLanguage extends StateLitElement {
 
         try {
             await this.executeAgent('agentAddLanguage', prompt);
+            if (this.config && this.selectedProject) {
+                const existing: any[] = (this.config as any).languages ?? [];
+                const newEntries = langs
+                    .filter(code => !existing.some((i: any) => i.language === code))
+                    .map(code => {
+                        const info = (allLanguages as ICollabLanguage[]).find(l => l.code === code);
+                        return { language: code, name: info?.name ?? code, path: `/${code}` };
+                    });
+                const updated = { ...(this.config as any), languages: [...existing, ...newEntries] };
+                await updateConfigProject(this.selectedProject.project, updated);
+                this.config = updated as any;
+                this._languages = updated.languages.map((i: any) => i.language);
+                this._dispatchConfig();
+            }
             this._pendingTasks = new Map(this._pendingTasks).set(taskKey, { ...this._pendingTasks.get(taskKey)!, status: 'done' });
         } catch (e: any) {
             this._pendingTasks = new Map(this._pendingTasks).set(taskKey, { ...this._pendingTasks.get(taskKey)!, status: 'error', message: e?.message });
@@ -507,7 +530,7 @@ export class PluginSelectLanguage extends StateLitElement {
         return html`
             <div class="flex flex-col gap-1">
                 <span class="text-lg font-semibold text-gray-700 dark:text-gray-200">${title}</span>
-                <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">${description}</span>
+                <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed text-center">${description}</span>
             </div>
         `;
     }
@@ -576,7 +599,7 @@ export class PluginSelectLanguage extends StateLitElement {
                         ${navBtn('»', max, atMax)}
                     </div>
                 </div>
-                <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">${desc}</span>
+                <span class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed text-center">${desc}</span>
             </div>
         `;
     }
