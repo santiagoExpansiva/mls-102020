@@ -317,8 +317,11 @@ export class ServiceExploreProjects102020 extends ServiceBase {
                 this._langValue = null;
                 const orgLen = this._selectedOrg?.projects.length ?? 0;
                 const isRealProject = value !== null && value > 0 && value <= orgLen;
-                this._dsConfig = isRealProject ? { ...DS_CONFIG } : DISABLED_CONFIG('designSystem');
-                this._langConfig = isRealProject ? { key: 'language', min: 0, max: 1, labels: {}, disabled: false } : DISABLED_CONFIG('language');
+                const candidateProject = isRealProject ? (this._selectedOrg?.projects[(value as number) - 1] ?? null) : null;
+                // @ts-ignore
+                const isActualProject = candidateProject !== null && candidateProject.project === mls.actualProject;
+                this._dsConfig = isActualProject ? { ...DS_CONFIG } : DISABLED_CONFIG('designSystem');
+                this._langConfig = isActualProject ? { key: 'language', min: 0, max: 1, labels: {}, disabled: false } : DISABLED_CONFIG('language');
                 break;
             case 'designSystem':
                 this._dsValue = value;
