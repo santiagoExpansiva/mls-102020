@@ -145,7 +145,10 @@ export class ServiceProject102020 extends ServiceBase {
             const modules: IModule[] = mod?.projectConfig?.modules ?? [];
             this._modules = modules;
             this._moduleConfig = this._buildModuleConfig(modules);
-            this._moduleValue = 0;
+            // @ts-ignore
+            const actualModule: string | undefined = mls.actualModule;
+            const idx = actualModule ? modules.findIndex(m => m.name === actualModule) : -1;
+            this._moduleValue = idx >= 0 ? idx + 1 : 0;
         } catch {
             this._modules = [];
             this._moduleConfig = DISABLED_CONFIG('module');
