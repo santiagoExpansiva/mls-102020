@@ -340,8 +340,12 @@ export class PluginSelectAssetsComponents extends StateLitElement {
         this.findIndex(group.name);
     }
 
-    private findIndex(_groupName: string) {
-        // TODO: implement
+    private findIndex(groupName: string) {
+        const folder = `molecules/${groupName.toLowerCase()}`;
+        // @ts-ignore
+        const found = Object.values(mls.stor.files as Record<string, any>)
+            .filter((f: any) => f.folder === folder && f.shortName === 'index');
+        console.log(`[selectAssetsComponents] findIndex("${groupName}") →`, found);
     }
 
     // ─── SVG Icons ───────────────────────────────────────────────────
