@@ -23,6 +23,12 @@ export const skills = [
     },
 
     {
+        name: 'groupEnterBoolean',
+        description: 'Allows the user to input a true/false decision. Value is boolean — starts as false until the user changes it. Supports Label and Helper slot tags. Implementations are toggle/switch and checkbox, fully interchangeable by swapping the component tag.',
+        skillReference: '/_102020_/l2/skills/molecules/groupEnterBoolean/creation',
+        skillUsageReference: '/_102020_/l2/skills/molecules/groupEnterBoolean/usage',
+    },
+    {
         name: 'groupEnterNumber',
         description: 'Allows the user to input numeric values. Ideal for quantities, measurements, percentages, ages, weights, and numeric configurations. Implementations include number input, stepper, slider, percentage input, and quantity selector.',
         skillReference: '/_102020_/l2/skills/molecules/groupEnterNumber/creation',
