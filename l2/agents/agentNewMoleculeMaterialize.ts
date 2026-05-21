@@ -1,4 +1,4 @@
-/// <mls fileReference="_102020_/l2/agents/agentNewMolecule.ts" enhancement="_102027_/l2/enhancementAgent.ts"/>
+/// <mls fileReference="_102020_/l2/agents/agentNewMoleculeMaterialize.ts" enhancement="_102027_/l2/enhancementAgent.ts"/>
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { appendLongTermMemory } from '/_102027_/l2/aiAgentHelper.js';
@@ -13,7 +13,7 @@ import { skills as skillList } from '/_102020_/l2/skills/molecules/index';
 
 export function createAgent(): IAgentAsync {
     return {
-        agentName: "agentNewMolecule",
+        agentName: "agentNewMoleculeMaterialize",
         agentProject: 102020,
         agentFolder: "agents",
         agentDescription: "New agent",
@@ -289,10 +289,10 @@ async function updateFiles(context: mls.msg.ExecutionContext, result: Result) {
 async function updateStorFile(params: { project: number, shortName: string, level: number, folder: string, content: string, extension: string, versionRef: string }): Promise<mls.editor.IModelBase> {
 
     const file = await mls.stor.addOrUpdateFile(params);
-    if (!file) throw new Error('[agentNewMolecule] Invalid storFile');
+    if (!file) throw new Error('[agentNewMoleculeMaterialize] Invalid storFile');
     const path = mls.stor.getKeyToFile(params);
-    console.log(`[agentNewMolecule] updating file: ${path}`);
-    console.log(`[agentNewMolecule] updating content: ${params.content}`);
+    console.log(`[agentNewMoleculeMaterialize] updating file: ${path}`);
+    console.log(`[agentNewMoleculeMaterialize] updating content: ${params.content}`);
 
     const models = await file.getOrCreateModel();
     models.model.setValue(params.content);

@@ -117,7 +117,7 @@ async function afterPromptStep(
             interaction: null,
             status: 'waiting_human_input',
             nextSteps: [],
-            agentName: "agentNewMolecule",
+            agentName: "agentNewMoleculeMaterialize",
             prompt: output.fileReference,
             rags: null,
         }
