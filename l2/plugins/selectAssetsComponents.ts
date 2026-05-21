@@ -46,6 +46,8 @@ interface IModule {
     path: string;
 }
 
+type ViewMode = 'list' | 'preview' | 'grid';
+
 const MY_SLOT = 1;
 const ASSETS_MIN = 1;
 const ASSETS_MAX = 3;
@@ -71,6 +73,7 @@ export class PluginSelectAssetsComponents extends StateLitElement {
     @state() private _selected: string | null = null;
     @state() private _filterCategory: SkillCategory | '' = '';
     @state() private _search: string = '';
+    @state() private _viewMode: ViewMode = 'grid';
 
     willUpdate(changed: Map<string, unknown>) {
         if (changed.has('selectedModule')) {
@@ -113,31 +116,54 @@ export class PluginSelectAssetsComponents extends StateLitElement {
                     @nav-change=${(e: CustomEvent) => this._dispatchSelect(e.detail.value)}
                 ></plugins--nav-header-102020>
 
-                ${this._renderSearch()}
+                ${this._renderToolbar()}
                 ${this._renderCategoryFilter()}
-                ${this._renderGrid()}
+                ${this._renderContent()}
             </div>
         `;
     }
 
-    // ─── Search ───────────────────────────────────────────────────────
+    // ─── Toolbar ─────────────────────────────────────────────────────
 
-    private _renderSearch() {
+    private _renderToolbar() {
         return html`
-            <input
-                type="text"
-                .value=${this._search}
-                placeholder=${this.msg.searchPlaceholder}
-                class="
-                    w-full text-sm px-2.5 py-1.5 rounded-md
-                    border border-gray-200 dark:border-gray-700
-                    bg-white dark:bg-gray-900
-                    text-gray-700 dark:text-gray-300
-                    placeholder-gray-400 dark:placeholder-gray-600
-                    focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-600
+            <div class="flex items-center gap-1.5">
+                <input
+                    type="text"
+                    .value=${this._search}
+                    placeholder=${this.msg.searchPlaceholder}
+                    class="
+                        flex-1 min-w-0 text-sm px-2.5 py-1.5 rounded-md
+                        border border-gray-200 dark:border-gray-700
+                        bg-white dark:bg-gray-900
+                        text-gray-700 dark:text-gray-300
+                        placeholder-gray-400 dark:placeholder-gray-600
+                        focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-600
+                    "
+                    @input=${(e: Event) => { this._search = (e.target as HTMLInputElement).value; }}
+                />
+                ${this._renderViewToggle()}
+            </div>
+        `;
+    }
+
+    private _renderViewToggle() {
+        const btn = (mode: ViewMode, icon: unknown) => html`
+            <button
+                class="p-1.5 rounded transition-colors cursor-pointer
+                    ${this._viewMode === mode
+                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
+                        : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'}
                 "
-                @input=${(e: Event) => { this._search = (e.target as HTMLInputElement).value; }}
-            />
+                @click=${() => { this._viewMode = mode; }}
+            >${icon}</button>
+        `;
+        return html`
+            <div class="flex items-center gap-0.5 rounded-md border border-gray-200 dark:border-gray-700 p-0.5">
+                ${btn('list',    this._svgList())}
+                ${btn('preview', this._svgListPreview())}
+                ${btn('grid',    this._svgGrid())}
+            </div>
         `;
     }
 
@@ -175,13 +201,84 @@ export class PluginSelectAssetsComponents extends StateLitElement {
         `;
     }
 
-    // ─── Grid ─────────────────────────────────────────────────────────
+    // ─── Content ─────────────────────────────────────────────────────
 
-    private _renderGrid() {
+    private _renderContent() {
         const groups = this._filteredGroups;
         if (groups.length === 0) {
             return html`<span class="text-sm text-gray-400 dark:text-gray-600 italic">${this.msg.noResults}</span>`;
         }
+        if (this._viewMode === 'list')    return this._renderListShort(groups);
+        if (this._viewMode === 'preview') return this._renderListPreview(groups);
+        return this._renderGrid(groups);
+    }
+
+    private _renderListShort(groups: MutationGroupEntry[]) {
+        return html`
+            <div class="flex flex-col">
+                ${groups.map(g => {
+                    const meta = CATEGORY_META[g.category];
+                    const isSelected = this._selected === g.name;
+                    const iconSvg = renderIcon(g.icon, 14);
+                    return html`
+                        <div
+                            class="
+                                flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors
+                                ${isSelected
+                                    ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
+                                    : 'hover:bg-gray-100 dark:hover:bg-gray-800/70 text-gray-500 dark:text-gray-400'}
+                            "
+                            @click=${() => this._onGroupClick(g)}
+                        >
+                            ${isSelected
+                                ? html`<div class="w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0"></div>`
+                                : html`<span class="shrink-0">${unsafeHTML(iconSvg)}</span>`}
+                            <span class="flex-1 text-sm font-medium text-gray-700 dark:text-gray-300 truncate">${g.label}</span>
+                            <span class="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${meta?.classes ?? ''}">${meta?.label ?? g.category}</span>
+                        </div>
+                    `;
+                })}
+            </div>
+        `;
+    }
+
+    private _renderListPreview(groups: MutationGroupEntry[]) {
+        return html`
+            <div class="flex flex-col gap-1">
+                ${groups.map(g => {
+                    const meta = CATEGORY_META[g.category];
+                    const isSelected = this._selected === g.name;
+                    const iconSvg = renderIcon(g.icon, 20);
+                    return html`
+                        <div
+                            class="
+                                flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-all
+                                border
+                                ${isSelected
+                                    ? 'border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                                    : 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 hover:border-gray-300 dark:hover:border-gray-700'}
+                            "
+                            @click=${() => this._onGroupClick(g)}
+                        >
+                            <div class="
+                                shrink-0 w-9 h-9 rounded-lg flex items-center justify-center
+                                ${isSelected
+                                    ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400'
+                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}
+                            ">${unsafeHTML(iconSvg)}</div>
+                            <div class="flex flex-col flex-1 min-w-0">
+                                <span class="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">${g.label}</span>
+                                <span class="text-xs text-gray-400 dark:text-gray-500 truncate">${g.shortDescription ?? ''}</span>
+                            </div>
+                            <span class="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${meta?.classes ?? ''}">${meta?.label ?? g.category}</span>
+                        </div>
+                    `;
+                })}
+            </div>
+        `;
+    }
+
+    private _renderGrid(groups: MutationGroupEntry[]) {
         return html`
             <div class="grid grid-cols-2 gap-2">
                 ${groups.map(g => this._renderGroupCard(g))}
@@ -245,6 +342,18 @@ export class PluginSelectAssetsComponents extends StateLitElement {
 
     private findIndex(_groupName: string) {
         // TODO: implement
+    }
+
+    // ─── SVG Icons ───────────────────────────────────────────────────
+
+    private _svgList() {
+        return html`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
+    }
+    private _svgListPreview() {
+        return html`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="5" rx="1"/><rect x="3" y="10" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><line x1="12" y1="6.5" x2="21" y2="6.5"/><line x1="12" y1="12.5" x2="21" y2="12.5"/><line x1="12" y1="18.5" x2="21" y2="18.5"/></svg>`;
+    }
+    private _svgGrid() {
+        return html`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`;
     }
 
     private _dispatchSelect(value: number) {
