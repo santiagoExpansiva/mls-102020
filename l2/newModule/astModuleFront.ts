@@ -161,7 +161,7 @@ export function hasModuleRoute(source: string, path: string): boolean {
 export function addModuleRoute(
   source: string,
   entry: ModuleRouteEntry,
-  { throwIfExists = false }: { throwIfExists?: boolean } = {},
+  throwIfExists = false ,
 ): string {
   if (hasModuleRoute(source, entry.path)) {
     if (throwIfExists) throw new Error(`Route "${entry.path}" already exists.`);

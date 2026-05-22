@@ -295,6 +295,51 @@ function balancedSlice(source: string, start: number, open: string, close: strin
 }
 
 // ============================================================
+// AUXILIAR FUNCTIONS
+// ============================================================
+
+type RouteHandlerPair = [routeKey: string, handlerName: string];
+
+function routeToHandlerName(routeKey: string, pageName:string): string {
+    const parts = routeKey.split('.');
+    // first part stays camelCase (pageName), each subsequent part gets first letter uppercased
+    return pageName + parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('') + 'Handler';
+}
+
+export function extractRouteHandlers(definition: { pages: any[] }, moduleName:string): RouteHandlerPair[] {
+    const page = definition.pages[0];
+    const pageName: string = page.pageName;
+    const seen = new Set<string>();
+    const result: RouteHandlerPair[] = [];
+
+    const add = (routeKey: string) => {
+        if (seen.has(routeKey)) return;
+        seen.add(routeKey);
+        result.push([routeKey, routeToHandlerName(routeKey, pageName)]);
+    }
+
+    // 1. Read routines — from dataShape.sourceRoutine across all organisms
+    for (const section of (page.sections ?? []) as any[]) {
+        for (const organism of (section.organisms ?? []) as any[]) {
+            const routine: string | undefined = organism.dataShape?.sourceRoutine;
+            if (routine && routine.startsWith(moduleName)) add(routine);
+        }
+    }
+
+    /*// 2. Write/action routines — from actionStates, skip UI-only state values
+    const skipSuffixes = new Set(['idle', 'loading', 'success', 'error']);
+    for (const actionState of (page.actionStates ?? []) as any[]) {
+        const stateKey: string = actionState.stateKey ?? '';
+        const parts = stateKey.split('.');
+        const suffix = parts[parts.length - 1] ?? '';
+        if (!suffix || skipSuffixes.has(suffix)) continue;
+        add(`${pageName}.${suffix}`);
+    }*/
+
+    return result;
+}
+
+// ============================================================
 // USE CASE
 // ============================================================
 

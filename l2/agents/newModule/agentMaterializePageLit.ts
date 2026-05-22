@@ -2,8 +2,11 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
-import { convertFileNameToTag } from '/_102027_/l2/utils.js';
+import { createStorFile, IReqCreateStorFile } from '/_102027_/l2/libStor.js';
+import { convertFileNameToTag, convertTagToFileName } from '/_102027_/l2/utils.js';
 import { getMaterializeOrchestrator } from '/_102027_/l2/agents/materialize/materializeOrchestrator.js';
+import { addModuleNav, addModuleRoute } from '/_102020_/l2/newModule/astModuleFront.js';
+import { addNav, addPage } from '/_102020_/l2/newModule/astIndex.js';
 
 export function createAgent(): IAgentAsync {
   return {
@@ -14,7 +17,7 @@ export function createAgent(): IAgentAsync {
     visibility: "public",
     beforePromptImplicit,
     beforePromptStep,
-    afterPromptStep 
+    afterPromptStep
   };
 }
 
@@ -127,6 +130,8 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
   const tag = convertFileNameToTag(info);
   const srcHtml = `<${tag}></${tag}>`;
   await orch.createStorFile(output.outputPath.replace('.ts', '.html'), srcHtml);
+  await addModuleRoutes(context, info.shortName, tag);
+  await addIndexPage(context, info.shortName, tag);
 
   const stepOri = context.task ? (findPreviousAgentStep(context.task, parentStep.stepId))?.stepId : parentStep.stepId;
 
@@ -167,8 +172,93 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
   return newSteps;
 }
 
-async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }): Promise<string> {
+async function addModuleRoutes(context: mls.msg.ExecutionContext, shortName: string, tag: string) {
 
+  let moduleName = context.task?.iaCompressed?.longMemory['moduleName'];
+  if (!moduleName) throw new Error('Not found moduleName 2: agentMaterializePageLit');
+
+  const key = mls.stor.getKeyToFile({ project: mls.actualProject || 0, level: 2, folder: `${moduleName}`, shortName: "module", extension: ".ts" });
+  if (!mls.stor.files[key]) throw new Error('[agentMaterializePageLit]Not found module file');
+
+  const info = convertTagToFileName(tag) as any;
+  info.extension = '.js';
+  info.level = 2;
+  const fileReference = mls.stor.convertFileToFileReference(info);
+
+  const sf = mls.stor.files[key];
+
+  let src = await sf.getContent() as string;
+
+  src = addModuleNav(src, { id: shortName, label: shortName, href: `/${moduleName}/${shortName}`, description: shortName });
+
+  src = addModuleRoute(src, {
+    path: `/${moduleName}/${shortName}`,
+    aliases: [],
+    entrypoint: fileReference.replace('.ts', '.js'),
+    tag,
+    title: shortName,
+  });
+
+  await saveFile(mls.stor.convertFileToFileReference(sf), src);
+
+}
+
+async function addIndexPage(context: mls.msg.ExecutionContext, shortName: string, tag: string) {
+
+  let moduleName = context.task?.iaCompressed?.longMemory['moduleName'];
+  if (!moduleName) throw new Error('Not found moduleName 3: agentMaterializePageLit');
+
+  const key = mls.stor.getKeyToFile({ project: mls.actualProject || 0, level: 2, folder: `${moduleName}`, shortName: "index", extension: ".ts" });
+  if (!mls.stor.files[key]) throw new Error('[agentMaterializePageLit]Not found index file');
+
+  const info = convertTagToFileName(tag) as any;
+  info.extension = '.js';
+  info.level = 2
+  const fileReference = mls.stor.convertFileToFileReference(info);
+
+  const sf = mls.stor.files[key];
+
+  let src = await sf.getContent() as string;
+
+  src = addNav(src, { label: shortName, href: `/${moduleName}/${shortName}` });
+
+  src = addPage(src, {
+    path: `/${moduleName}/${shortName}`,
+    title: shortName,
+    tagName: tag,
+    loader: fileReference,
+  });
+
+  await saveFile(mls.stor.convertFileToFileReference(sf), src);
+
+}
+
+async function saveFile(ref: string, src: string) {
+
+  const info = mls.stor.convertFileReferenceToFile(ref);
+  const k = mls.stor.getKeyToFile(info);
+  let sf = mls.stor.files[k];
+
+  if (!sf) {
+    const param: IReqCreateStorFile = {
+      ...info,
+      source: src
+    }
+
+    sf = await createStorFile(param, true, true, true);
+
+  } else {
+
+    const m = await sf.getOrCreateModel();
+    if (m && m.model) m.model.setValue(src);
+
+  }
+
+  await mls.stor.localStor.setContent(sf, { contentType: 'string', content: src });
+}
+
+async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }): Promise<string> {
+  debugger;
   const orch = getMaterializeOrchestrator(info.path);
   const user = await orch.getVar(info.path, info.item.specVar);
   const skill = await orch.getSkill(info.item.skillPath);
