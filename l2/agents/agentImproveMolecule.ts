@@ -84,7 +84,7 @@ async function afterPromptStep(
     };
 
     // YES path: clarification step handles next intents
-    if (payload.type === 'clarification') return [updateStatus];
+    if (payload.type === 'clarification') return [];
 
     // NO path: direct improvement
     if (payload.type !== 'flexible' || !payload.result) throw new Error(`[${agent.agentName}][afterPromptStep] invalid payload type: ${payload?.type}`);
@@ -113,7 +113,8 @@ async function afterPromptStep(
         }
     };
 
-    return [newStep, updateStatus];
+    //return [newStep, updateStatus];
+    return [newStep];
 }
 
 async function beforeClarificationStep(
@@ -201,7 +202,8 @@ function processOutput(
         }
     };
 
-    return [newStep, updateStatusAgent, updateStatus];
+    //return [newStep, updateStatusAgent, updateStatus];
+    return [newStep, updateStatusAgent]
 }
 
 async function getContentByExtension(page: string, ext: 'ts' | 'less' | 'html' | 'defs'): Promise<string> {
@@ -215,7 +217,7 @@ async function getContentByExtension(page: string, ext: 'ts' | 'less' | 'html' |
 }
 
 const system1 = `
-<!-- modelType: deepseekchat -->
+<!-- modelType: codepro -->
 <!-- modelTypeList: geminiChat (2.5 pro), code (grok), deepseekchat, codeflash (gemini), deepseekreasoner, mini (4.1) ou nano (openai), codeinstruct (4.1), codereasoning(gpt5), code2 (kimi 2.5) -->
 
 You are an analyst responsible for evaluating whether an improvement request to an existing web component requires updating its functional/visual requirements (defs) or only its implementation.
