@@ -3,7 +3,8 @@
 import { html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { StateLitElement } from '/_102027_/l2/stateLitElement.js';
-import { setProjectDetails, loadPluginProject } from '/_102027_/l2/libCommom.js';
+import { setProjectDetails, loadPluginProject, openElementInServiceDetails } from '/_102027_/l2/libCommom.js';
+import { convertFileToTag } from '/_102027_/l2/utils';
 import '/_102020_/l2/plugins/navHeader.js';
 
 // ─── i18n ─────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ export class PluginSelectProject extends StateLitElement {
     @state() private _pluginsByCategory: Record<string, IPluginItem[]> = {};
     @state() private _openCategories: Set<string> = new Set();
     @state() private _pluginsLoading: boolean = false;
+    @state() private _selectedPlugin: string | null = null;
 
     willUpdate(changed: Map<string, unknown>) {
         if (changed.has('value') || changed.has('selectedOrg')) {
@@ -308,16 +310,44 @@ export class PluginSelectProject extends StateLitElement {
     }
 
     private _renderPluginItem(item: IPluginItem) {
+        const isSelected = this._selectedPlugin === item.action.widget;
         return html`
-            <div class="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors cursor-pointer">
+            <div
+                class="
+                    flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors
+                    ${isSelected
+                        ? 'bg-indigo-50 dark:bg-indigo-900/20'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-900/40'}
+                "
+                @click=${() => this._onPluginItemClick(item)}
+            >
                 ${item.getSvg ? html`
-                    <span class="shrink-0 w-5 h-5 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                    <span class="shrink-0 w-5 h-5 flex items-center justify-center
+                        ${isSelected ? 'text-indigo-500 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}">
                         ${item.getSvg()}
                     </span>
                 ` : nothing}
-                <span class="text-sm text-gray-700 dark:text-gray-300">${item.title}</span>
+                <span class="text-sm flex-1
+                    ${isSelected
+                        ? 'font-medium text-indigo-600 dark:text-indigo-400'
+                        : 'text-gray-700 dark:text-gray-300'}
+                ">${item.title}</span>
+                ${isSelected ? html`<div class="w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0"></div>` : nothing}
             </div>
         `;
+    }
+
+    private _onPluginItemClick(item: IPluginItem) {
+        this._selectedPlugin = item.action.widget;
+        const match = item.action.widget.match(/^_(\d+)_(.+)$/);
+        if (!match) return;
+        // @ts-ignore
+        const storFileItem = Object.values(mls.stor.files as Record<string, any>)
+            .find((f: any) => f.project === Number(match[1]) && f.shortName === match[2]);
+        if (!storFileItem) return;
+        const tag = convertFileToTag(storFileItem);
+        const el = document.createElement(tag);
+        openElementInServiceDetails(el);
     }
 
     private _renderAll() {
