@@ -273,7 +273,7 @@ function generatePipeLine(moduleName: string, shortName: string) {
         {
             "id": "contract",
             "specVar": "contractSpec",
-            "outputPath": "/l1/" + moduleName + "/layer_2_controller/" + shortName + ".ts",
+            "outputPath": "/l1/" + moduleName + "/layer_2_controllers/" + shortName + ".ts",
             "skillPath": "_102020_/l2/agents/newModule/skills/genContract.ts",
             "agent": "agentMaterializeContract",
             "dependsOn": [],

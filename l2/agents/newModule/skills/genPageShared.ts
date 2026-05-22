@@ -127,7 +127,8 @@ export class {ModuleName}{PageName}Base extends CollabLitElement {
     super.connectedCallback();
     const pendingLoad = consumeExpectedNavigationLoad();
     const task = this.loadInitialData(undefined, {
-      mode: pendingLoad ? 'blocking' : 'silent',
+      // mode: pendingLoad ? 'blocking' : 'silent',
+      mode: 'silent',
       signal: pendingLoad?.signal,
     });
     bindExpectedNavigationLoad(pendingLoad, task);

@@ -115,7 +115,6 @@ Technical constraints that must still be respected:
 - No markdown fences, no explanations, no inline comments
 - 2-space indentation inside the class; the html template may use 6-space indentation for readability
 - One blank line between top-level declarations
-- The class and \`customElements.define\` are the only two top-level declarations after the imports
 
 ---
 `;

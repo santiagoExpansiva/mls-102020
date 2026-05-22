@@ -183,7 +183,8 @@ async function addModuleRoutes(context: mls.msg.ExecutionContext, shortName: str
   const info = convertTagToFileName(tag) as any;
   info.extension = '.js';
   info.level = 2;
-  const fileReference = mls.stor.convertFileToFileReference(info);
+  let fileReference = mls.stor.convertFileToFileReference(info);
+  fileReference = fileReference.startsWith('/') ? fileReference : '/' + fileReference;
 
   const sf = mls.stor.files[key];
 
@@ -214,7 +215,8 @@ async function addIndexPage(context: mls.msg.ExecutionContext, shortName: string
   const info = convertTagToFileName(tag) as any;
   info.extension = '.js';
   info.level = 2
-  const fileReference = mls.stor.convertFileToFileReference(info);
+  let fileReference = mls.stor.convertFileToFileReference(info);
+  fileReference = fileReference.startsWith('/') ? fileReference : '/' + fileReference;
 
   const sf = mls.stor.files[key];
 
