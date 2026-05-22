@@ -148,17 +148,17 @@ export class PluginSelectPage extends StateLitElement {
         for (const f of Object.values(mls.stor.files as Record<string, any>)) {
             if (f.project !== project) continue;
             const folder: string = f.folder ?? '';
+            const shortName: string = f.shortName ?? '';
+            if (!shortName) continue;
 
             for (const devicePath of devicePaths) {
                 const prefix = `${modulePath}/${devicePath}`;
                 if (!folder.startsWith(prefix + '/')) continue;
 
-                const afterPrefix = folder.slice(prefix.length + 1); // "page11/login"
-                const parts = afterPrefix.split('/');
-                if (parts.length === 2 && /^page\d+$/.test(parts[0])) {
-                    const pageName = parts[1];
-                    if (!pageMap.has(pageName)) pageMap.set(pageName, new Set());
-                    pageMap.get(pageName)!.add(devicePath);
+                const afterPrefix = folder.slice(prefix.length + 1); // "page11"
+                if (/^page\d+$/.test(afterPrefix)) {
+                    if (!pageMap.has(shortName)) pageMap.set(shortName, new Set());
+                    pageMap.get(shortName)!.add(devicePath);
                 }
             }
         }
