@@ -125,12 +125,19 @@ async function afterPromptStep(
         status
     };
 
+    // When needsPlayground is true, a child agent (agentNewMoleculePlayground) will be triggered.
+    // Per parent-agent pattern: do not include updateStatus alongside add-step to avoid breaking child execution.
+    const hasChildAgent = intents.some((i) => i.type === 'add-step');
+    if (hasChildAgent) return intents;
+
     return [...intents, updateStatus];
 }
 
 async function processOutput(context: mls.msg.ExecutionContext, result: IResult): Promise<mls.msg.AgentIntent[]> {
 
     const fileReference = await updateMoleculeTs(context, result.ts);
+    if (!result.needsPlayground) return [];
+
     const group = await getGroup(context, fileReference);
 
     const newStep: mls.msg.AgentIntentAddStep = {
@@ -226,6 +233,18 @@ Apply only what is asked — preserve all existing behaviors, structure, and sty
 4. Apply only what is explicitly requested.
 5. Add inline comments in English only for new implementations.
 
+## needsPlayground field
+Set \`needsPlayground: true\` if the change affects how the component is used or rendered externally:
+- Added, removed, or renamed a \`@property\` decorator
+- Added or removed a slot
+- Added or removed a dispatched custom event
+- Changed the \`render()\` template structure (new elements, new conditional sections)
+
+Set \`needsPlayground: false\` if only internal behavior changed:
+- Bug fix in logic not related to rendering
+- Style-only change (CSS variables, colors, spacing, typography)
+- Refactor with no observable difference from outside the component
+
 ## Output format
 You must return the object strictly as JSON
 [[OutputSection]]
@@ -240,6 +259,7 @@ export type Output =
 
 interface IResult {
     ts: string;
+    needsPlayground: boolean;
 }
 
 interface IDataPrompt {
