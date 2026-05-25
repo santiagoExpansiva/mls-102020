@@ -406,7 +406,7 @@ export class ServiceGenome102020 extends ServiceBase {
                     ">${label}</span>
 
                     <div class="
-                        w-4 h-0.5 rounded-full
+                        w-full h-0.5 rounded-full
                         transition-all duration-200
                         ${isContext
                             ? 'bg-cyan-400 shadow-[0_0_4px_1px_rgba(34,211,238,0.6),0_0_8px_2px_rgba(34,211,238,0.3)]'

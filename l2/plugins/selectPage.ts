@@ -68,6 +68,7 @@ interface IModule {
 interface IPageEntry {
     name: string;
     devices: string[];
+    file: mls.stor.IFileInfo;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -142,7 +143,7 @@ export class PluginSelectPage extends StateLitElement {
             ? DEVICE_LABELS[DEVICE_SUB_PATHS[actualDevice]] ?? null
             : null;
 
-        const pageMap = new Map<string, Set<string>>();
+        const pageMap = new Map<string, { devices: Set<string>; file: mls.stor.IFileInfo }>();
 
         // @ts-ignore
         for (const f of Object.values(mls.stor.files as Record<string, any>)) {
@@ -157,14 +158,14 @@ export class PluginSelectPage extends StateLitElement {
 
                 const afterPrefix = folder.slice(prefix.length + 1); // "page11"
                 if (/^page\d+$/.test(afterPrefix)) {
-                    if (!pageMap.has(shortName)) pageMap.set(shortName, new Set());
-                    pageMap.get(shortName)!.add(devicePath);
+                    if (!pageMap.has(shortName)) pageMap.set(shortName, { devices: new Set(), file: f });
+                    pageMap.get(shortName)!.devices.add(devicePath);
                 }
             }
         }
 
         this._pages = Array.from(pageMap.entries())
-            .map(([name, devices]) => ({ name, devices: Array.from(devices).sort() }))
+            .map(([name, { devices, file }]) => ({ name, devices: Array.from(devices).sort(), file }))
             .sort((a, b) => a.name.localeCompare(b.name));
 
         console.log('[selectPage] pages found:', this._pages);
@@ -178,7 +179,12 @@ export class PluginSelectPage extends StateLitElement {
         this._pages.forEach((p, i) => { labels[i + 1] = p.name; });
         labels[this._pages.length + 1] = '+';
         this.dispatchEvent(new CustomEvent('page-config', {
-            detail: { min: 0, max: this._pages.length + 1, labels },
+            detail: {
+                min: 0,
+                max: this._pages.length + 1,
+                labels,
+                pages: this._pages.map(p => ({ name: p.name, file: p.file })),
+            },
             bubbles: true,
             composed: true,
         }));
@@ -366,8 +372,9 @@ export class PluginSelectPage extends StateLitElement {
     }
 
     private _dispatchSelect(value: number) {
+        const entry = value > 0 && value <= this._pages.length ? this._pages[value - 1] : null;
         this.dispatchEvent(new CustomEvent('select-page', {
-            detail: { value },
+            detail: { value, file: entry?.file ?? null },
             bubbles: true,
             composed: true,
         }));

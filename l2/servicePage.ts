@@ -103,6 +103,8 @@ export class ServicePage102020 extends ServiceBase {
     @state() private _pageValue: number | null = 0;
     @state() private _ruleValue: number | null = null;
 
+    private _pageEntries: Array<{ name: string; file: mls.stor.IFileInfo }> = [];
+
     @state() private _selectedKnob: string = 'page';
 
     // ─── Data Loading ─────────────────────────────────────────────────
@@ -172,11 +174,51 @@ export class ServicePage102020 extends ServiceBase {
     private _onKnobChange(key: string, e: CustomEvent) {
         this._selectedKnob = key;
         this._setKnobValue(key, e.detail.value);
+        if (key === 'page') {
+            const value: number = e.detail.value;
+            const entry = value > 0 && value <= this._pageEntries.length ? this._pageEntries[value - 1] : null;
+            this._setActualPage(entry?.file ?? null);
+        }
     }
 
     private _onKnobClick(key: string) {
         this._selectedKnob = key;
         this.requestUpdate();
+    }
+
+    private _onPageSelect(e: CustomEvent) {
+        this._setKnobValue('page', e.detail.value);
+        this._setActualPage(e.detail.file as mls.stor.IFileInfo ?? null);
+    }
+
+    private async _setActualPage(file: mls.stor.IFileInfo | null) {
+        if (!file) return;
+        let name = `_${file.project}_${file.shortName}`;
+        if (file.folder) name = `_${file.project}_${file.folder}/${file.shortName}`;
+        for (const lv of [3, 4]) {
+            // @ts-ignore
+            mls.actual[lv].setFullName(name);
+            // @ts-ignore
+            mls.actual[lv][this.position as ('right' | 'left')] = file;
+        }
+        // @ts-ignore
+        const storFiles = await mls.stor.getFiles({ project: file.project, shortName: file.shortName, folder: file.folder, loadContent: false });
+        // @ts-ignore
+        if ([1, 2, 3, 4].includes(mls.actualLevel)) await this.createModel(file, '.ts');
+        // @ts-ignore
+        if ([2, 3, 4].includes(mls.actualLevel) && storFiles.less) await this.createModel(file, '.less');
+        // @ts-ignore
+        if ([2, 3, 4].includes(mls.actualLevel) && storFiles.html) await this.createModel(file, '.html');
+        const params: any = { action: 'open' };
+        params.level = file.level;
+        params.project = file.project;
+        params.shortName = file.shortName;
+        params.extension = file.extension;
+        params.folder = file.folder;
+        // @ts-ignore
+        params.position = this.position as ('right' | 'left');
+        // @ts-ignore
+        mls.events.fire([mls.actualLevel], ['FileAction'], JSON.stringify(params), 0);
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────
@@ -252,7 +294,7 @@ export class ServicePage102020 extends ServiceBase {
                     ">${label}</span>
 
                     <div class="
-                        w-4 h-0.5 rounded-full
+                        w-full h-0.5 rounded-full
                         transition-all duration-200
                         ${isContext
                             ? 'bg-cyan-400 shadow-[0_0_4px_1px_rgba(34,211,238,0.6),0_0_8px_2px_rgba(34,211,238,0.3)]'
@@ -266,8 +308,9 @@ export class ServicePage102020 extends ServiceBase {
     // ─── Details Row ──────────────────────────────────────────────────
 
     private _onPageConfig(e: CustomEvent) {
-        const { min, max, labels } = e.detail;
+        const { min, max, labels, pages } = e.detail;
         this._pageConfig = { key: 'page', min, max, labels };
+        if (pages) this._pageEntries = pages;
         // @ts-ignore
         this.requestUpdate();
     }
@@ -276,7 +319,7 @@ export class ServicePage102020 extends ServiceBase {
         return html`
             <div class="flex flex-col flex-1">
                 <div class="flex flex-col gap-3 px-4 py-4 flex-1"
-                    @select-page=${(e: CustomEvent) => this._setKnobValue('page', e.detail.value)}
+                    @select-page=${(e: CustomEvent) => this._onPageSelect(e)}
                     @select-rule=${(e: CustomEvent) => this._setKnobValue('rule', e.detail.value)}
                     @page-config=${(e: CustomEvent) => this._onPageConfig(e)}
                 >
@@ -293,7 +336,7 @@ export class ServicePage102020 extends ServiceBase {
                     <plugins--select-page-102020
                         .selectedModule=${this._selectedModule}
                         .value=${this._pageValue}
-                        @select-page=${(e: CustomEvent) => this._setKnobValue('page', e.detail.value)}
+                        @select-page=${(e: CustomEvent) => this._onPageSelect(e)}
                     ></plugins--select-page-102020>
                 `;
             case 'rule':

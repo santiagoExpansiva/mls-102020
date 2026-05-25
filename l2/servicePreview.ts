@@ -91,6 +91,7 @@ export class ServicePreview extends ServiceBase {
   get confE() { return `l${this.level}_${this.position}`; }
 
   get isL3(): boolean { return this.level === 3; }
+  get isL4(): boolean { return this.level === 4; }
 
   constructor() {
     super();
@@ -101,6 +102,7 @@ export class ServicePreview extends ServiceBase {
     };
     this.initStatesPreview();
     this.initStatesPreviewL3();
+    this.initStatesPreviewL4();
   }
 
   public details: IService = {
@@ -110,7 +112,7 @@ export class ServicePreview extends ServiceBase {
     tooltip: 'Aura Preview',
     visible: true,
     widget: '_102020_servicePreview',
-    level: [2, 3]
+    level: [2, 3, 4]
   }
 
   public onClickMain(op: string): void {
@@ -222,6 +224,20 @@ export class ServicePreview extends ServiceBase {
     });
   }
 
+  private initStatesPreviewL4() {
+    initState('previewL4', {
+      selectedElement: null,
+      selectedTagName: '',
+      selectedAttributes: {},
+      selectedStyles: {},
+      selectedRect: null,
+      breadcrumb: [],
+      editMode: 'select',
+      hoveredElement: null,
+      panelVisible: true,
+    });
+  }
+
   // Implementations
 
   private toogleWatch() {
@@ -322,7 +338,7 @@ export class ServicePreview extends ServiceBase {
   private onFileAction(ev: mls.events.IEvent) {
 
 
-    if (![2, 3].includes(ev.level) || (ev.type !== 'FileAction') || !ev.desc) return;
+    if (![2, 3, 4].includes(ev.level) || (ev.type !== 'FileAction') || !ev.desc) return;
     const fileAction = JSON.parse(ev.desc) as mls.events.IFileAction;
     const eventsValid = ['open', 'openBackground', 'statusOrErrorChanged', 'changed', 'new', 'modeCreated', 'editorChanged', 'openLink', 'editorEvents'];
 
@@ -371,8 +387,8 @@ export class ServicePreview extends ServiceBase {
   private setLastOpenedFile() {
     if (!mls.actual[this.level].left) {
 
-      // L3: fallback para o arquivo aberto no L2
-      if (this.isL3 && mls.actual[2]?.left) {
+      // L3/L4: fallback para o arquivo aberto no L2
+      if ((this.isL3 || this.isL4) && mls.actual[2]?.left) {
         const l2Info = mls.actual[2].left as mls.stor.IFileInfo;
         mls.actual[this.level].setFullName(`_${l2Info.project}_/l2/${l2Info.folder ? l2Info.folder + '/' : ''}${l2Info.shortName}`);
         return;
@@ -382,11 +398,11 @@ export class ServicePreview extends ServiceBase {
 
       // Tenta o level atual, senão fallback pro L2
       const levelKey = String(this.level);
-      const fallbackKey = this.isL3 ? '2' : levelKey;
+      const fallbackKey = (this.isL3 || this.isL4) ? '2' : levelKey;
       let targetKey = levelKey;
 
       if (!lastFileOpened || !lastFileOpened[targetKey as any]) {
-        if (this.isL3 && lastFileOpened && lastFileOpened[fallbackKey as any]) {
+        if ((this.isL3 || this.isL4) && lastFileOpened && lastFileOpened[fallbackKey as any]) {
           targetKey = fallbackKey;
         } else {
           this.clearPreview();
@@ -407,8 +423,8 @@ export class ServicePreview extends ServiceBase {
       const key = mls.stor.getKeyToFiles(infoLast.project, this.level, infoLast.shortName, infoLast.folder, '.ts');
       const file = mls.stor.files[key];
       if (!file) {
-        // L3: tenta buscar o file no level 2
-        if (this.isL3) {
+        // L3/L4: tenta buscar o file no level 2
+        if (this.isL3 || this.isL4) {
           const keyL2 = mls.stor.getKeyToFiles(infoLast.project, 2, infoLast.shortName, infoLast.folder, '.ts');
           const fileL2 = mls.stor.files[keyL2];
           if (!fileL2) {
@@ -425,7 +441,7 @@ export class ServicePreview extends ServiceBase {
   }
 
   private async setActualFiles(project: number, shortName: string, folder: string) {
-    const storLevel = this.isL3 ? 2 : this.level;
+    const storLevel = (this.isL3 || this.isL4) ? 2 : this.level;
     const files = await mls.stor.getFiles({
       folder,
       project,
@@ -527,6 +543,13 @@ export class ServicePreview extends ServiceBase {
           <preview-editor-l3-102020>
             ${domVirtual.innerHTML}
           </preview-editor-l3-102020>
+        `;
+      } else if (this.isL4) {
+        // L4: wrapa no component editor L4
+        doc.body.innerHTML = `
+          <preview-editor-l4-102020>
+            ${domVirtual.innerHTML}
+          </preview-editor-l4-102020>
         `;
       } else {
         // L2: conteúdo direto
