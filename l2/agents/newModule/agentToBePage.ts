@@ -141,7 +141,12 @@ async function processOutput(context: mls.msg.ExecutionContext, output: ToBePage
     if (!module) throw new Error('Not found moduleName:' + agent.agentName);
 
     const refDef = `_${mls.actualProject || 0}_/l2/${module}/${output.pages[0].pageName}.defs.ts`;
-    let srcDefs = updateVariableJson('/// <mls fileReference="' + refDef + '"  enhancement="_blank"/>\n\n', 'definition', output);
+    const info = mls.stor.convertFileReferenceToFile(refDef);
+    const key = mls.stor.getKeyToFile(info);
+    if (!mls.stor.files[key]) throw new Error('[agentToBePage] Not found module file');
+    let srcDefs = await mls.stor.files[key].getContent() as string;
+
+    srcDefs = updateVariableJson(srcDefs, 'definitionPage', output);
 
     srcDefs = addPipeLine(srcDefs, module, output.pages[0].pageName, refDef);
 
@@ -228,7 +233,7 @@ function generateContract(src: string, defsPath: string, moduleName: string) {
     return updateVariableText(src, 'contractSpec', `
 ## Pages spec
 \\\`\\\`\\\`JSON
-    [[(${defsPath}).definition]]
+    [[(${defsPath}).definitionPage]]
 \\\`\\\`\\\`
 
 ## Ontology
@@ -242,7 +247,7 @@ function generateShared(src: string, defsPath: string, moduleName: string) {
     return updateVariableText(src, 'sharedSpec', `
 ## Pages spec
 \\\`\\\`\\\`JSON
-    [[(${defsPath}).definition]]
+    [[(${defsPath}).definitionPage]]
 \\\`\\\`\\\`
 
 ## Ontology
@@ -257,7 +262,7 @@ function generatePage(src: string, defsPath: string, moduleName: string, shortNa
     return updateVariableText(src, 'desktopLayoutSpec', `
 ## Pages spec
 \\\`\\\`\\\`JSON
-    [[(${defsPath}).definition]]
+    [[(${defsPath}).definitionPage]]
 \\\`\\\`\\\`
 
 ## Base Class

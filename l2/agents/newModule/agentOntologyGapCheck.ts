@@ -3,7 +3,7 @@
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
 import { updateVariableJson, getVariableJson } from '/_102027_/l2/defsAST.js';
-import { ModuleToBe } from '/_102020_/l2/agents/newModule/agentToBeConceptual.js';
+import { ModuleToBe, EntityDefinition } from '/_102020_/l2/agents/newModule/agentToBeConceptual.js';
 
 export function createAgent(): IAgentAsync {
     return {
@@ -106,10 +106,13 @@ async function afterPromptStep(
     const sf = getOntologyStorFile(moduleName);
     let ontologyContent: string;
 
-    if (result.hasGaps && result.updatedOntology) {
+    if (result.hasGaps && result.newEntities && Object.keys(result.newEntities).length > 0) {
         const m = await sf.getOrCreateModel();
         const currentSrc = m.model.getValue() as string;
-        ontologyContent = updateVariableJson(currentSrc, 'ontology', result.updatedOntology);
+        const moduleToBe = getVariableJson<ModuleToBe>(currentSrc, 'ontology');
+        moduleToBe.ontology = moduleToBe.ontology ?? { entities: {} };
+        moduleToBe.ontology.entities = { ...moduleToBe.ontology.entities, ...result.newEntities };
+        ontologyContent = updateVariableJson(currentSrc, 'ontology', moduleToBe);
         m.model.setValue(ontologyContent);
         await mls.stor.localStor.setContent(sf, { contentType: 'string', content: ontologyContent });
     } else {
@@ -184,6 +187,9 @@ Do NOT add entities that:
 - Are purely technical (sessions, logs, cache, tokens)
 - Can be modeled as fields within an existing entity
 
+IMPORTANT: When hasGaps is true, return ONLY the new missing entities in 'newEntities'.
+Do NOT repeat or copy existing entities — they will be merged automatically.
+
 ## Output format
 Return strictly JSON, no spaces, no indent, minified
 [[OutputSection]]
@@ -203,6 +209,6 @@ export type GapCheckResult =
     | {
         hasGaps: true;
         summary: string;
-        updatedOntology: ModuleToBe;
+        newEntities: Record<string, EntityDefinition>; // ONLY the missing entities — existing ones are merged in code
       };
 //#endregion
