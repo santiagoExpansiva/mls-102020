@@ -4,125 +4,127 @@ import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { createStorFile, IReqCreateStorFile } from '/_102027_/l2/libStor.js';
 
 export function createAgent(): IAgentAsync {
-    return {
-        agentName: "agentCreatePersistence",
-        agentProject: 102020,
-        agentFolder: "agents/newModule",
-        agentDescription: "New agent",
-        visibility: "public",
-        beforePromptImplicit,
-        beforePromptStep,
-        afterPromptStep
-    };
+  return {
+    agentName: "agentCreatePersistence",
+    agentProject: 102020,
+    agentFolder: "agents/newModule",
+    agentDescription: "New agent",
+    visibility: "public",
+    beforePromptImplicit,
+    beforePromptStep,
+    afterPromptStep
+  };
 }
 
 async function beforePromptImplicit(
-    agent: IAgentMeta,
-    context: mls.msg.ExecutionContext,
-    userPrompt: string,
+  agent: IAgentMeta,
+  context: mls.msg.ExecutionContext,
+  userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
 
-    if (!userPrompt || userPrompt.length < 5) throw new Error('invalid prompt');
+  if (!userPrompt || userPrompt.length < 5) throw new Error('invalid prompt');
 
-    const info = JSON.parse(userPrompt);
-    const ontology = await getOntology(info.moduleName);
+  const info = JSON.parse(userPrompt);
+  const ontology = await getOntology(info.moduleName);
 
-    const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
-        type: "add-message-ai",
-        request: {
-            action: 'addMessageAI',
-            agentName: agent.agentName,
-            inputAI: [{
-                type: "system",
-                content: system1.replace('{{ontology}}', ontology).replace('{{projectId}}', (mls.actualProject || 0).toString()).replace('{{moduleName}}', info.moduleName),
-            }, {
-                type: "human",
-                content: 'create persistence file'
-            }],
-            taskTitle: `Test 1`,
-            threadId: context.message.threadId,
-            userMessage: context.message.content,
-            longTermMemory: { moduleName: info.moduleName }
-        }
-    };
-    return [addMessageAI];
+  const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
+    type: "add-message-ai",
+    request: {
+      action: 'addMessageAI',
+      agentName: agent.agentName,
+      inputAI: [{
+        type: "system",
+        content: system1.replace('{{ontology}}', ontology).replace('{{projectId}}', (mls.actualProject || 0).toString()).replace('{{moduleName}}', info.moduleName),
+      }, {
+        type: "human",
+        content: 'create persistence file'
+      }],
+      taskTitle: `Test 1`,
+      threadId: context.message.threadId,
+      userMessage: context.message.content,
+      longTermMemory: { moduleName: info.moduleName }
+    }
+  };
+  return [addMessageAI];
 
 }
 
 async function beforePromptStep(
-    agent: IAgentMeta,
-    context: mls.msg.ExecutionContext,
-    parentStep: mls.msg.AIAgentStep,
-    step: mls.msg.AIAgentStep,
-    hookSequential: number,
-    args?: string
+  agent: IAgentMeta,
+  context: mls.msg.ExecutionContext,
+  parentStep: mls.msg.AIAgentStep,
+  step: mls.msg.AIAgentStep,
+  hookSequential: number,
+  args?: string
 ): Promise<mls.msg.AgentIntent[]> {
 
-    let moduleName = context.task?.iaCompressed?.longMemory['moduleName'];
-    if (!moduleName) throw new Error('[agentCreatePersistence]: Not found moduleName');
+  if (!args) throw new Error(`(${agent.agentName})[beforePromptStep] args invalid`);
 
-    const ontology = await getOntology(moduleName);
+  let moduleName = context.task?.iaCompressed?.longMemory['moduleName'];
+  if (!moduleName) throw new Error('[agentCreatePersistence]: Not found moduleName');
 
-    const continueIntent: mls.msg.AgentIntentPromptReady = {
-        type: "prompt_ready",
-        args: '',
-        messageId: context.message.orderAt,
-        threadId: context.message.threadId,
-        taskId: context.task?.PK || '',
-        hookSequential,
-        parentStepId: parentStep.stepId,
-        humanPrompt: 'create persistence file',
-        systemPrompt: system1.replace('{{ontology}}', ontology).replace('{{projectId}}', (mls.actualProject || 0).toString()).replace('{{moduleName}}', moduleName)
-    }
+  const ontology = await getOntology(moduleName);
 
-    return [continueIntent];
+  const continueIntent: mls.msg.AgentIntentPromptReady = {
+    type: "prompt_ready",
+    args,
+    messageId: context.message.orderAt,
+    threadId: context.message.threadId,
+    taskId: context.task?.PK || '',
+    hookSequential,
+    parentStepId: parentStep.stepId,
+    humanPrompt: 'create persistence file',
+    systemPrompt: system1.replace('{{ontology}}', ontology).replace('{{projectId}}', (mls.actualProject || 0).toString()).replace('{{moduleName}}', moduleName)
+  }
+
+  return [continueIntent];
 }
 
 
 async function afterPromptStep(
-    agent: IAgentMeta,
-    context: mls.msg.ExecutionContext,
-    parentStep: mls.msg.AIAgentStep,
-    step: mls.msg.AIAgentStep,
-    hookSequential: number,
+  agent: IAgentMeta,
+  context: mls.msg.ExecutionContext,
+  parentStep: mls.msg.AIAgentStep,
+  step: mls.msg.AIAgentStep,
+  hookSequential: number,
 ): Promise<mls.msg.AgentIntent[]> {
 
 
-    if (!agent || !context || !step) throw new Error(`[afterPromptStep] invalid params, agent:${!!agent}, context:${!!context}, step:${!!step}`);
+  if (!agent || !context || !step) throw new Error(`[afterPromptStep] invalid params, agent:${!!agent}, context:${!!context}, step:${!!step}`);
 
-    const payload = (step.interaction?.payload?.[0]);
-    if (payload?.type !== 'flexible' || !payload.result) throw new Error(`[afterPromptStep] invalid payload: ${payload}`)
-    let status: mls.msg.AIStepStatus = 'completed';
-    let intents: mls.msg.AgentIntent[] = [];
+  const payload = (step.interaction?.payload?.[0]);
+  if (payload?.type !== 'flexible' || !payload.result) throw new Error(`[afterPromptStep] invalid payload: ${payload}`)
+  let status: mls.msg.AIStepStatus = 'completed';
+  let intents: mls.msg.AgentIntent[] = [];
 
-    const output = payload.result;
-    intents = await processOutput(context, output);
+  const output = payload.result;
+  intents = await processOutput(context, output);
 
-    const updateStatus: mls.msg.AgentIntentUpdateStatus = {
-        type: 'update-status',
-        hookSequential,
-        messageId: context.message.orderAt,
-        threadId: context.message.threadId,
-        taskId: context.task?.PK || '',
-        parentStepId: parentStep.stepId,
-        stepId: step.stepId,
-        status
-    };
+  const updateStatus: mls.msg.AgentIntentUpdateStatus = {
+    type: 'update-status',
+    hookSequential,
+    messageId: context.message.orderAt,
+    threadId: context.message.threadId,
+    taskId: context.task?.PK || '',
+    parentStepId: parentStep.stepId,
+    stepId: step.stepId,
+    status
+  };
 
-    return [...intents, updateStatus];
+  return [...intents, updateStatus];
 
 }
 
 async function processOutput(context: mls.msg.ExecutionContext, output: any): Promise<mls.msg.AgentIntent[]> {
 
-    if (!output.srcFile) throw new Error('[agentCreatePersistence] not found srcFile');
+  if (!output.srcFile) throw new Error('[agentCreatePersistence] not found srcFile');
 
-    let moduleName = context.task?.iaCompressed?.longMemory['moduleName'];
-    if (!moduleName) throw new Error('[agentCreatePersistence]: Not found moduleName');
+  let moduleName = context.task?.iaCompressed?.longMemory['moduleName'];
+  if (!moduleName) throw new Error('[agentCreatePersistence]: Not found moduleName');
 
-    await saveFile(`_${mls.actualProject}_/l1/${moduleName}/layer_1_external/persistence.ts` ,output.srcFile)
+  await saveFile(`_${mls.actualProject}_/l1/${moduleName}/layer_1_external/persistence.ts`, output.srcFile)
 
-    return [];
+  return [];
 }
 
 async function saveFile(ref: string, src: string, needCreateModel: boolean = true) {
@@ -139,7 +141,7 @@ async function saveFile(ref: string, src: string, needCreateModel: boolean = tru
 
     sf = await createStorFile(param, needCreateModel, needCreateModel, needCreateModel);
 
-  } else { 
+  } else {
 
     const m = await sf.getOrCreateModel();
     if (m && m.model) m.model.setValue(src);
@@ -151,12 +153,12 @@ async function saveFile(ref: string, src: string, needCreateModel: boolean = tru
 
 async function getOntology(moduleName: string): Promise<string> {
 
-    const key = mls.stor.getKeyToFile({ project: mls.actualProject || 0, level: 2, shortName: 'module', folder: moduleName, extension: '.defs.ts' });
+  const key = mls.stor.getKeyToFile({ project: mls.actualProject || 0, level: 2, shortName: 'module', folder: moduleName, extension: '.defs.ts' });
 
-    if (!mls.stor.files[key]) throw new Error("[agentCreatePersistence] Not found ontology");
+  if (!mls.stor.files[key]) throw new Error("[agentCreatePersistence] Not found ontology");
 
-    const src = await mls.stor.files[key].getContent() as string;
-    return src;
+  const src = await mls.stor.files[key].getContent() as string;
+  return src;
 }
 
 
