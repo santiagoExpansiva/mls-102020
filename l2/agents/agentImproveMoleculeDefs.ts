@@ -2,7 +2,6 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { appendLongTermMemory } from '/_102027_/l2/aiAgentHelper.js';
-import { updateDefs } from '/_102020_/l2/agents/agentNewMoleculeDefs.js';
 
 export function createAgent(): IAgentAsync {
     return {
@@ -86,7 +85,7 @@ async function afterPromptStep(
 
     const status: mls.msg.AIStepStatus = 'completed';
     const output: IResult = payload.result;
-    await updateDefs(output.skillMd, output.fileReference, output.group);
+    await updateExistingDefs(output.skillMd, output.fileReference, output.group);
 
     const updateStatus: mls.msg.AgentIntentUpdateStatus = {
         type: 'update-status',
@@ -120,13 +119,39 @@ async function afterPromptStep(
             interaction: null,
             status: 'waiting_human_input',
             nextSteps: [],
-            agentName: "agentImproveMoleculeMaterialize",
-            prompt: JSON.stringify({ page, prompt, position }),
+            agentName: "agentNewMoleculeMaterialize",
+            prompt: output.fileReference, //JSON.stringify({ page, prompt, position }),
             rags: null,
         }
     };
 
     return [newStep, updateStatus];
+}
+
+async function updateExistingDefs(skill: string, fileReference: string, group: string): Promise<void> {
+
+    let fileInfo = mls.stor.convertFileReferenceToFile(fileReference);
+    if (!fileReference || fileInfo.project < 1) throw new Error(`[updateExistingDefs] Invalid fileReference: ${fileReference}`);
+
+    const skillNormalized = skill.replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+    const defsFileReference = fileReference.replace('.ts', '.defs.ts');
+
+    const template = `/// <mls fileReference="${defsFileReference}" enhancement="_blank" />
+
+// Do not change – automatically generated code.
+
+export const group = '${group}';
+export const skill = \`${skillNormalized}\`;
+
+`;
+
+    const params = { ...fileInfo, content: template, extension: '.defs.ts', versionRef: new Date().toISOString() };
+    const file = await mls.stor.addOrUpdateFile(params);
+    if (!file) throw new Error(`[updateExistingDefs] addOrUpdateFile returned null for: ${fileReference}`);
+
+    const model = await file.getOrCreateModel();
+    if (model) mls.editor.forceModelUpdate(model.model);
+
 }
 
 const system1 = `
