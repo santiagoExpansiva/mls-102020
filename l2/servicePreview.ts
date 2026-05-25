@@ -191,8 +191,8 @@ export class ServicePreview extends ServiceBase {
   }
 
   private setEvents() {
-    mls.events.addEventListener([this.level], ['FileAction'], this.onFileAction.bind(this));
-    mls.events.addEventListener([this.level], ['styleChanged' as any], this.onStyleChanged.bind(this));
+    mls.events.addEventListener([2, 3, 4], ['FileAction'], this.onFileAction.bind(this));
+    mls.events.addEventListener([2, 3, 4], ['styleChanged' as any], this.onStyleChanged.bind(this));
   }
 
   handleIcaStateChange(key: string, value: any) {
@@ -502,8 +502,13 @@ export class ServicePreview extends ServiceBase {
 
     iframe.addEventListener('load', async () => {
 
-      await this.writePreviewContent(iframe);
-      this.loading = false;
+      try {
+        await this.writePreviewContent(iframe);
+      } catch (e: any) {
+        console.error('[servicePreview] writePreviewContent error:', e);
+      } finally {
+        this.loading = false;
+      }
 
       // Apply current dark/light state and language to the new iframe
       const htmlEl = iframe.contentDocument?.querySelector('html');
@@ -527,8 +532,16 @@ export class ServicePreview extends ServiceBase {
 
     await this.setActualFileInfos();
 
-    if (!this.actualFiles || !this.actualFiles.html) throw new Error('No find html file');
-    if (!this.actualFiles || !this.actualFiles.htmlContent) throw new Error('No find html file content');
+    if (!this.actualFiles || !this.actualFiles.html) {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) doc.body.innerHTML = `<div style="padding:24px;font-family:sans-serif;color:#888;">.html file not found for this page</div>`;
+      return;
+    }
+    if (!this.actualFiles.htmlContent) {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) doc.body.innerHTML = `<div style="padding:24px;font-family:sans-serif;color:#888;">.html content is empty</div>`;
+      return;
+    }
 
     try {
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
