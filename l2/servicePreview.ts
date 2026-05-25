@@ -7,7 +7,7 @@ import { getPath } from '/_102027_/l2/utils.js';
 import { convertFileToTag } from '/_102020_/l2/utils.js';
 import { getTokensCss, getTokensLess, removeTokensFromSource } from '/_102027_/l2/designSystemBase.js';
 import { getConfigProject } from '/_102027_/l2/libProjectConfig.js';
-import { getLastOpenedFiles, } from '/_102027_/l2/libCommom.js';
+import { getLastOpenedFiles } from '/_102027_/l2/libCommom.js';
 import { compileStyleUsingStorFile } from '/_102027_/l2/libCompileStyle.js';
 import { createModel } from '/_102027_/l2/libModel.js';
 
@@ -385,18 +385,17 @@ export class ServicePreview extends ServiceBase {
   }
 
   private setLastOpenedFile() {
+
+    const lastFileOpened = getLastOpenedFiles(mls.actualProject || 0);
+    if ((this.isL3 || this.isL4) && mls.actual[2]?.left) {
+      const last = mls.actualLevel as number;
+      if (!last || !lastFileOpened[last]) return;
+      mls.actual[this.level].setFullName(lastFileOpened[last] as string);
+      return;
+    }
+
     if (!mls.actual[this.level].left) {
 
-      // L3/L4: fallback para o arquivo aberto no L2
-      if ((this.isL3 || this.isL4) && mls.actual[2]?.left) {
-        const l2Info = mls.actual[2].left as mls.stor.IFileInfo;
-        mls.actual[this.level].setFullName(`_${l2Info.project}_/l2/${l2Info.folder ? l2Info.folder + '/' : ''}${l2Info.shortName}`);
-        return;
-      }
-
-      const lastFileOpened = getLastOpenedFiles(mls.actualProject || 0);
-
-      // Tenta o level atual, senão fallback pro L2
       const levelKey = String(this.level);
       const fallbackKey = (this.isL3 || this.isL4) ? '2' : levelKey;
       let targetKey = levelKey;
