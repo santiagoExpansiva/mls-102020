@@ -92,10 +92,9 @@ export class ServiceGenome102020 extends ServiceBase {
         onClickMain: this.onClickMain.bind(this),
     };
 
-    onServiceClick(_visible: boolean, _reinit: boolean, _el: IToolbarContent | null) {
+    async onServiceClick(_visible: boolean, _reinit: boolean, _el: IToolbarContent | null) {
         this._initDesignSystemKnob();
-        // @ts-ignore
-        const file = mls.actual[3]?.left as mls.stor.IFileInfo ?? null;
+        const file: mls.stor.IFileInfo | null = await mls.actual[3].getStorFile() ?? null;
         this._updateCurrentPage(file);
     }
 
@@ -135,9 +134,7 @@ export class ServiceGenome102020 extends ServiceBase {
     // ─── Design System ────────────────────────────────────────────────
 
     private async _initDesignSystemKnob() {
-        // @ts-ignore
         if (!mls.actualProject) return;
-        // @ts-ignore
         const projectDS: IDesignSystemTokens[] = await getTokens(mls.actualProject);
 
         const labels: Record<number, string> = { 0: 'All' };
@@ -161,7 +158,6 @@ export class ServiceGenome102020 extends ServiceBase {
     // ─── Molecule Logic ───────────────────────────────────────────────
 
     private _getMolecules(): Map<string, any[]> {
-        // @ts-ignore
         const files = Object.values(mls.stor.files) as any[];
         const htmlFiles = files.filter(
             (f) => f.extension === '.html' && f.folder.startsWith('molecules') && f.shortName !== 'index'
@@ -203,7 +199,6 @@ export class ServiceGenome102020 extends ServiceBase {
         }
 
         const widgetsFromGroup = groupsMolecules.get(actualGroup)!;
-        // @ts-ignore
         const groupDescription = (listOfGroups as any[]).find(
             (item: any) => item.name.toLowerCase() === actualGroup
         )?.description || '';
@@ -279,7 +274,6 @@ export class ServiceGenome102020 extends ServiceBase {
 
         this._oldSelectedTag = newTag;
         setState('preview.pendingReselect', newTag);
-        // @ts-ignore
         mls.editor.forceModelUpdate(tsModel.model);
     }
 
@@ -332,19 +326,16 @@ export class ServiceGenome102020 extends ServiceBase {
         this._currentPageFile = file;
         this._isPageContext = !file || isPageFile(file.folder ?? '');
         if (!file) { this._actualPage = null; return; }
-        // @ts-ignore
         const key = mls.editor.getKeyModel(file.project, file.shortName, file.folder, file.level);
-        // @ts-ignore
         this._actualPage = mls.editor.models[key]?.ts ?? null;
     }
 
-    private _onFileActionGenome = (ev: mls.events.IEvent) => {
+    private _onFileActionGenome = async (ev: mls.events.IEvent) => {
         if (!ev.desc) return;
         try {
             const fa = JSON.parse(ev.desc) as mls.events.IFileAction;
             if (fa.action !== 'open' || fa.position !== 'left') return;
-            // @ts-ignore
-            const file = mls.actual[this.level]?.left as mls.stor.IFileInfo ?? null;
+            const file: mls.stor.IFileInfo | null = await mls.actual[3].getStorFile() ?? null;
             this._updateCurrentPage(file);
             // @ts-ignore
             this.requestUpdate();
@@ -366,9 +357,8 @@ export class ServiceGenome102020 extends ServiceBase {
         mls.events.removeEventListener([this.level], ['FileAction'], this._onFileActionGenome);
     }
 
-    firstUpdated() {
-        // @ts-ignore
-        const file = mls.actual[this.level]?.left as mls.stor.IFileInfo ?? null;
+    async firstUpdated() {
+        const file: mls.stor.IFileInfo | null = await mls.actual[3].getStorFile() ?? null;
         this._updateCurrentPage(file);
     }
 
