@@ -101,6 +101,10 @@ async function afterPromptStep(
 
     if (context.isTest) return [updateStatus];
 
+    const page = context.task?.iaCompressed?.longMemory['page'] || output.fileReference;
+    const position = context.task?.iaCompressed?.longMemory['position'] || 'left';
+    const prompt = context.task?.iaCompressed?.longMemory['prompt'] || '';
+
     if (context.task) await appendLongTermMemory(context, { group: output.group });
 
     const newStep: mls.msg.AgentIntentAddStep = {
@@ -109,15 +113,15 @@ async function afterPromptStep(
         threadId: context.message.threadId,
         taskId: context.task?.PK || '',
         parentStepId: 1,
-        stepTitle: `Implements molecule: ${output.fileReference}`,
+        stepTitle: `Improving molecule: ${output.fileReference}`,
         step: {
             type: 'agent',
             stepId: 0,
             interaction: null,
             status: 'waiting_human_input',
             nextSteps: [],
-            agentName: "agentNewMoleculeMaterialize",
-            prompt: output.fileReference,
+            agentName: "agentImproveMoleculeMaterialize",
+            prompt: JSON.stringify({ page, prompt, position }),
             rags: null,
         }
     };
