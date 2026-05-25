@@ -89,7 +89,11 @@ export class ServicePage102020 extends ServiceBase {
         onClickMain: this.onClickMain.bind(this),
     };
 
-    onServiceClick(_visible: boolean, _reinit: boolean, _el: IToolbarContent | null) { }
+    onServiceClick(_visible: boolean, _reinit: boolean, _el: IToolbarContent | null) {
+        this._pageValue = 0;
+        // @ts-ignore
+        this.requestUpdate();
+    }
 
     // ─── State ────────────────────────────────────────────────────────
 
@@ -167,6 +171,7 @@ export class ServicePage102020 extends ServiceBase {
             case 'page': this._pageValue = value; break;
             case 'rule': this._ruleValue = value; break;
         }
+        // @ts-ignore
         this.requestUpdate();
     }
 
@@ -184,6 +189,7 @@ export class ServicePage102020 extends ServiceBase {
 
     private _onKnobClick(key: string) {
         this._selectedKnob = key;
+        // @ts-ignore
         this.requestUpdate();
     }
 
