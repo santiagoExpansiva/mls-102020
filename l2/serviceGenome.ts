@@ -94,6 +94,9 @@ export class ServiceGenome102020 extends ServiceBase {
 
     onServiceClick(_visible: boolean, _reinit: boolean, _el: IToolbarContent | null) {
         this._initDesignSystemKnob();
+        // @ts-ignore
+        const file = mls.actual[3]?.left as mls.stor.IFileInfo ?? null;
+        this._updateCurrentPage(file);
     }
 
     // ─── State ────────────────────────────────────────────────────────
@@ -324,6 +327,15 @@ export class ServiceGenome102020 extends ServiceBase {
 
     // ─── Lifecycle ────────────────────────────────────────────────────
 
+    private _updateCurrentPage(file: mls.stor.IFileInfo | null) {
+        this._currentPageFile = file;
+        if (!file) { this._actualPage = null; return; }
+        // @ts-ignore
+        const key = mls.editor.getKeyModel(file.project, file.shortName, file.folder, file.level);
+        // @ts-ignore
+        this._actualPage = mls.editor.models[key]?.ts ?? null;
+    }
+
     private _onFileActionGenome = (ev: mls.events.IEvent) => {
         if (!ev.desc) return;
         try {
@@ -331,7 +343,7 @@ export class ServiceGenome102020 extends ServiceBase {
             if (fa.action !== 'open' || fa.position !== 'left') return;
             // @ts-ignore
             const file = mls.actual[this.level]?.left as mls.stor.IFileInfo ?? null;
-            this._currentPageFile = file;
+            this._updateCurrentPage(file);
             // @ts-ignore
             this.requestUpdate();
         } catch { /* ignore */ }
@@ -354,9 +366,8 @@ export class ServiceGenome102020 extends ServiceBase {
 
     firstUpdated() {
         // @ts-ignore
-        this._actualPage = mls.editor.models['_102020_pizzaria/web/desktop/page11_login']?.ts ?? null;
-        // @ts-ignore
-        this._currentPageFile = mls.actual[this.level]?.left as mls.stor.IFileInfo ?? null;
+        const file = mls.actual[this.level]?.left as mls.stor.IFileInfo ?? null;
+        this._updateCurrentPage(file);
     }
 
     // ─── Render ───────────────────────────────────────────────────────
