@@ -26,12 +26,18 @@ async function beforePromptImplicit(
 
     if (!userPrompt || userPrompt.length < 5) throw new Error('invalid prompt');
 
-    let pp = context.message.content
-        .replace(`@@ ${agent.agentName}`, '')
-        .replace(`@@${agent.agentName}`, '').trim();
-
-    const data = mls.common.safeParseArgs(pp) as IDataPrompt;
-    if (!('page' in data) || !('prompt' in data)) throw new Error(`[${agent.agentName}] Invalid prompt structure: missing page and prompt`);
+    let data: IDataPrompt;
+    if (context.isTest) {
+        const testData = JSON.parse(userPrompt) as { fileReference: string; prompt: string };
+        if (!testData.fileReference || !testData.prompt) throw new Error(`[${agent.agentName}] Invalid test prompt structure: missing fileReference or prompt`);
+        data = { page: testData.fileReference.replace(/\.ts$/, ''), prompt: testData.prompt, position: 'left' };
+    } else {
+        let pp = context.message.content
+            .replace(`@@ ${agent.agentName}`, '')
+            .replace(`@@${agent.agentName}`, '').trim();
+        data = mls.common.safeParseArgs(pp) as IDataPrompt;
+        if (!('page' in data) || !('prompt' in data)) throw new Error(`[${agent.agentName}] Invalid prompt structure: missing page and prompt`);
+    }
 
     const currentDefs = await getContentByExtension(data.page, 'defs');
     const currentTs = await getContentByExtension(data.page, 'ts');
@@ -89,7 +95,11 @@ async function afterPromptStep(
     // NO path: direct improvement
     if (payload.type !== 'flexible' || !payload.result) throw new Error(`[${agent.agentName}][afterPromptStep] invalid payload type: ${payload?.type}`);
 
-    if (context.isTest) return [updateStatus];
+    if (context.isTest) {
+        const info = { payload, context };
+        console.log('[Details]: ', info);
+        return [updateStatus];
+    }
 
     const page = context.task?.iaCompressed?.longMemory['page'] || payload.result.page;
     const position = context.task?.iaCompressed?.longMemory['position'] || 'left';
@@ -161,7 +171,7 @@ function processOutput(
     _suggestions: ClarificationData
 ): mls.msg.AgentIntent[] {
 
-    const updateStatus: mls.msg.AgentIntentUpdateStatus = {
+    const updateStatusPayload: mls.msg.AgentIntentUpdateStatus = {
         type: 'update-status',
         hookSequential,
         messageId: context.message.orderAt,
@@ -203,7 +213,8 @@ function processOutput(
     };
 
     //return [newStep, updateStatusAgent, updateStatus];
-    return [newStep, updateStatusAgent]
+    //return [newStep, updateStatusAgent]
+    return [newStep, updateStatusPayload]
 }
 
 async function getContentByExtension(page: string, ext: 'ts' | 'less' | 'html' | 'defs'): Promise<string> {

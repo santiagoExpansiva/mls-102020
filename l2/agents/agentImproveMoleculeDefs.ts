@@ -120,7 +120,7 @@ async function afterPromptStep(
             interaction: null,
             status: 'waiting_human_input',
             nextSteps: [],
-            agentName: "agentImproveMoleculeMaterialize",
+            agentName: "agentNewMoleculeMaterialize",
             prompt: JSON.stringify({ page, prompt, position }),
             rags: null,
         }
