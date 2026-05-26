@@ -218,7 +218,7 @@ async function generateConfig(moduleName: string) {
           "moduleId": "${moduleName}",
           "basePath": "/${moduleName}",
           "shellMode": "spa",
-          "backendRouter": "./_102035_/l1/${moduleName}/layer_2_controller/router.js"
+          "backendRouter": "./_102035_/l1/${moduleName}/layer_2_controllers/router.js"
         }
       ]
     },
@@ -324,18 +324,24 @@ async function generateInfoModule(moduleName: string) {
 
 
   const src = `/// <mls fileReference="_${mls.actualProject}_/l2/${moduleName}/module.ts" enhancement="_blank" />
-import type { AuraModuleFrontendDefinition } from '/_102029_/l2/contracts/bootstrap.js';
+import type { AuraModuleFrontendDefinition, IPaths, IGenomeConfig } from '/_102029_/l2/contracts/bootstrap.js';
 
-export const moduleGenome = {
-  page11: {
+export const moduleGenome: Record<string, IGenomeConfig> = {
+  'web/desktop/page11': {
+    designSystem: 'default',
+    designSystemSkill:  '_102020_/l2/agents/newModule/skills/defaultDs.js',
     device: 'desktop',
-    layout: 'standard',
-  },
-  page21: {
-    device: 'mobile',
-    layout: 'standard',
-  },
+    layout: 'standart',
+    layoutSkill: '_102020_/l2/agents/newModule/skills/genPageRender.ts',
+  }
 } as const;
+
+export const skills: IPaths = {
+  "web": {
+    sharedPath: 'web/shared',
+    sharedSkill: '/_102020_/l2/agents/newModule/skills/genPageShared.ts'
+  }
+}
 
 export const moduleStates = {
 } as const;
