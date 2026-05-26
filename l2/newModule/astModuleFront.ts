@@ -161,7 +161,7 @@ export function hasModuleRoute(source: string, path: string): boolean {
 export function addModuleRoute(
   source: string,
   entry: ModuleRouteEntry,
-  throwIfExists = false ,
+  { throwIfExists = false }: { throwIfExists?: boolean } = {},
 ): string {
   if (hasModuleRoute(source, entry.path)) {
     if (throwIfExists) throw new Error(`Route "${entry.path}" already exists.`);
@@ -193,122 +193,11 @@ export function removeModuleRoute(source: string, path: string): string {
 }
  
 // ============================================================
-// GENOME — types
-// ============================================================
-
-export interface GenomeEntry {
-  key: string;
-  designSystem: string;
-  designSystemSkill: string;
-  device: string;
-  layout: string;
-  layoutSkill: string;
-}
-
-// ============================================================
-// GENOME — leitura
-// ============================================================
-
-function getModuleGenomeSpans(source: string): Array<GenomeEntry & { start: number; end: number }> {
-  const block = extractObjectSpanOfConst(source, 'moduleGenome');
-  if (!block) return [];
-
-  const results: Array<GenomeEntry & { start: number; end: number }> = [];
-  const keyRe = /'([^']+)'\s*:\s*\{/g;
-  let m: RegExpExecArray | null;
-
-  while ((m = keyRe.exec(block.content)) !== null) {
-    const braceStart = block.start + m.index + m[0].length - 1;
-    let valueContent: string;
-    try { valueContent = balancedSlice(source, braceStart, '{', '}'); }
-    catch { continue; }
-
-    const dsM         = /designSystem\s*:\s*['"]([^'"]*)['"]/s.exec(valueContent);
-    const dsSkillM    = /designSystemSkill\s*:\s*['"]([^'"]*)['"]/s.exec(valueContent);
-    const deviceM     = /device\s*:\s*['"]([^'"]*)['"]/s.exec(valueContent);
-    const layoutM     = /\blayout\s*:\s*['"]([^'"]*)['"]/s.exec(valueContent);
-    const layoutSkillM = /layoutSkill\s*:\s*['"]([^'"]*)['"]/s.exec(valueContent);
-
-    if (!dsM || !dsSkillM || !deviceM || !layoutM || !layoutSkillM) continue;
-
-    results.push({
-      key:               m[1],
-      designSystem:      dsM[1],
-      designSystemSkill: dsSkillM[1],
-      device:            deviceM[1],
-      layout:            layoutM[1],
-      layoutSkill:       layoutSkillM[1],
-      start:             block.start + m.index,
-      end:               braceStart + valueContent.length,
-    });
-  }
-  return results;
-}
-
-export function getModuleGenome(source: string): GenomeEntry[] {
-  return getModuleGenomeSpans(source).map(({ start: _s, end: _e, ...e }) => e);
-}
-
-export function hasModuleGenomeEntry(source: string, key: string): boolean {
-  return getModuleGenome(source).some(e => e.key === key);
-}
-
-// ============================================================
-// GENOME — escrita
-// ============================================================
-
-export function addModuleGenome(
-  source: string,
-  entry: GenomeEntry,
-  { throwIfExists = false }: { throwIfExists?: boolean } = {},
-): string {
-  if (hasModuleGenomeEntry(source, entry.key)) {
-    if (throwIfExists) throw new Error(`Genome key "${entry.key}" already exists.`);
-    return source;
-  }
-
-  const block = extractObjectSpanOfConst(source, 'moduleGenome');
-  if (!block) throw new Error('Could not find moduleGenome const.');
-
-  const newItem = [
-    `'${entry.key}': {`,
-    `    designSystem: '${entry.designSystem}',`,
-    `    designSystemSkill: '${entry.designSystemSkill}',`,
-    `    device: '${entry.device}',`,
-    `    layout: '${entry.layout}',`,
-    `    layoutSkill: '${entry.layoutSkill}',`,
-    `  }`,
-  ].join('\n  ');
-
-  return insertIntoObject(source, block, newItem, getModuleGenomeSpans(source));
-}
-
-export function removeModuleGenome(source: string, key: string): string {
-  const spans = getModuleGenomeSpans(source);
-  const target = spans.find(e => e.key === key);
-  if (!target) throw new Error(`Genome key "${key}" not found.`);
-  return removeItemFromArray(source, target, spans);
-}
-
-// ============================================================
 // INTERNAL — localiza array de uma prop dentro de uma const
 // ============================================================
  
 interface Span { content: string; start: number; end: number }
  
-/**
- * Encontra o objeto { ... } de um `export const constName`.
- * Ex: extractObjectSpanOfConst(src, 'moduleGenome')
- */
-function extractObjectSpanOfConst(source: string, constName: string): Span | null {
-  const constRe = new RegExp(`export\\s+const\\s+${constName}[^=]*=\\s*\\{`);
-  const constMatch = constRe.exec(source);
-  if (!constMatch) return null;
-  const objStart = constMatch.index + constMatch[0].length - 1;
-  const content = balancedSlice(source, objStart, '{', '}');
-  return { content, start: objStart, end: objStart + content.length };
-}
-
 /**
  * Encontra o array de `arrayKey` dentro do objeto `constName`.
  * Ex: extractArraySpanInsideConst(src, 'moduleFrontendDefinition', 'navigation')
@@ -358,28 +247,6 @@ function insertIntoArray(
   return source.slice(0, insertAt) + `${prefix}\n    ${newItem},` + source.slice(insertAt);
 }
  
-function insertIntoObject(
-  source: string,
-  block: Span,
-  newItem: string,
-  spans: Array<{ start: number; end: number }>,
-): string {
-  if (spans.length === 0) {
-    const indent = detectIndent(source, block.start);
-    const inner  = indent + '  ';
-    const replacement = `{\n${inner}${newItem},\n${indent}}`;
-    return source.slice(0, block.start) + replacement + source.slice(block.end);
-  }
-
-  const last = spans[spans.length - 1];
-  let insertAt = last.end;
-  const hasTrailingComma = source[insertAt] === ',';
-  if (hasTrailingComma) insertAt++;
-
-  const prefix = hasTrailingComma ? '' : ',';
-  return source.slice(0, insertAt) + `${prefix}\n  ${newItem},` + source.slice(insertAt);
-}
-
 function removeItemFromArray(
   source: string,
   target: { start: number; end: number },
