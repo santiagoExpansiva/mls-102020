@@ -9,6 +9,7 @@ import '/_102027_/l2/collabSelectKnob.js';
 import '/_102020_/l2/plugins/selectPage.js';
 import '/_102020_/l2/plugins/selectRule.js';
 
+
 // ─── i18n ─────────────────────────────────────────────────────────────
 /// **collab_i18n_start**
 const message_en = {
