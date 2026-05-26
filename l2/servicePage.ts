@@ -4,6 +4,7 @@ import { html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { ServiceBase, IService, IToolbarContent, IServiceMenu } from '/_102027_/l2/serviceBase.js';
 import { createModel } from '/_102027_/l2/libModel.js';
+import { saveOpenedFile } from '/_102027_/l2/libCommom.js';
 
 import '/_102027_/l2/collabSelectKnob.js';
 import '/_102020_/l2/plugins/selectPage.js';
@@ -192,6 +193,10 @@ export class ServicePage102020 extends ServiceBase {
         params.shortName = file.shortName;
         params.extension = file.extension;
         params.folder = file.folder;
+        saveOpenedFile(params.project, 4, mls.actual[4].getFullName());
+        saveOpenedFile(params.project, 3, mls.actual[3].getFullName());
+
+
 
         params.position = this.position as ('right' | 'left');
         mls.events.fire([mls.actualLevel], ['FileAction'], JSON.stringify(params), 0);

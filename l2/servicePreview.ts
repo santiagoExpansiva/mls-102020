@@ -7,7 +7,7 @@ import { getPath } from '/_102027_/l2/utils.js';
 import { convertFileToTag } from '/_102020_/l2/utils.js';
 import { getTokensCss, getTokensLess, removeTokensFromSource } from '/_102027_/l2/designSystemBase.js';
 import { getConfigProject } from '/_102027_/l2/libProjectConfig.js';
-import { getLastOpenedFiles } from '/_102027_/l2/libCommom.js';
+import { getLastOpenedFiles, saveOpenedFile } from '/_102027_/l2/libCommom.js';
 import { compileStyleUsingStorFile } from '/_102027_/l2/libCompileStyle.js';
 import { createModel } from '/_102027_/l2/libModel.js';
 import { createThread, getUserId } from '/_102025_/l2/collabMessagesHelper.js';
@@ -368,13 +368,22 @@ export class ServicePreview extends ServiceBase {
   private async setActualFileInfos() {
 
     this.setLastOpenedFile();
-    if (!mls.actual[this.level].left) return;
-    const { project, shortName, folder } = mls.actual[this.level].left as mls.stor.IFileInfo;
-    this.project = project;
-    this.shortName = shortName;
-    this.folder = folder;
+    if (this.level === 2) {
+      if (!mls.actual[this.level].left) return;
+      const { project, shortName, folder } = mls.actual[this.level].left as mls.stor.IFileInfo;
+      this.project = project;
+      this.shortName = shortName;
+      this.folder = folder;
+    }
 
-    await this.setActualFiles(project, shortName, folder);
+    if (this.level === 3 || this.level === 4) {
+      const { project, shortName, folder }  = mls.actual[this.level].getStorFileBase()
+      this.project = project;
+      this.shortName = shortName;
+      this.folder = folder;
+    }
+
+    await this.setActualFiles(this.project, this.shortName, this.folder);
     await this.setActualModels();
 
 
@@ -382,56 +391,19 @@ export class ServicePreview extends ServiceBase {
 
   private setLastOpenedFile() {
 
+
     const lastFileOpened = getLastOpenedFiles(mls.actualProject || 0);
-    if ((this.isL3 || this.isL4) && mls.actual[2]?.left) {
-      const last = mls.actualLevel as number;
-      if (!last || !lastFileOpened[last]) return;
-      mls.actual[this.level].setFullName(lastFileOpened[last] as string);
-      return;
-    }
-
-    if (!mls.actual[this.level].left) {
-
+    if (this.level === 2) {
       const levelKey = String(this.level);
-      const fallbackKey = (this.isL3 || this.isL4) ? '2' : levelKey;
-      let targetKey = levelKey;
-
-      if (!lastFileOpened || !lastFileOpened[targetKey as any]) {
-        if ((this.isL3 || this.isL4) && lastFileOpened && lastFileOpened[fallbackKey as any]) {
-          targetKey = fallbackKey;
-        } else {
+      if (!lastFileOpened || !lastFileOpened[levelKey as any]) {
+        const lastFileLeft = (lastFileOpened[levelKey as any] as OpenedFileL2).left;
+        if (!lastFileLeft) {
           this.clearPreview();
           return;
         }
+        mls.actual[this.level].setFullName(lastFileLeft);
+
       }
-
-      const lastFileLeft = (lastFileOpened[targetKey as any] as OpenedFileL2).left;
-      if (!lastFileLeft) {
-        this.clearPreview();
-        return;
-      }
-
-      mls.actual[this.level].setFullName(lastFileLeft);
-      const infoLast = getPath(lastFileLeft);
-      if (!infoLast) throw new Error('[servicePreview] Not found path:' + lastFileLeft);
-
-      const key = mls.stor.getKeyToFiles(infoLast.project, this.level, infoLast.shortName, infoLast.folder, '.ts');
-      const file = mls.stor.files[key];
-      if (!file) {
-        // L3/L4: tenta buscar o file no level 2
-        if (this.isL3 || this.isL4) {
-          const keyL2 = mls.stor.getKeyToFiles(infoLast.project, 2, infoLast.shortName, infoLast.folder, '.ts');
-          const fileL2 = mls.stor.files[keyL2];
-          if (!fileL2) {
-            this.clearPreview();
-            return;
-          }
-        } else {
-          this.clearPreview();
-          return;
-        }
-      }
-
     }
   }
 

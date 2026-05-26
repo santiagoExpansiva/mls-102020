@@ -1,58 +1,24 @@
 /// <mls fileReference="_102020_/l2/previewEditorL3.ts" enhancement="_102027_/l2/enhancementLit.ts"/>
 
 import { StateLitElement } from '/_102027_/l2/stateLitElement.js';
-import { customElement, property, state, query } from 'lit/decorators.js';
-import { globalState, setState, initState, getState, subscribe, unsubscribe } from '/_102027_/l2/collabState.js';
-import { findTextOrigin, findTextOriginByIndex, findTextOriginByOccurrence, buildTemplateMap, applyTextEdit } from '/_102020_/l2/previewTextEditor.js';
-
-
-/// **collab_i18n_start**
-const message_pt = {
-  attributes: 'Atributos',
-  computedStyles: 'Estilos Computados',
-  noSelection: 'Clique em um elemento para inspecionar',
-  modeSelect: 'Seleção',
-  modeInspect: 'Inspeção',
-}
-
-const message_en = {
-  attributes: 'Attributes',
-  computedStyles: 'Computed Styles',
-  noSelection: 'Click an element to inspect',
-  modeSelect: 'Select',
-  modeInspect: 'Inspect',
-}
-
-type MessageType = typeof message_en;
-
-const messages: { [key: string]: MessageType } = {
-  'en': message_en,
-  'pt': message_pt
-}
-/// **collab_i18n_end**
+import { customElement } from 'lit/decorators.js';
+import { setState, initState, getState, subscribe, unsubscribe } from '/_102027_/l2/collabState.js';
+import {  findTextOriginByOccurrence, applyTextEdit } from '/_102020_/l2/previewTextEditor.js';
 
 @customElement('preview-editor-l3-102020')
 class PreviewEditorL3 extends StateLitElement {
 
-  private msg: MessageType = messages['en'];
   private overlayEl!: HTMLDivElement;
-  private breadcrumbEl!: HTMLDivElement;
-  private propertiesPanelEl!: HTMLDivElement;
   private selectedElementRef: HTMLElement | null = null;
-  private breadcrumbElements: Map<string, HTMLElement> = new Map();
 
   constructor() {
     super();
     initState('previewL3', {
       selectedElement: null,
       selectedTagName: '',
-      selectedAttributes: {},
-      selectedStyles: {},
       selectedRect: null,
-      breadcrumb: [],
       editMode: 'select',
       hoveredElement: null,
-      panelVisible: true,
     });
   }
 
@@ -66,7 +32,6 @@ class PreviewEditorL3 extends StateLitElement {
     }
     if (key === 'previewL3.selectedElement') {
       this.drawSelection(value);
-      this.updatePropertiesPanel();
     }
   }
 
@@ -93,10 +58,7 @@ class PreviewEditorL3 extends StateLitElement {
   }
 
   firstUpdated() {
-    this.setLanguage();
     this.createOverlay();
-    this.createBreadcrumb();
-    this.createPropertiesPanel();
     this.injectBaseStyles();
 
     window.addEventListener('scroll', this.onScrollResize);
@@ -104,13 +66,6 @@ class PreviewEditorL3 extends StateLitElement {
 
     // Re-select the molecule element that was swapped before the iframe repainted
     this._tryReselectPending();
-  }
-
-  // --- Idioma ---
-
-  private setLanguage() {
-    const lang = getState('preview.language') || 'en';
-    this.msg = messages[lang] || messages['en'];
   }
 
   // --- Reselect after molecule swap ---
@@ -155,13 +110,8 @@ class PreviewEditorL3 extends StateLitElement {
 
     setState('previewL3.selectedElement', selector);
     setState('previewL3.selectedTagName', selectableEl.tagName.toLowerCase());
-    setState('previewL3.selectedAttributes', this.getAttributes(selectableEl));
-    setState('previewL3.selectedStyles', this.getRelevantStyles(selectableEl));
     setState('previewL3.selectedRect', selectableEl.getBoundingClientRect());
-    setState('previewL3.breadcrumb', this.buildBreadcrumb(selectableEl));
 
-    this.updateBreadcrumb();
-    this.showPropertiesPanel();
     this.notifyHost('element-select', selectableEl);
   }
 
@@ -175,116 +125,6 @@ class PreviewEditorL3 extends StateLitElement {
         position: fixed; top: 0; left: 0;
         width: 100%; height: 100%;
         pointer-events: none; z-index: 99990;
-      }
-
-      .l3-breadcrumb {
-        position: fixed;
-        bottom: 0; left: 0;
-        width: 100%;
-        background: rgba(30, 30, 30, 0.95);
-        color: #ccc;
-        padding: 5px 10px;
-        font-size: 12px;
-        font-family: monospace;
-        z-index: 99999;
-        pointer-events: auto;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        overflow-x: auto;
-        white-space: nowrap;
-        backdrop-filter: blur(8px);
-      }
-
-      .l3-breadcrumb .l3-crumb {
-        cursor: pointer;
-        padding: 2px 4px;
-        border-radius: 3px;
-        transition: background 0.15s;
-      }
-
-      .l3-breadcrumb .l3-crumb:hover {
-        background: rgba(66, 135, 245, 0.2);
-        color: #fff;
-      }
-
-      .l3-breadcrumb .l3-crumb.active {
-        color: #4287f5;
-        font-weight: bold;
-      }
-
-      .l3-breadcrumb .l3-separator {
-        color: #555;
-        font-size: 10px;
-      }
-
-      .l3-properties-panel {
-        position: fixed;
-        top: 0; right: 0;
-        width: 280px; height: 100%;
-        background: rgba(30, 30, 30, 0.97);
-        color: #ccc;
-        z-index: 99998;
-        pointer-events: auto;
-        overflow-y: auto;
-        font-family: monospace;
-        font-size: 12px;
-        border-left: 1px solid rgba(255,255,255,0.08);
-        backdrop-filter: blur(8px);
-        transform: translateX(100%);
-        transition: transform 0.2s ease;
-      }
-
-      .l3-properties-panel.open {
-        transform: translateX(0);
-      }
-
-      .l3-panel-section {
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-      }
-
-      .l3-panel-section-title {
-        font-size: 10px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #666;
-        margin-bottom: 6px;
-      }
-
-      .l3-panel-tag {
-        font-size: 16px;
-        font-weight: bold;
-        color: #4287f5;
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-      }
-
-      .l3-panel-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 3px 0;
-        gap: 8px;
-      }
-
-      .l3-panel-key {
-        color: #9a9a9a;
-        flex-shrink: 0;
-      }
-
-      .l3-panel-value {
-        color: #e0e0e0;
-        text-align: right;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 160px;
-      }
-
-      .l3-panel-empty {
-        padding: 40px 12px;
-        text-align: center;
-        color: #555;
       }
 
       .l3-hover-highlight {
@@ -326,20 +166,6 @@ class PreviewEditorL3 extends StateLitElement {
     this.appendChild(this.overlayEl);
   }
 
-  private createBreadcrumb() {
-    this.breadcrumbEl = document.createElement('div');
-    this.breadcrumbEl.classList.add('l3-control', 'l3-breadcrumb');
-    this.breadcrumbEl.addEventListener('click', this.onBreadcrumbClick);
-    this.appendChild(this.breadcrumbEl);
-  }
-
-  private createPropertiesPanel() {
-    this.propertiesPanelEl = document.createElement('div');
-    this.propertiesPanelEl.classList.add('l3-control', 'l3-properties-panel');
-    this.propertiesPanelEl.innerHTML = `<div class="l3-panel-empty">${this.msg.noSelection}</div>`;
-    this.appendChild(this.propertiesPanelEl);
-  }
-
   // --- Eventos principais ---
 
   private onClick = (e: MouseEvent) => {
@@ -359,13 +185,8 @@ class PreviewEditorL3 extends StateLitElement {
 
     setState('previewL3.selectedElement', selector);
     setState('previewL3.selectedTagName', selectableEl.tagName.toLowerCase());
-    setState('previewL3.selectedAttributes', this.getAttributes(selectableEl));
-    setState('previewL3.selectedStyles', this.getRelevantStyles(selectableEl));
     setState('previewL3.selectedRect', selectableEl.getBoundingClientRect());
-    setState('previewL3.breadcrumb', this.buildBreadcrumb(selectableEl));
 
-    this.updateBreadcrumb();
-    this.showPropertiesPanel();
     this.notifyHost('element-select', selectableEl);
 
     const textResult = this.findClickedTextNode(e, target);
@@ -431,33 +252,6 @@ class PreviewEditorL3 extends StateLitElement {
       const selector = getState('previewL3.selectedElement');
       if (selector) this.drawSelection(selector);
     }
-  }
-
-  // --- Breadcrumb click ---
-
-  private onBreadcrumbClick = (e: MouseEvent) => {
-    e.stopPropagation();
-    const crumb = (e.target as HTMLElement).closest('.l3-crumb') as HTMLElement;
-    if (!crumb) return;
-
-    const crumbId = crumb.dataset.crumbId;
-    if (!crumbId) return;
-
-    const el = this.breadcrumbElements.get(crumbId);
-    if (!el || !el.isConnected) return;
-
-    this.selectedElementRef = el;
-    const selector = this.buildSelector(el);
-
-    setState('previewL3.selectedElement', selector);
-    setState('previewL3.selectedTagName', el.tagName.toLowerCase());
-    setState('previewL3.selectedAttributes', this.getAttributes(el));
-    setState('previewL3.selectedStyles', this.getRelevantStyles(el));
-    setState('previewL3.selectedRect', el.getBoundingClientRect());
-    setState('previewL3.breadcrumb', this.buildBreadcrumb(el));
-
-    this.updateBreadcrumb();
-    this.updatePropertiesPanel();
   }
 
   // --- Text node helpers ---
@@ -593,7 +387,7 @@ class PreviewEditorL3 extends StateLitElement {
    *
    * 3. Attribute on a wc written by the page (future, not yet handled here)
    */
-  private applyTextEditToSource(oldText: string, newText: string, el: HTMLElement, occurrenceIndex: number = 0) {
+  private async applyTextEditToSource(oldText: string, newText: string, el: HTMLElement, occurrenceIndex: number = 0) {
     const pageComponent = this.findPageComponent();
     if (!pageComponent) return;
 
@@ -605,7 +399,22 @@ class PreviewEditorL3 extends StateLitElement {
 
     console.log('[TextEdit] applyTextEditToSource', { oldText, newText, lang, occurrenceIndex });
 
-    const origin = findTextOriginByOccurrence(oldText, source, occurrenceIndex, lang);
+    let origin = findTextOriginByOccurrence(oldText, source, occurrenceIndex, lang);
+    let activeModel = tsModel;
+    let activeSource = source;
+
+    if (origin.type === 'dynamic') {
+      const sharedModel = await this.getSharedTsModel();
+      if (sharedModel) {
+        const sharedSource = sharedModel.model.getValue();
+        const sharedOrigin = findTextOriginByOccurrence(oldText, sharedSource, occurrenceIndex, lang);
+        if (sharedOrigin.type !== 'dynamic') {
+          origin = sharedOrigin;
+          activeModel = sharedModel;
+          activeSource = sharedSource;
+        }
+      }
+    }
 
     console.log('[TextEdit] origin resolved:', origin.type === 'i18n' ? {
       type: origin.type,
@@ -615,24 +424,64 @@ class PreviewEditorL3 extends StateLitElement {
 
     if (origin.type === 'dynamic') return;
 
-    const result = applyTextEdit(origin, newText, source, lang);
+    const result = applyTextEdit(origin, newText, activeSource, lang);
 
     console.log('[TextEdit] applyTextEdit result:', { success: result.success, error: result.error });
 
     if (!result.success || !result.newSource) return;
 
     setState('preview.pausePreview', true);
-    tsModel.model.pushEditOperations(
+    activeModel.model.pushEditOperations(
       [],
       [{
-        range: tsModel.model.getFullModelRange(),
+        range: activeModel.model.getFullModelRange(),
         text: result.newSource,
       }],
       () => null,
     );
   }
 
-    private getTextOccurrenceIndex(targetTextNode: Text, text: string, pageTag: string): number {
+  private async getSharedTsModel(): Promise<any | null> {
+    try {
+      const service = getState('preview.service') as any;
+      if (!service?.actualFiles?.ts) return null;
+
+      const { project, folder, shortName } = service.actualFiles.ts;
+
+      // folder: "petshop/web/desktop/page11" → moduleName: "petshop", genomeKey: "web/desktop/page11"
+      const slashIdx = folder.indexOf('/');
+      if (slashIdx < 0) return null;
+      const moduleName = folder.slice(0, slashIdx);
+      const genomeKey = folder.slice(slashIdx + 1);
+      const genomeSegments = genomeKey.split('/');
+      const device = genomeSegments[0];
+      if (!device) return null;
+
+      const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;
+      const deviceSkills = mod?.skills?.[device];
+      if (!deviceSkills?.sharedPath) return null;
+
+      // sharedPath may be a full MLS path like '/_102029_/l2/web/shared' or just '/web/shared'
+      // Strip leading /_XXXXX_/l2/ prefix, then any remaining slashes
+      const sharedPath = (deviceSkills.sharedPath as string)
+        .replace(/^\/?_\d+_\/l2\//, '')
+        .replace(/^\/|\/$/g, '');
+
+      const sharedFolder = `${moduleName}/${sharedPath}`;
+
+      const level = service.isL3 ? 2 : service.level;
+      const mlsAny = (globalThis as any).mls;
+      const storKey = mlsAny.stor.getKeyToFile({ project, shortName, folder: sharedFolder, extension: '.ts', level });
+      const storFile = mlsAny.stor.files[storKey];
+      if (!storFile) return null;
+
+      return await (storFile as any).getOrCreateModel();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  private getTextOccurrenceIndex(targetTextNode: Text, text: string, pageTag: string): number {
     const pageEl = this.querySelector(pageTag);
     if (!pageEl) return 0;
 
@@ -668,8 +517,7 @@ class PreviewEditorL3 extends StateLitElement {
     return 0;
   }
 
-
-      private findPageComponent(): string | null {
+  private findPageComponent(): string | null {
     for (const child of Array.from(this.children)) {
       const tag = child.tagName.toLowerCase();
       if (tag.includes('-') && !child.classList.contains('l3-control') && tag !== 'preview-editor-l3-102020') {
@@ -782,108 +630,6 @@ class PreviewEditorL3 extends StateLitElement {
     `;
   }
 
-  // --- Breadcrumb ---
-
-  private updateBreadcrumb() {
-    const breadcrumb = getState('previewL3.breadcrumb') || [];
-    if (breadcrumb.length === 0) {
-      this.breadcrumbEl.innerHTML = '';
-      this.breadcrumbElements.clear();
-      return;
-    }
-
-    let current: HTMLElement | null = this.selectedElementRef;
-    const elements: HTMLElement[] = [];
-
-    while (current && current !== this) {
-      elements.unshift(current);
-      current = current.parentElement;
-    }
-
-    this.breadcrumbElements.clear();
-
-    this.breadcrumbEl.innerHTML = elements.map((el, i) => {
-      const tag = el.tagName.toLowerCase();
-      const id = el.id ? `#${el.id}` : '';
-      const cls = el.classList.length > 0 ? `.${Array.from(el.classList).filter(c => !c.startsWith('l3-')).slice(0, 1).join('.')}` : '';
-      const label = `${tag}${id}${cls}`;
-      const crumbId = `l3-crumb-${i}`;
-      const isLast = i === elements.length - 1;
-      const separator = i < elements.length - 1 ? '<span class="l3-separator"> › </span>' : '';
-
-      this.breadcrumbElements.set(crumbId, el);
-
-      return `<span class="l3-crumb ${isLast ? 'active' : ''}" data-crumb-id="${crumbId}">${label}</span>${separator}`;
-    }).join('');
-  }
-
-  // --- Painel de propriedades ---
-
-  private showPropertiesPanel() {
-    this.propertiesPanelEl.classList.add('open');
-    this.updatePropertiesPanel();
-  }
-
-  private hidePropertiesPanel() {
-    this.propertiesPanelEl.classList.remove('open');
-    this.propertiesPanelEl.innerHTML = `<div class="l3-panel-empty">${this.msg.noSelection}</div>`;
-  }
-
-  private updatePropertiesPanel() {
-    const selector = getState('previewL3.selectedElement');
-    if (!selector || !this.selectedElementRef) {
-      this.hidePropertiesPanel();
-      return;
-    }
-
-    const tagName = getState('previewL3.selectedTagName') || '';
-    const attributes = getState('previewL3.selectedAttributes') || {};
-    const styles = getState('previewL3.selectedStyles') || {};
-
-    let html = '';
-
-    html += `<div class="l3-panel-tag">&lt;${tagName}&gt;</div>`;
-
-    const attrEntries = Object.entries(attributes);
-    if (attrEntries.length > 0) {
-      html += `<div class="l3-panel-section">`;
-      html += `<div class="l3-panel-section-title">${this.msg.attributes}</div>`;
-      for (const [key, value] of attrEntries) {
-        html += `<div class="l3-panel-row">
-          <span class="l3-panel-key">${key}</span>
-          <span class="l3-panel-value" title="${value}">${value}</span>
-        </div>`;
-      }
-      html += `</div>`;
-    }
-
-    const styleEntries = Object.entries(styles);
-    if (styleEntries.length > 0) {
-      html += `<div class="l3-panel-section">`;
-      html += `<div class="l3-panel-section-title">${this.msg.computedStyles}</div>`;
-      for (const [key, value] of styleEntries) {
-        html += `<div class="l3-panel-row">
-          <span class="l3-panel-key">${key}</span>
-          <span class="l3-panel-value" title="${value}">${value}</span>
-        </div>`;
-      }
-      html += `</div>`;
-    }
-
-    if (this.selectedElementRef) {
-      const cs = getComputedStyle(this.selectedElementRef);
-      html += `<div class="l3-panel-section">`;
-      html += `<div class="l3-panel-section-title">Box Model</div>`;
-      html += `<div class="l3-panel-row"><span class="l3-panel-key">margin</span><span class="l3-panel-value">${cs.margin}</span></div>`;
-      html += `<div class="l3-panel-row"><span class="l3-panel-key">padding</span><span class="l3-panel-value">${cs.padding}</span></div>`;
-      html += `<div class="l3-panel-row"><span class="l3-panel-key">border</span><span class="l3-panel-value">${cs.border}</span></div>`;
-      html += `<div class="l3-panel-row"><span class="l3-panel-key">size</span><span class="l3-panel-value">${cs.width} × ${cs.height}</span></div>`;
-      html += `</div>`;
-    }
-
-    this.propertiesPanelEl.innerHTML = html;
-  }
-
   // --- Helpers ---
 
   private isL3Control(el: HTMLElement): boolean {
@@ -916,45 +662,6 @@ class PreviewEditorL3 extends StateLitElement {
     return path.join(' > ');
   }
 
-  private buildBreadcrumb(el: HTMLElement): string[] {
-    const path: string[] = [];
-    let current: HTMLElement | null = el;
-    while (current && current !== this) {
-      const tag = current.tagName.toLowerCase();
-      const id = current.id ? `#${current.id}` : '';
-      path.unshift(`${tag}${id}`);
-      current = current.parentElement;
-    }
-    return path;
-  }
-
-  private getAttributes(el: HTMLElement): Record<string, string> {
-    const attrs: Record<string, string> = {};
-    for (const attr of Array.from(el.attributes)) {
-      if (attr.name.startsWith('data-l3-')) continue;
-      attrs[attr.name] = attr.value;
-    }
-    return attrs;
-  }
-
-  private getRelevantStyles(el: HTMLElement): Record<string, string> {
-    const cs = getComputedStyle(el);
-    const props = [
-      'display', 'position', 'width', 'height',
-      'color', 'background-color', 'font-size', 'font-family',
-      'flex-direction', 'justify-content', 'align-items',
-      'gap', 'overflow', 'opacity', 'z-index',
-    ];
-    const styles: Record<string, string> = {};
-    for (const p of props) {
-      const val = cs.getPropertyValue(p);
-      if (val && val !== 'none' && val !== 'normal' && val !== 'auto' && val !== '0px') {
-        styles[p] = val;
-      }
-    }
-    return styles;
-  }
-
   private notifyHost(type: string, el: HTMLElement, extra?: Record<string, any>) {
     window.parent.postMessage({
       source: 'preview-editor-l3',
@@ -973,6 +680,7 @@ class PreviewEditorL3 extends StateLitElement {
       text: 'text',
       inspect: 'crosshair',
     };
+    // @ts-ignore
     this.style.cursor = cursors[mode] || 'default';
   }
 
