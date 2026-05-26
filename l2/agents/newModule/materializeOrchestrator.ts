@@ -56,11 +56,20 @@ export class MaterializeOrchestrator {
         if (!sfInfo) return;
 
         const key = mls.stor.getKeyToFile(sfInfo);
-        const sf = mls.stor.files[key];
+        const sf = mls.stor.files[key]; 
         if (!sf) return;
 
         const data = await sf.getContent() as string;
         this.items = getMaterializeIndex(data);
+    }
+
+    public async getToExecuteOnlyMaterialize(id: string): Promise<mls.defs.MaterializeEntry|undefined> { 
+
+        if (!this.items.length) await this.loadItems();
+        const item = this.items.find((i) => i.id === id);
+        if (item) item.dependsOn = [];
+        return item;
+        
     }
 
     isAllCompleted(): boolean {
