@@ -129,11 +129,11 @@ export class ServiceGenome102020 extends ServiceBase {
     @state() private _moleculesConfig: IKnobConfig = DISABLED_CONFIG('molecules');
     @state() private _selectedMoleculeGroup: string = '';
     @state() private _selectedMoleculeGroupDescription: string = '';
-    @state() private _selectedMoleculeFiles: any[] = [];
+    @state() private _selectedMoleculeFiles: mls.stor.IFileInfo[] = [];
     @state() private _oldSelectedTag: string = '';
     @state() private _moleculeError: string = '';
     @state() private _moleculeReplaceMode: 'selected' | 'all' = 'selected';
-    @state() private _actualPage: any = null;
+    @state() private _actualPage: mls.editor.IModelBase | null = null;
 
     // ─── Preview state subscription ───────────────────────────────────
 
@@ -287,7 +287,8 @@ export class ServiceGenome102020 extends ServiceBase {
 
         this._oldSelectedTag = newTag;
         setState('preview.pendingReselect', newTag);
-        mls.editor.forceModelUpdate(tsModel.model);
+        mls.editor.forceModelUpdate(tsModel.model)
+
     }
 
     // ─── Knob helpers ─────────────────────────────────────────────────
@@ -318,7 +319,6 @@ export class ServiceGenome102020 extends ServiceBase {
                 this._onMoleculesChanged(value);
                 return;
         }
-        // @ts-ignore
         this.requestUpdate();
     }
 
@@ -329,7 +329,6 @@ export class ServiceGenome102020 extends ServiceBase {
 
     private _onKnobClick(key: string) {
         this._selectedKnob = key;
-        // @ts-ignore
         this.requestUpdate();
     }
 
@@ -339,7 +338,6 @@ export class ServiceGenome102020 extends ServiceBase {
         if (!mls.actual[3].path) return;
         const lastFileOpened = getLastOpenedFiles(mls.actualProject || 0);
         if (!lastFileOpened || !lastFileOpened[3]) return;
-        console.info(lastFileOpened[3])
         mls.actual[3].setFullName(lastFileOpened[3] as string);
     }
 
@@ -370,7 +368,7 @@ export class ServiceGenome102020 extends ServiceBase {
         if (modules.some((m: IModule) => m.name === firstSegment)) mls.setActualModule(firstSegment);
     }
 
-    private _updateCurrentPage(file: mls.stor.IFileInfo | null) {
+    private async _updateCurrentPage(file: mls.stor.IFileInfo | null) {
         this._currentPageFile = file;
         if (!file) {
             this._actualPage = null;
@@ -382,8 +380,9 @@ export class ServiceGenome102020 extends ServiceBase {
             const pageMatch = (file.folder ?? '').match(/\/page(\d)/);
             if (pageMatch) this._layoutValue = parseInt(pageMatch[1]);
         }
-        const key = mls.editor.getKeyModel(file.project, file.shortName, file.folder, file.level);
-        this._actualPage = mls.editor.models[key]?.ts ?? null;
+        
+        const storFiles = await mls.stor.getFiles({ ...file, level: 2, loadContent: false })
+        if (storFiles.ts) this._actualPage = await storFiles.ts.getOrCreateModel();
     }
 
     private _onFileActionGenome = async (ev: mls.events.IEvent) => {
@@ -393,7 +392,6 @@ export class ServiceGenome102020 extends ServiceBase {
             if (fa.action !== 'open' || fa.position !== 'left') return;
             const file = await this._getActual3File();
             this._updateCurrentPage(file);
-            // @ts-ignore
             this.requestUpdate();
         } catch { /* ignore */ }
     };

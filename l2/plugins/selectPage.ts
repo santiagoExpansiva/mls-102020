@@ -94,6 +94,7 @@ export class PluginSelectPage extends StateLitElement {
 
     @property({ attribute: false }) selectedModule: IModule | null = null;
     @property({ attribute: false }) value: number | null = null;
+    @property({ attribute: false }) reloadToken: number = 0;
 
     @state() private _pages: IPageEntry[] = [];
     @state() private _search: string = '';
@@ -105,7 +106,7 @@ export class PluginSelectPage extends StateLitElement {
     }
 
     willUpdate(changed: Map<string, unknown>) {
-        if (changed.has('selectedModule')) {
+        if (changed.has('selectedModule') || changed.has('reloadToken')) {
             this._search = '';
             this._loadPages();
         }
@@ -147,7 +148,7 @@ export class PluginSelectPage extends StateLitElement {
 
         let routes: any[] = [];
         try {
-            const mod = await import(`/_${project}_/l2/${modulePath}/module.js`);
+            const mod = await import(`/_${project}_/l2/${modulePath}/module.js?t=${Date.now()}`);
             routes = mod?.moduleFrontendDefinition?.routes ?? [];
         } catch {
             this._dispatchConfig();

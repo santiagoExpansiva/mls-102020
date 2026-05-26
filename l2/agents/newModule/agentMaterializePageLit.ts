@@ -28,12 +28,12 @@ async function beforePromptImplicit(
 ): Promise<mls.msg.AgentIntent[]> {
 
 
-  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string };
+  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string , device:string, type:string};
 
   info.project = mls.actualProject || 0;
   const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
-  const device = context.task?.iaCompressed?.longMemory['device'] as string || 'web';
-  const type = context.task?.iaCompressed?.longMemory['type'] as string || 'page11';
+  const device = info.device || context.task?.iaCompressed?.longMemory['device'] as string || 'web';
+  const type = info.type || context.task?.iaCompressed?.longMemory['type'] as string || 'page11';
   const prompt = await getSkill(info, moduleName, device, type);
 
   const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
@@ -48,7 +48,7 @@ async function beforePromptImplicit(
       taskTitle: agent.agentDescription,
       threadId: context.message.threadId,
       userMessage: info.path,
-      longTermMemory: { moduleName: info.moduleName }
+      longTermMemory: { moduleName: info.moduleName, device, type }
     }
   };
 
@@ -128,6 +128,8 @@ async function afterPromptStep(
 
 async function processOutput(context: mls.msg.ExecutionContext, output: any, agent: IAgentMeta, parentStep: mls.msg.AIAgentStep): Promise<mls.msg.AgentIntent[]> {
 
+  output.outputPath = output.outputPath.startsWith('/') ? output.outputPath.slice(1) : output.outputPath;
+  
   const orch = getMaterializeOrchestrator(output.path);
   await orch.createStorFile(output.outputPath, parseAISource(output.srcFile));
 
@@ -269,13 +271,14 @@ async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, p
 
   const project = info.project || 0;
   const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;
-  const genomeKey = `${device}/desktop/${type}`;
+  const genomeKey = Object.keys(mod.moduleGenome as Record<string, unknown>).find(k => k.startsWith(`${device}/`) && k.endsWith(`/${type}`));
+  if (!genomeKey) throw new Error(`[agentMaterializePageLit] no genome key found for device "${device}" and type "${type}"`);
   const genome = mod.moduleGenome[genomeKey];
   if (!genome) throw new Error(`[agentMaterializePageLit] no genome config for key "${genomeKey}"`);
 
   const fileName = info.item.outputPath.startsWith('/') ? info.item.outputPath.slice(1) : info.item.outputPath;
   const genomeKeyNorm = genomeKey.endsWith('/') ? genomeKey.slice(0, -1) : genomeKey;
-  info.item.outputPath = `/_${project}_/l2/${moduleName}/${genomeKeyNorm}/${fileName}`;
+  info.item.outputPath = `_${project}_/l2/${moduleName}/${genomeKeyNorm}/${fileName}`;
 
   const orch = getMaterializeOrchestrator(info.path);
   const user = await orch.getVar(info.path, info.item.specVar);

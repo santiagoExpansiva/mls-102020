@@ -23,12 +23,11 @@ async function beforePromptImplicit(
   userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
 
-
-  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string };
+  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string , device:string, type:string};
 
   info.project = mls.actualProject || 0;
   const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
-  const device = context.task?.iaCompressed?.longMemory['device'] as string || 'web';
+  const device = info.device || context.task?.iaCompressed?.longMemory['device'] as string || 'web';
   const prompt = await getSkill(info, moduleName, device);
 
   const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
@@ -43,7 +42,7 @@ async function beforePromptImplicit(
       taskTitle: agent.agentDescription,
       threadId: context.message.threadId,
       userMessage: info.path,
-      longTermMemory: { moduleName: info.moduleName }
+      longTermMemory: { moduleName: info.moduleName, device }
     }
   };
 
@@ -92,6 +91,7 @@ async function afterPromptStep(
   step: mls.msg.AIAgentStep,
   hookSequential: number,
 ): Promise<mls.msg.AgentIntent[]> {
+  debugger;
   if (!agent || !context || !step) throw new Error(`(${agent.agentName}) [afterPromptStep] invalid params, agent:${!!agent}, context:${!!context}, step:${!!step}`);
 
   const payload = (step.interaction?.payload?.[0]);
@@ -122,7 +122,8 @@ async function afterPromptStep(
 async function processOutput(context: mls.msg.ExecutionContext, output: any, agent: IAgentMeta, parentStep: mls.msg.AIAgentStep): Promise<mls.msg.AgentIntent[]> {
 
   const orch = getMaterializeOrchestrator(output.path);
-  await orch.createStorFile(output.outputPath, parseAISource(output.srcFile));
+  const ref = output.outputPath.startsWith('/') ? output.outputPath.slice(1) : output.outputPath;
+  await orch.createStorFile(ref, parseAISource(output.srcFile));
 
   const stepOri = context.task ? (findPreviousAgentStep(context.task, parentStep.stepId))?.stepId : parentStep.stepId;
 

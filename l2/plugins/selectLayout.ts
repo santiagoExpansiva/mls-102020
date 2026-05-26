@@ -3,7 +3,6 @@
 import { html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { StateLitElement } from '/_102027_/l2/stateLitElement.js';
-import { addModuleGenome } from '/_102020_/l2/newModule/astModuleFront.js';
 import '/_102020_/l2/plugins/navHeader.js';
 
 // ─── i18n ─────────────────────────────────────────────────────────────
@@ -74,14 +73,15 @@ interface ILayoutOption {
     value: number;
     key: 'standard' | 'compact' | 'tabs' | 'sidebar' | 'bentoGrids';
     genomeKey: string;
+    skill: string;
 }
 
 const LAYOUT_OPTIONS: ILayoutOption[] = [
-    { value: 1, key: 'standard',   genomeKey: 'standart'    },
-    { value: 2, key: 'compact',    genomeKey: 'compact'     },
-    { value: 3, key: 'tabs',       genomeKey: 'tabs'        },
-    { value: 4, key: 'sidebar',    genomeKey: 'sidebar'     },
-    { value: 5, key: 'bentoGrids', genomeKey: 'bento-grids' },
+    { value: 1, key: 'standard',   genomeKey: 'standart',    skill: '/_102029_/l2/skills/layout/standart.js'    },
+    { value: 2, key: 'compact',    genomeKey: 'compact',     skill: '/_102029_/l2/skills/layout/compact.js'     },
+    { value: 3, key: 'tabs',       genomeKey: 'tabs',        skill: '/_102029_/l2/skills/layout/tabs.js'        },
+    { value: 4, key: 'sidebar',    genomeKey: 'sidebar',     skill: '/_102029_/l2/skills/layout/sidebar.js'     },
+    { value: 5, key: 'bentoGrids', genomeKey: 'bento-grids', skill: '/_102029_/l2/skills/layout/bento.js' },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────
@@ -94,6 +94,7 @@ export class PluginSelectLayout extends StateLitElement {
 
     @state() private _genomeLayoutValue: number | null = null;
     @state() private _saving: boolean = false;
+    @state() private _saveError: string = '';
 
     willUpdate(changed: Map<string, unknown>) {
         if (changed.has('pageFile')) {
@@ -103,6 +104,7 @@ export class PluginSelectLayout extends StateLitElement {
 
     private async _loadGenome(): Promise<void> {
         this._genomeLayoutValue = null;
+
         if (!this.pageFile) return;
 
         const project: number = mls.actualProject as number;
@@ -111,6 +113,7 @@ export class PluginSelectLayout extends StateLitElement {
 
         const folder = this.pageFile.folder ?? '';
         const genomeKey = folder.substring(modulePrefix.length + 1);
+
         if (!genomeKey) return;
 
         try {
@@ -250,6 +253,11 @@ export class PluginSelectLayout extends StateLitElement {
                 >
                     ${this._saving ? this.msg.adding : `+ ${this.msg.addLayout} (${label})`}
                 </button>
+                ${this._saveError ? html`
+                    <div class="rounded-md border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-900/10 px-2.5 py-1.5">
+                        <span class="text-xs text-red-600 dark:text-red-400 font-mono">${this._saveError}</span>
+                    </div>
+                ` : nothing}
             </div>
         `;
     }
@@ -319,76 +327,38 @@ export class PluginSelectLayout extends StateLitElement {
             </svg>`;
     }
 
-    private _deriveDevice(genomeKey: string): string {
-        if (genomeKey.startsWith('web/desktop')) return 'desktop';
-        if (genomeKey.startsWith('web/mobile')) return 'mobile';
-        if (genomeKey.startsWith('android')) return 'android';
-        if (genomeKey.startsWith('ios')) return 'ios';
-        return '';
-    }
 
     private async _addLayoutToGenome(opt: ILayoutOption): Promise<void> {
-        if (!this.pageFile || this._saving) return;
-        // @ts-ignore
-        const project: number = mls.actualProject;
-        // @ts-ignore
-        const modulePrefix: string = mls.actualModule ?? '';
-        if (!modulePrefix) return;
-
-        const folder = this.pageFile.folder ?? '';
-        const genomeKey = folder.substring(modulePrefix.length + 1);
-        if (!genomeKey) return;
-
         this._saving = true;
-        // @ts-ignore
-        this.requestUpdate();
+        this._saveError = '';
 
         try {
-            // @ts-ignore
-            const storFiles: any = await mls.stor.getFiles({
-                project,
-                shortName: 'module',
-                folder: modulePrefix,
-                loadContent: true,
-            });
-            const fileInfo: any = storFiles?.ts;
-            if (!fileInfo?.content) return;
+            const modulePrefix: string = mls.actualModule ?? '';
+            if (!modulePrefix || !this.pageFile) return;
 
-            const newSource = addModuleGenome(fileInfo.content, {
-                key: genomeKey,
-                device: this._deriveDevice(genomeKey),
+            const folder = this.pageFile.folder ?? '';
+            const genomeKey = folder.substring(modulePrefix.length + 1);
+            if (!genomeKey) return;
+
+            const parts = genomeKey.split('/');
+            const device = parts[1] ?? 'desktop';
+            const currentPage = parts[2] ?? '';                     // e.g. 'page11'
+            const dsDigit = currentPage.replace(/^page\d/, '');    // e.g. '1'
+            const newPage = `page${opt.value}${dsDigit}`;          // e.g. 'page21'
+            const newGenomeKey = [...parts.slice(0, 2), newPage].join('/');
+
+            const genomeValue = {
+                designSystem: 'default',
+                designSystemSkill: '/_102029_/l2/skills/designsystem/default.js',
+                device,
                 layout: opt.genomeKey,
-                designSystem: '',
-                designSystemSkill: '',
-                layoutSkill: '',
-            });
+                layoutSkill: opt.skill,
+            };
 
-            // @ts-ignore
-            const libModel: any = await import('/_102027_/l2/libModel.js');
-            await libModel.createModel(fileInfo);
-
-            // @ts-ignore
-            const modelKey: string = mls.editor.getKeyModel(project, 'module', modulePrefix, 2);
-            // @ts-ignore
-            const tsModel: any = (mls.editor.models as any)[modelKey]?.ts;
-            if (tsModel) {
-                tsModel.model.pushEditOperations(
-                    [],
-                    [{ range: tsModel.model.getFullModelRange(), text: newSource }],
-                    () => null,
-                );
-                // @ts-ignore
-                mls.editor.forceModelUpdate(tsModel.model);
-            }
-
-            this._genomeLayoutValue = opt.value;
-            this._dispatchSelect(opt.value);
-        } catch (e) {
-            console.error('[selectLayout] _addLayoutToGenome failed', e);
+            console.log('[selectLayout] genome key   :', newGenomeKey);
+            console.log('[selectLayout] genome value :', genomeValue);
         } finally {
             this._saving = false;
-            // @ts-ignore
-            this.requestUpdate();
         }
     }
 
