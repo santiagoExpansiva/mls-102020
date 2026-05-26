@@ -5,7 +5,6 @@ import { createStorFile, IReqCreateStorFile } from '/_102027_/l2/libStor.js';
 import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
 import { updateVariableJson, updateVariableText } from '/_102027_/l2/defsAST.js';
 import { addImport, addRoute, extractRouteHandlers } from "/_102020_/l2/newModule/astRouter.js";
-
 export function createAgent(): IAgentAsync {
     return {
         agentName: "agentToBePage",
@@ -44,7 +43,7 @@ async function beforePromptImplicit(
             taskTitle: agent.agentDescription,
             threadId: context.message.threadId,
             userMessage: context.message.content,
-            longTermMemory: { moduleName: info.moduleName }
+            longTermMemory: { moduleName: info.moduleName, device: info.device || 'web', type: info.type || 'page11' }
         }
 
     };
@@ -287,8 +286,7 @@ function generatePipeLine(moduleName: string, shortName: string) {
         {
             "id": "shared",
             "specVar": "sharedSpec",
-            "outputPath": "/l2/" + moduleName + "/web/shared/" + shortName + ".ts",
-            "skillPath": "_102020_/l2/agents/newModule/skills/genPageShared.ts",
+            "outputPath": shortName + ".ts",
             "agent": "agentMaterializeSharedPage",
             "dependsOn": ["contract"],
             "specUpdatedAt": dt
@@ -296,8 +294,7 @@ function generatePipeLine(moduleName: string, shortName: string) {
         {
             "id": "desktop",
             "specVar": "desktopLayoutSpec",
-            "outputPath": "/l2/" + moduleName + "/web/desktop/page11/" + shortName + ".ts",
-            "skillPath": "_102020_/l2/agents/newModule/skills/genPageRender.ts",
+            "outputPath": shortName + ".ts",
             "agent": "agentMaterializePageLit",
             "dependsOn": ["contract", "shared"],
             "specUpdatedAt": dt,

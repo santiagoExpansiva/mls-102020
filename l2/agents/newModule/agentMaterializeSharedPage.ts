@@ -27,7 +27,9 @@ async function beforePromptImplicit(
   const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string };
 
   info.project = mls.actualProject || 0;
-  const prompt = await getSkill(info);
+  const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
+  const device = context.task?.iaCompressed?.longMemory['device'] as string || 'web';
+  const prompt = await getSkill(info, moduleName, device);
 
   const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
     type: "add-message-ai",
@@ -64,7 +66,9 @@ async function beforePromptStep(
   const info = JSON.parse(args) as { path: string, item: mls.defs.MaterializeEntry, project?: number };
 
   info.project = mls.actualProject || 0;
-  const prompt = await getSkill(info);
+  const moduleName = context.task?.iaCompressed?.longMemory['moduleName'] as string;
+  const device = context.task?.iaCompressed?.longMemory['device'] as string || 'web';
+  const prompt = await getSkill(info, moduleName, device);
 
   const continueParallel: mls.msg.AgentIntentPromptReady = {
     type: "prompt_ready",
@@ -159,11 +163,22 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
   return newSteps;
 }
 
-async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }): Promise<string> {
+async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }, moduleName: string, device: string): Promise<string> {
+
+  const project = info.project || 0;
+  const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;
+  const deviceSkills = mod.skills[device];
+  if (!deviceSkills) throw new Error(`[agentMaterializeSharedPage] no skills config for device "${device}"`);
+
+  const sharedPath = deviceSkills.sharedPath as string;
+  const fileName = info.item.outputPath.startsWith('/') ? info.item.outputPath.slice(1) : info.item.outputPath;
+  let sharedPathNorm = (sharedPath.startsWith('/') ? sharedPath.slice(1) : sharedPath);
+  sharedPathNorm = sharedPathNorm.endsWith('/') ? sharedPathNorm.slice(0, -1) : sharedPathNorm;
+  info.item.outputPath = `/_${project}_/l2/${moduleName}/${sharedPathNorm}/${fileName}`;
 
   const orch = getMaterializeOrchestrator(info.path);
   const user = await orch.getVar(info.path, info.item.specVar);
-  const skill = await orch.getSkill(info.item.skillPath);
+  const skill = await orch.getSkill(deviceSkills.sharedSkill);
   const prompt = `##Skill\n${skill}\n\n##User data\n${user}\n\n##User info\n${JSON.stringify(info)}`;
 
   return prompt;
