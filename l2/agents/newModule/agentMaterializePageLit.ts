@@ -31,7 +31,10 @@ async function beforePromptImplicit(
   const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string };
 
   info.project = mls.actualProject || 0;
-  const prompt = await getSkill(info);
+  const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
+  const device = context.task?.iaCompressed?.longMemory['device'] as string || 'web';
+  const type = context.task?.iaCompressed?.longMemory['type'] as string || 'page11';
+  const prompt = await getSkill(info, moduleName, device, type);
 
   const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
     type: "add-message-ai",
@@ -68,7 +71,10 @@ async function beforePromptStep(
   const info = JSON.parse(args) as { path: string, item: mls.defs.MaterializeEntry, project?: number };
 
   info.project = mls.actualProject || 0;
-  const prompt = await getSkill(info);
+  const moduleName = context.task?.iaCompressed?.longMemory['moduleName'] as string;
+  const device = context.task?.iaCompressed?.longMemory['device'] as string || 'web';
+  const type = context.task?.iaCompressed?.longMemory['type'] as string || 'page11';
+  const prompt = await getSkill(info, moduleName, device, type);
 
   const continueParallel: mls.msg.AgentIntentPromptReady = {
     type: "prompt_ready",
@@ -259,11 +265,21 @@ async function saveFile(ref: string, src: string) {
   await mls.stor.localStor.setContent(sf, { contentType: 'string', content: src });
 }
 
-async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }): Promise<string> {
-  debugger;
+async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }, moduleName: string, device: string, type: string): Promise<string> {
+
+  const project = info.project || 0;
+  const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;
+  const genomeKey = `${device}/desktop/${type}`;
+  const genome = mod.moduleGenome[genomeKey];
+  if (!genome) throw new Error(`[agentMaterializePageLit] no genome config for key "${genomeKey}"`);
+
+  const fileName = info.item.outputPath.startsWith('/') ? info.item.outputPath.slice(1) : info.item.outputPath;
+  const genomeKeyNorm = genomeKey.endsWith('/') ? genomeKey.slice(0, -1) : genomeKey;
+  info.item.outputPath = `/_${project}_/l2/${moduleName}/${genomeKeyNorm}/${fileName}`;
+
   const orch = getMaterializeOrchestrator(info.path);
   const user = await orch.getVar(info.path, info.item.specVar);
-  const skill = await orch.getSkill(info.item.skillPath);
+  const skill = await orch.getSkill(genome.layoutSkill);
   const prompt = `##Skill\n${skill}\n\n##User data\n${user}\n\n##User info\n${JSON.stringify(info)}`;
 
   return prompt;

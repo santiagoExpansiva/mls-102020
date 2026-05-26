@@ -88,6 +88,13 @@ const DEVICE_SUB_PATHS: Record<number, string> = {
     4: 'ios',
 };
 
+const DEVICE_GENOME_KEYS: Record<number, string> = {
+    1: 'desktop',
+    2: 'mobile',
+    3: 'android',
+    4: 'ios',
+};
+
 // ─── Component ───────────────────────────────────────────────────────
 
 @customElement('plugins--select-device-102020')
@@ -106,10 +113,11 @@ export class PluginSelectDevice extends StateLitElement {
     }
 
     private async _loadModuleData(): Promise<void> {
+        debugger;
         this._genome = {};
         this._routeCountByDevice = {};
         if (!this.selectedModule) return;
-        const project: number = mls.actualProject;
+        const project: number = mls.actualProject as number;
         try {
             const mod = await import(`/_${project}_/l2/${this.selectedModule.path}/module.js`);
             this._genome = mod?.moduleGenome ?? {};
@@ -163,9 +171,10 @@ export class PluginSelectDevice extends StateLitElement {
     // ─── Renders ─────────────────────────────────────────────────────
 
     private _checkDeviceExists(deviceValue: number): boolean {
+        debugger;
         if (!this.selectedModule) return false;
-        const subPath = DEVICE_SUB_PATHS[deviceValue];
-        return Object.keys(this._genome).some(key => key.startsWith(subPath + '/') || key === subPath);
+        const deviceKey = DEVICE_GENOME_KEYS[deviceValue];
+        return Object.values(this._genome).some((config: any) => config.device === deviceKey);
     }
 
     private _renderDeviceCard(device: IDeviceInfo) {

@@ -1,8 +1,9 @@
 /// <mls fileReference="_102020_/l2/plugins/selectLayout.ts" enhancement="_102027_/l2/enhancementLit.ts"/>
 
 import { html, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import { StateLitElement } from '/_102027_/l2/stateLitElement.js';
+import { addModuleGenome } from '/_102020_/l2/newModule/astModuleFront.js';
 import '/_102020_/l2/plugins/navHeader.js';
 
 // ─── i18n ─────────────────────────────────────────────────────────────
@@ -19,7 +20,11 @@ const message_en = {
     tabsDesc: 'Tab-based navigation separating content into distinct sections.',
     sidebar: 'Sidebar',
     sidebarDesc: 'Persistent side navigation alongside a main content area.',
+    bentoGrids: 'Bento Grids',
+    bentoGridsDesc: 'Mosaic-style grid of cards with variable sizes and positions.',
     notCreated: 'Layout not yet created for page',
+    addLayout: 'Add Layout',
+    adding: 'Adding…',
 };
 type MessageType = typeof message_en;
 const messages: Record<string, MessageType> = {
@@ -36,7 +41,11 @@ const messages: Record<string, MessageType> = {
         tabsDesc: 'Navegação por abas que separa o conteúdo em seções distintas.',
         sidebar: 'Barra Lateral',
         sidebarDesc: 'Navegação lateral persistente ao lado de uma área de conteúdo principal.',
+        bentoGrids: 'Bento Grids',
+        bentoGridsDesc: 'Grade mosaico de cards com tamanhos e posições variáveis.',
         notCreated: 'Layout ainda não criado para a página',
+        addLayout: 'Adicionar Layout',
+        adding: 'Adicionando…',
     },
     es: {
         title: 'Layout',
@@ -50,7 +59,11 @@ const messages: Record<string, MessageType> = {
         tabsDesc: 'Navegación por pestañas que separa el contenido en secciones distintas.',
         sidebar: 'Barra Lateral',
         sidebarDesc: 'Navegación lateral persistente junto a un área de contenido principal.',
+        bentoGrids: 'Bento Grids',
+        bentoGridsDesc: 'Cuadrícula mosaico de tarjetas con tamaños y posiciones variables.',
         notCreated: 'Layout aún no creado para la página',
+        addLayout: 'Agregar Layout',
+        adding: 'Agregando…',
     },
 };
 /// **collab_i18n_end**
@@ -59,14 +72,16 @@ const messages: Record<string, MessageType> = {
 
 interface ILayoutOption {
     value: number;
-    key: 'standard' | 'compact' | 'tabs' | 'sidebar';
+    key: 'standard' | 'compact' | 'tabs' | 'sidebar' | 'bentoGrids';
+    genomeKey: string;
 }
 
 const LAYOUT_OPTIONS: ILayoutOption[] = [
-    { value: 1, key: 'standard' },
-    { value: 2, key: 'compact' },
-    { value: 3, key: 'tabs' },
-    { value: 4, key: 'sidebar' },
+    { value: 1, key: 'standard',   genomeKey: 'standart'    },
+    { value: 2, key: 'compact',    genomeKey: 'compact'     },
+    { value: 3, key: 'tabs',       genomeKey: 'tabs'        },
+    { value: 4, key: 'sidebar',    genomeKey: 'sidebar'     },
+    { value: 5, key: 'bentoGrids', genomeKey: 'bento-grids' },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────
@@ -77,38 +92,57 @@ export class PluginSelectLayout extends StateLitElement {
     @property({ attribute: false }) value: number | null = 0;
     @property({ attribute: false }) pageFile: mls.stor.IFileInfo | null = null;
 
-    private get msg(): MessageType {
-        return messages[this.getMessageKey(messages)];
+    @state() private _genomeLayoutValue: number | null = null;
+    @state() private _saving: boolean = false;
+
+    willUpdate(changed: Map<string, unknown>) {
+        if (changed.has('pageFile')) {
+            this._loadGenome();
+        }
     }
 
-    // Returns null when pageFile is unknown (no validation possible),
-    // or a Set<number> of layout numbers (1-4) that exist for the current page.
-    // First digit of pageXX folder name encodes the layout: page1X=standard, page2X=compact, etc.
-    private _computeAvailableLayouts(): Set<number> | null {
-        if (!this.pageFile) return null;
-        const { project, folder, shortName } = this.pageFile;
-        const pageMatch = folder.match(/^(.+)\/page\d+$/);
-        if (!pageMatch) return null;
-        const prefix = pageMatch[1];
-        const available = new Set<number>();
-        // @ts-ignore
-        for (const f of Object.values(mls.stor.files as Record<string, mls.stor.IFileInfo>)) {
-            if (f.project !== project || f.shortName !== shortName) continue;
-            const m = (f.folder ?? '').match(/^(.+)\/page(\d+)$/);
-            if (!m || m[1] !== prefix) continue;
-            const layoutNum = parseInt(m[2][0]);
-            if (layoutNum >= 1 && layoutNum <= 4) available.add(layoutNum);
+    private async _loadGenome(): Promise<void> {
+        this._genomeLayoutValue = null;
+        if (!this.pageFile) return;
+
+        const project: number = mls.actualProject as number;
+        const modulePrefix: string = mls.actualModule ?? '';
+        if (!modulePrefix) return;
+
+        const folder = this.pageFile.folder ?? '';
+        const genomeKey = folder.substring(modulePrefix.length + 1);
+        if (!genomeKey) return;
+
+        try {
+            const modulePath = modulePrefix;
+            const mod = await import(`/_${project}_/l2/${modulePath}/module.js`);
+            const genome: Record<string, any> = mod?.moduleGenome ?? {};
+            const entry = genome[genomeKey];
+            if (!entry) return;
+            const opt = LAYOUT_OPTIONS.find(o => o.genomeKey === entry.layout);
+            if (opt) {
+                this._genomeLayoutValue = opt.value;
+                this._dispatchSelect(opt.value);
+            }
+        } catch {
+            // no genome — keep null
         }
-        return available;
+
+        // @ts-ignore
+        this.requestUpdate();
+    }
+
+    private get msg(): MessageType {
+        return messages[this.getMessageKey(messages)];
     }
 
     createRenderRoot() { return this; }
 
     render() {
         const max = LAYOUT_OPTIONS.length;
-        const available = this._computeAvailableLayouts();
-        const isAll = this.value === 0 || this.value === null;
-        const selectedOption = LAYOUT_OPTIONS.find(o => o.value === this.value);
+        const v = this.value ?? 0;
+        const isAll = v === 0;
+        const selectedOption = LAYOUT_OPTIONS.find(o => o.value === v);
 
         if (isAll) {
             return html`
@@ -124,35 +158,40 @@ export class PluginSelectLayout extends StateLitElement {
                     ></plugins--nav-header-102020>
 
                     <div class="grid grid-cols-2 gap-2">
-                        ${LAYOUT_OPTIONS.map(opt => this._renderLayoutCard(opt, false, available))}
+                        ${LAYOUT_OPTIONS.map(opt => this._renderLayoutCard(opt, false))}
                     </div>
                 </div>
             `;
         }
 
         if (!selectedOption) return nothing;
-        const hasLayout = available === null || available.has(selectedOption.value);
+        const isConfigured = this._genomeLayoutValue === null || selectedOption.value === this._genomeLayoutValue;
         return html`
             <div class="flex flex-col gap-3">
                 <plugins--nav-header-102020
                     .fixedLabel=${this.msg.title}
                     .itemName=${this.msg[selectedOption.key]}
                     .desc=${this.msg.desc}
-                    .value=${this.value ?? 1}
+                    .value=${v}
                     .min=${0}
                     .max=${max}
                     @nav-change=${(e: CustomEvent) => this._dispatchSelect(e.detail.value)}
                 ></plugins--nav-header-102020>
 
-                ${hasLayout
-                    ? this._renderLayoutCard(selectedOption, true, available)
-                    : this._renderNotCreatedBanner()}
+                ${isConfigured
+                    ? this._renderLayoutCard(selectedOption, true)
+                    : this._renderNotCreatedBanner(selectedOption)}
             </div>
         `;
     }
 
-    private _renderLayoutCard(opt: ILayoutOption, isSelected: boolean, available: Set<number> | null) {
-        const hasLayout = available === null || available.has(opt.value);
+    private _isConfiguredLayout(opt: ILayoutOption): boolean {
+        if (this._genomeLayoutValue === null) return true;
+        return opt.value === this._genomeLayoutValue;
+    }
+
+    private _renderLayoutCard(opt: ILayoutOption, isSelected: boolean) {
+        const hasLayout = this._isConfiguredLayout(opt);
         const label = this.msg[opt.key];
         const desc = this.msg[`${opt.key}Desc` as keyof MessageType];
         const pageName = this.pageFile?.shortName ?? '';
@@ -190,20 +229,36 @@ export class PluginSelectLayout extends StateLitElement {
         `;
     }
 
-    private _renderNotCreatedBanner() {
+    private _renderNotCreatedBanner(opt: ILayoutOption) {
         const pageName = this.pageFile?.shortName ?? '';
+        const label = this.msg[opt.key];
         return html`
-            <div class="rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-900/10 px-3 py-2.5">
-                <span class="text-sm text-amber-600 dark:text-amber-400">${this.msg.notCreated} ${pageName}</span>
+            <div class="flex flex-col gap-2">
+                <div class="rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-900/10 px-3 py-2.5">
+                    <span class="text-sm text-amber-600 dark:text-amber-400">${this.msg.notCreated} ${pageName}</span>
+                </div>
+                <button
+                    class="
+                        self-start text-sm px-3 py-1.5 rounded
+                        bg-indigo-500 dark:bg-indigo-600 text-white
+                        hover:bg-indigo-600 dark:hover:bg-indigo-500
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        transition-colors cursor-pointer
+                    "
+                    ?disabled=${this._saving}
+                    @click=${() => this._addLayoutToGenome(opt)}
+                >
+                    ${this._saving ? this.msg.adding : `+ ${this.msg.addLayout} (${label})`}
+                </button>
             </div>
         `;
     }
 
     private _renderDiagram(key: ILayoutOption['key'], selected: boolean) {
-        const header = selected ? '#818cf8' : '#9ca3af';
+        const header  = selected ? '#818cf8' : '#9ca3af';
         const content = selected ? '#c7d2fe' : '#e5e7eb';
         const sidebar = selected ? '#a5b4fc' : '#d1d5db';
-        const darkHeader = selected ? '#4f46e5' : '#4b5563';
+        const darkHeader  = selected ? '#4f46e5' : '#4b5563';
         const darkContent = selected ? '#3730a3' : '#374151';
         const darkSidebar = selected ? '#4338ca' : '#374151';
 
@@ -241,13 +296,100 @@ export class PluginSelectLayout extends StateLitElement {
                 <rect x="4" y="14" width="72" height="42" rx="0 2 2 2" fill="${darkContent}" class="hidden dark:block"/>
             </svg>`;
 
-        return html`
+        if (key === 'sidebar') return html`
             <svg viewBox="0 0 80 60" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
                 <rect x="4" y="4" width="18" height="52" rx="2" fill="${sidebar}" class="dark:hidden"/>
                 <rect x="4" y="4" width="18" height="52" rx="2" fill="${darkSidebar}" class="hidden dark:block"/>
                 <rect x="26" y="4" width="50" height="52" rx="2" fill="${content}" class="dark:hidden"/>
                 <rect x="26" y="4" width="50" height="52" rx="2" fill="${darkContent}" class="hidden dark:block"/>
             </svg>`;
+
+        return html`
+            <svg viewBox="0 0 80 60" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                <rect x="4" y="4"  width="44" height="26" rx="2" fill="${content}" class="dark:hidden"/>
+                <rect x="4" y="4"  width="44" height="26" rx="2" fill="${darkContent}" class="hidden dark:block"/>
+                <rect x="52" y="4" width="24" height="12" rx="2" fill="${header}" class="dark:hidden"/>
+                <rect x="52" y="4" width="24" height="12" rx="2" fill="${darkHeader}" class="hidden dark:block"/>
+                <rect x="52" y="18" width="24" height="12" rx="2" fill="${content}" class="dark:hidden"/>
+                <rect x="52" y="18" width="24" height="12" rx="2" fill="${darkContent}" class="hidden dark:block"/>
+                <rect x="4" y="34"  width="24" height="22" rx="2" fill="${header}" class="dark:hidden"/>
+                <rect x="4" y="34"  width="24" height="22" rx="2" fill="${darkHeader}" class="hidden dark:block"/>
+                <rect x="32" y="34" width="44" height="22" rx="2" fill="${content}" class="dark:hidden"/>
+                <rect x="32" y="34" width="44" height="22" rx="2" fill="${darkContent}" class="hidden dark:block"/>
+            </svg>`;
+    }
+
+    private _deriveDevice(genomeKey: string): string {
+        if (genomeKey.startsWith('web/desktop')) return 'desktop';
+        if (genomeKey.startsWith('web/mobile')) return 'mobile';
+        if (genomeKey.startsWith('android')) return 'android';
+        if (genomeKey.startsWith('ios')) return 'ios';
+        return '';
+    }
+
+    private async _addLayoutToGenome(opt: ILayoutOption): Promise<void> {
+        if (!this.pageFile || this._saving) return;
+        // @ts-ignore
+        const project: number = mls.actualProject;
+        // @ts-ignore
+        const modulePrefix: string = mls.actualModule ?? '';
+        if (!modulePrefix) return;
+
+        const folder = this.pageFile.folder ?? '';
+        const genomeKey = folder.substring(modulePrefix.length + 1);
+        if (!genomeKey) return;
+
+        this._saving = true;
+        // @ts-ignore
+        this.requestUpdate();
+
+        try {
+            // @ts-ignore
+            const storFiles: any = await mls.stor.getFiles({
+                project,
+                shortName: 'module',
+                folder: modulePrefix,
+                loadContent: true,
+            });
+            const fileInfo: any = storFiles?.ts;
+            if (!fileInfo?.content) return;
+
+            const newSource = addModuleGenome(fileInfo.content, {
+                key: genomeKey,
+                device: this._deriveDevice(genomeKey),
+                layout: opt.genomeKey,
+                designSystem: '',
+                designSystemSkill: '',
+                layoutSkill: '',
+            });
+
+            // @ts-ignore
+            const libModel: any = await import('/_102027_/l2/libModel.js');
+            await libModel.createModel(fileInfo);
+
+            // @ts-ignore
+            const modelKey: string = mls.editor.getKeyModel(project, 'module', modulePrefix, 2);
+            // @ts-ignore
+            const tsModel: any = (mls.editor.models as any)[modelKey]?.ts;
+            if (tsModel) {
+                tsModel.model.pushEditOperations(
+                    [],
+                    [{ range: tsModel.model.getFullModelRange(), text: newSource }],
+                    () => null,
+                );
+                // @ts-ignore
+                mls.editor.forceModelUpdate(tsModel.model);
+            }
+
+            this._genomeLayoutValue = opt.value;
+            this._dispatchSelect(opt.value);
+        } catch (e) {
+            console.error('[selectLayout] _addLayoutToGenome failed', e);
+        } finally {
+            this._saving = false;
+            // @ts-ignore
+            this.requestUpdate();
+        }
     }
 
     private _dispatchSelect(value: number) {

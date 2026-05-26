@@ -99,6 +99,11 @@ export class PluginSelectPage extends StateLitElement {
     @state() private _search: string = '';
     @state() private _activeDevice: string | null = null;
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._loadPages();
+    }
+
     willUpdate(changed: Map<string, unknown>) {
         if (changed.has('selectedModule')) {
             this._search = '';
@@ -122,15 +127,19 @@ export class PluginSelectPage extends StateLitElement {
 
     // ─── Page Loading ─────────────────────────────────────────────────
 
+    private get _modulePath(): string | null {
+        return this.selectedModule?.path ?? mls.actualModule ?? null;
+    }
+
     private async _loadPages(): Promise<void> {
         this._pages = [];
-        if (!this.selectedModule) {
+        const modulePath = this._modulePath;
+        if (!modulePath) {
             this._dispatchConfig();
             return;
         }
 
         const project: number = mls.actualProject as number;
-        const modulePath = this.selectedModule.path;
         const actualDevice: number | undefined = (mls as any).actualDevice;
         const activeDevicePath = (actualDevice && DEVICE_SUB_PATHS[actualDevice]) ? DEVICE_SUB_PATHS[actualDevice] : null;
 

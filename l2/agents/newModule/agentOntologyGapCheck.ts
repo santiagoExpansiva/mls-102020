@@ -3,7 +3,7 @@
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
 import { updateVariableJson, getVariableJson } from '/_102027_/l2/defsAST.js';
-import { ModuleToBe, EntityDefinition } from '/_102020_/l2/agents/newModule/agentToBeConceptual.js';
+import { ModuleToBe } from '/_102020_/l2/agents/newModule/agentToBeConceptual.js';
 
 export function createAgent(): IAgentAsync {
     return {
@@ -109,7 +109,10 @@ async function afterPromptStep(
     if (result.hasGaps && result.newEntities && Object.keys(result.newEntities).length > 0) {
         const m = await sf.getOrCreateModel();
         const currentSrc = m.model.getValue() as string;
+        console.info('antes', currentSrc);
+        console.info('add', result.newEntities);
         const moduleToBe = getVariableJson<ModuleToBe>(currentSrc, 'ontology');
+    
         moduleToBe.ontology = moduleToBe.ontology ?? { entities: {} };
         moduleToBe.ontology.entities = { ...moduleToBe.ontology.entities, ...result.newEntities };
         ontologyContent = updateVariableJson(currentSrc, 'ontology', moduleToBe);
@@ -191,17 +194,7 @@ Do NOT add entities that:
 
 Each entry in 'newEntities' must follow this structure:
 \`\`\`
-"EntityName": {
-  "description": "...",
-  "fields": {
-    "id": { "type": "string" },
-    "fieldName": { "type": "string | number | boolean | datetime | array" },
-    "fieldWithEnum": { "type": "string", "values": ["val1", "val2"] },
-    "optionalField": { "type": "string", "required": false },
-    "fieldWithNote": { "type": "string", "constraints": "free-text hint" }
-  },
-  "rules": ["ruleId1", "ruleId2"]
-}
+"EntityName": <EntityDefinition>
 \`\`\`
 
 Rules:
@@ -229,10 +222,26 @@ export type GapCheckResult =
     | {
         hasGaps: false;
         summary: string;
-      }
+    }
     | {
         hasGaps: true;
         summary: string;
         newEntities: Record<string, EntityDefinition>; // ONLY the missing entities — existing ones are merged in code
-      };
+    };
+
+export interface EntityDefinition {
+    description?: string;
+
+    fields: Record<string, EntityField>;
+
+    // References business/platform rules that apply to this entity
+    rules?: string[];
+}
+
+export interface EntityField {
+    type: string;
+    required?: boolean; // default = true
+    values?: string[]; // Closed set, used for validation, DB schema and UI generation
+    constraints?: string; // Free-text helper for LLMs and humans (never executable)
+}
 //#endregion

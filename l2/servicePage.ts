@@ -39,11 +39,6 @@ interface IModule {
     path: string;
 }
 
-interface IRule {
-    name: string;
-    path: string;
-}
-
 interface IKnobConfig {
     key: string;
     min: number;
@@ -51,16 +46,6 @@ interface IKnobConfig {
     labels: Record<number, string>;
     disabled?: boolean;
 }
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-const DISABLED_CONFIG = (key: string): IKnobConfig => ({
-    key,
-    min: 1,
-    max: 1,
-    labels: {},
-    disabled: true,
-});
 
 // ─── Service ─────────────────────────────────────────────────────────
 
@@ -100,10 +85,9 @@ export class ServicePage102020 extends ServiceBase {
     @state() private msg: MessageType = message_en;
 
     @state() private _modules: IModule[] = [];
-    @state() private _rules: IRule[] = [];
 
     @state() private _pageConfig: IKnobConfig = { key: 'page', min: 0, max: 1, labels: { 0: 'All', 1: '+' } };
-    @state() private _ruleConfig: IKnobConfig = DISABLED_CONFIG('rule');
+    @state() private _ruleConfig: IKnobConfig = { key: 'rule', min: 0, max: 0, labels: { 0: 'All' } };
 
     @state() private _pageValue: number | null = 0;
     @state() private _ruleValue: number | null = null;
@@ -120,26 +104,13 @@ export class ServicePage102020 extends ServiceBase {
         if (!project) return;
         try {
             const mod = await import(`/_${project}_/l2/project.js`);
-            const modules: IModule[] = mod?.projectConfig?.modules ?? [];
-            const rules: IRule[] = mod?.projectConfig?.rules ?? [];
-            this._modules = modules;
-            this._rules = rules;
-            this._ruleConfig = this._buildConfig('rule', rules.map(r => r.name));
+            this._modules = mod?.projectConfig?.modules ?? [];
             this._ruleValue = 0;
         } catch {
             this._modules = [];
-            this._rules = [];
-            this._ruleConfig = DISABLED_CONFIG('rule');
         }
         // @ts-ignore
         this.requestUpdate();
-    }
-
-    private _buildConfig(key: string, names: string[]): IKnobConfig {
-        const labels: Record<number, string> = { 0: 'All' };
-        names.forEach((n, i) => { labels[i + 1] = n; });
-        labels[names.length + 1] = '+';
-        return { key, min: 0, max: names.length + 1, labels };
     }
 
     private get _selectedModule(): IModule | null {
@@ -162,7 +133,7 @@ export class ServicePage102020 extends ServiceBase {
         switch (key) {
             case 'page': return this._pageConfig;
             case 'rule': return this._ruleConfig;
-            default: return DISABLED_CONFIG(key);
+            default: return { key, min: 0, max: 0, labels: {}, disabled: true };
         }
     }
 
@@ -318,6 +289,13 @@ export class ServicePage102020 extends ServiceBase {
         this.requestUpdate();
     }
 
+    private _onRuleConfig(e: CustomEvent) {
+        const { min, max, labels } = e.detail;
+        this._ruleConfig = { key: 'rule', min, max, labels };
+        // @ts-ignore
+        this.requestUpdate();
+    }
+
     private _renderDetailsRow() {
         return html`
             <div class="flex flex-col flex-1">
@@ -325,6 +303,7 @@ export class ServicePage102020 extends ServiceBase {
                     @select-page=${(e: CustomEvent) => this._onPageSelect(e)}
                     @select-rule=${(e: CustomEvent) => this._setKnobValue('rule', e.detail.value)}
                     @page-config=${(e: CustomEvent) => this._onPageConfig(e)}
+                    @rule-config=${(e: CustomEvent) => this._onRuleConfig(e)}
                 >
                     ${this._renderContextStatusArea()}
                 </div>
@@ -345,7 +324,7 @@ export class ServicePage102020 extends ServiceBase {
             case 'rule':
                 return html`
                     <plugins--select-rule-102020
-                        .rules=${this._rules}
+                        .selectedModule=${this._selectedModule}
                         .value=${this._ruleValue}
                         @select-rule=${(e: CustomEvent) => this._setKnobValue('rule', e.detail.value)}
                     ></plugins--select-rule-102020>
