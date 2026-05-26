@@ -30,6 +30,11 @@ async function beforePromptImplicit(
     // userPrompt contains all we need
     const info = JSON.parse(userPrompt);
     const ontology = await getOntology(info.moduleName);
+    const dt = mls.stor.convertFileReferenceToFile(info.page);
+    const key = mls.stor.getKeyToFile(dt);
+    if (!mls.stor.files[key]) throw new Error(`[${agent.agentName}] not found stor:` + info.page);
+
+    const hm = await mls.stor.files[key].getContent() as string;
 
     const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
         type: "add-message-ai",
@@ -38,7 +43,7 @@ async function beforePromptImplicit(
             agentName: agent.agentName,
             inputAI: [
                 { type: 'system', content: system1.replace('{{ontology}}', ontology).replace('{{moduleName}}', info.moduleName) },
-                { type: 'human', content: userPrompt }
+                { type: 'human', content: hm }
             ],
             taskTitle: agent.agentDescription,
             threadId: context.message.threadId,

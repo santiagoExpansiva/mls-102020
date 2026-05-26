@@ -2,7 +2,7 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js'
 import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
-import { getMaterializeOrchestrator } from '/_102027_/l2/agents/materialize/materializeOrchestrator.js';
+import { getMaterializeOrchestrator } from '/_102020_/l2/agents/newModule/materializeOrchestrator.js';
 
 export function createAgent(): IAgentAsync {
   return {
@@ -23,11 +23,14 @@ async function beforePromptImplicit(
   userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
 
-  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string , device:string, type:string};
-
-  info.project = mls.actualProject || 0;
+  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id:string };
   const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
   const device = info.device || context.task?.iaCompressed?.longMemory['device'] as string || 'web';
+
+  info.project = mls.actualProject || 0; 
+  const orch = getMaterializeOrchestrator(info.path);
+  info.item = await orch.getToExecuteOnlyMaterialize(info.id) as mls.defs.MaterializeEntry;
+
   const prompt = await getSkill(info, moduleName, device);
 
   const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
@@ -42,7 +45,7 @@ async function beforePromptImplicit(
       taskTitle: agent.agentDescription,
       threadId: context.message.threadId,
       userMessage: info.path,
-      longTermMemory: { moduleName: info.moduleName, device }
+      longTermMemory: { moduleName: info.moduleName, device, onlyStep:"true" }
     }
   };
 
@@ -91,7 +94,7 @@ async function afterPromptStep(
   step: mls.msg.AIAgentStep,
   hookSequential: number,
 ): Promise<mls.msg.AgentIntent[]> {
-  debugger;
+  
   if (!agent || !context || !step) throw new Error(`(${agent.agentName}) [afterPromptStep] invalid params, agent:${!!agent}, context:${!!context}, step:${!!step}`);
 
   const payload = (step.interaction?.payload?.[0]);
@@ -120,6 +123,8 @@ async function afterPromptStep(
 }
 
 async function processOutput(context: mls.msg.ExecutionContext, output: any, agent: IAgentMeta, parentStep: mls.msg.AIAgentStep): Promise<mls.msg.AgentIntent[]> {
+
+  const onlyThisStep = (context.task?.iaCompressed?.longMemory['onlyStep'] as string || 'false') === 'true';
 
   const orch = getMaterializeOrchestrator(output.path);
   const ref = output.outputPath.startsWith('/') ? output.outputPath.slice(1) : output.outputPath;
@@ -155,7 +160,7 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
         }
       };
 
-      newSteps.push(newStep);
+      if(!onlyThisStep) newSteps.push(newStep);
 
     })
 

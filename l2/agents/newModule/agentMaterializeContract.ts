@@ -2,7 +2,7 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
-import { getMaterializeOrchestrator } from '/_102027_/l2/agents/materialize/materializeOrchestrator.js';
+import { getMaterializeOrchestrator } from '/_102020_/l2/agents/newModule/materializeOrchestrator.js';
 
 export function createAgent(): IAgentAsync {
   return {
@@ -23,10 +23,15 @@ async function beforePromptImplicit(
   userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
 
+  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id:string };
+  const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
+  const device = info.device || context.task?.iaCompressed?.longMemory['device'] as string || 'web';
+  const type = info.type || context.task?.iaCompressed?.longMemory['type'] as string || 'page11';
 
-  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string };
+  info.project = mls.actualProject || 0; 
+  const orch = getMaterializeOrchestrator(info.path);
+  info.item = await orch.getToExecuteOnlyMaterialize(info.id) as mls.defs.MaterializeEntry;  
 
-  info.project = mls.actualProject || 0;
   const prompt = await getSkill(info);
 
   const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
@@ -41,7 +46,7 @@ async function beforePromptImplicit(
       taskTitle: agent.agentDescription,
       threadId: context.message.threadId,
       userMessage: info.path,
-      longTermMemory: { moduleName: info.moduleName }
+      longTermMemory: { moduleName, device, type, onlyStep:"true" }
     }
   };
 
@@ -118,6 +123,8 @@ async function afterPromptStep(
 
 async function processOutput(context: mls.msg.ExecutionContext, output: any, agent: IAgentMeta, parentStep: mls.msg.AIAgentStep): Promise<mls.msg.AgentIntent[]> {
 
+  const onlyThisStep = (context.task?.iaCompressed?.longMemory['onlyStep'] as string || 'false') === 'true';
+
   const orch = getMaterializeOrchestrator(output.path);
   await orch.createStorFile(output.outputPath, parseAISource(output.srcFile));
 
@@ -151,7 +158,7 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
         }
       };
 
-      newSteps.push(newStep);
+      if(!onlyThisStep) newSteps.push(newStep);
 
     })
 
