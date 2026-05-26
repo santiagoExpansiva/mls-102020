@@ -10,7 +10,6 @@ import { getConfigProject } from '/_102027_/l2/libProjectConfig.js';
 import { getLastOpenedFiles } from '/_102027_/l2/libCommom.js';
 import { compileStyleUsingStorFile } from '/_102027_/l2/libCompileStyle.js';
 import { createModel } from '/_102027_/l2/libModel.js';
-
 import { createThread, getUserId } from '/_102025_/l2/collabMessagesHelper.js';
 import { getThreadByName } from '/_102025_/l2/collabMessagesIndexedDB.js';
 import { loadAgent, executeBeforePrompt } from '/_102027_/l2/aiAgentOrchestration.js';
@@ -27,7 +26,6 @@ import { PreviewModeAura } from '/_102020_/l2/previewModeAura.js';
 import { IJSONDependence } from '/_102027_/l2/libCompile.js';
 import { OpenedFileL2 } from '/_102027_/l2/libCommom.js';
 import { ServiceBase, IService, IToolbarContent, IServiceMenu, IOptions } from '/_102027_/l2/serviceBase.js';
-
 
 /// **collab_i18n_start**
 const message_pt = {
@@ -200,7 +198,6 @@ export class ServicePreview extends ServiceBase {
       this.changeLanguagePreview(value);
     }
     if (key === 'preview.file') {
-      console.info(value);
       this.changeFilePreview(value)
     }
   }
@@ -337,13 +334,12 @@ export class ServicePreview extends ServiceBase {
 
   private onFileAction(ev: mls.events.IEvent) {
 
-
     if (![2, 3, 4].includes(ev.level) || (ev.type !== 'FileAction') || !ev.desc) return;
     const fileAction = JSON.parse(ev.desc) as mls.events.IFileAction;
     const eventsValid = ['open', 'openBackground', 'statusOrErrorChanged', 'changed', 'new', 'modeCreated', 'editorChanged', 'openLink', 'editorEvents'];
 
     try {
-      if (fileAction.position === this.position || !eventsValid.includes(fileAction.action)) return;
+      if (!eventsValid.includes(fileAction.action)) return;
 
       if (fileAction.action === 'open' || (fileAction.action as any) === 'openBackground') {
         setState('preview.pausePreview', false);
