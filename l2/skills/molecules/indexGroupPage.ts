@@ -122,6 +122,10 @@ Every distinct component in the group must appear as a column.
 # Responsibilities
 - Declare the custom element with @customElement('molecules--{groupname}--index-{actualProjectId}')
 - Name the class Group{GroupName}Index (PascalCase, e.g. GroupEnterBooleanIndex)
+- Always include these three imports at the top of index.ts, in this order:
+  import { html, TemplateResult } from 'lit';
+  import { customElement, state } from 'lit/decorators.js';
+  import { StateLitElement } from '/_102029_/l2/stateLitElement.js';
 - Import each component module from its canonical path before using it in the template:
   import '/_actualProjectId_/l2/molecules/{groupname}/{component-name}';
   (groupname is lowercase in the import path)

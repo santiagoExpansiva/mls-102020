@@ -24,11 +24,11 @@ async function beforePromptImplicit(
     userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
 
-    if (!userPrompt || userPrompt.length < 5) throw new Error('invalid prompt');
+    if (!userPrompt || userPrompt.length < 3) throw new Error('invalid prompt');
     if (!mls.actualProject) throw new Error(`(${agent.agentName})[beforePromptImplicit] project invalid`);
 
-    const data: { group: string } = JSON.parse(userPrompt);
-    const { systemPrompt, humanPrompt } = await buildPrompts(agent.agentName, data.group);
+    const group = userPrompt.trim();
+    const { systemPrompt, humanPrompt } = await buildPrompts(agent.agentName, group);
 
     const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
         type: "add-message-ai",
@@ -42,7 +42,7 @@ async function beforePromptImplicit(
                 type: "human",
                 content: humanPrompt,
             }],
-            taskTitle: `Generating index page for ${data.group}`,
+            taskTitle: `Generating index page for ${group}`,
             threadId: context.message.threadId,
             userMessage: context.message.content,
         }
@@ -63,8 +63,8 @@ async function beforePromptStep(
     if (!args) throw new Error(`(${agent.agentName})[beforePromptStep] args invalid`);
     if (!mls.actualProject) throw new Error(`(${agent.agentName})[beforePromptStep] project invalid`);
 
-    const data: { group: string } = JSON.parse(args);
-    const { systemPrompt, humanPrompt } = await buildPrompts(agent.agentName, data.group);
+    const group = args.trim();
+    const { systemPrompt, humanPrompt } = await buildPrompts(agent.agentName, group);
 
     const continueIntent: mls.msg.AgentIntentPromptReady = {
         type: "prompt_ready",
