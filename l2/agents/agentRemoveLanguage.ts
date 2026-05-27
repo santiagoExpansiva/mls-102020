@@ -125,35 +125,38 @@ async function getPaths(languages: { code: string, name: string }[], project: nu
     const modules: { name: string, path: string }[] = module.projectConfig.modules;
 
     const result: { languages: string[], fileReference: string }[] = [];
-    const platforms = ['web', 'ios', 'android'];
 
     for (const mod of modules) {
-        for (const platform of platforms) {
-            const sharedFolder = `${mod.path}/${platform}/shared`;
+
+        const moduleConfig = await import(`/_${project}_/l2/${mod}/module.js`);
+        if (!moduleConfig?.skills) continue;
+
+        const sharedFolder = `${moduleConfig.web.sharedPath}`
+            .replace(/^\/?_\d+_\/l2\//, '')
+            .replace(/^\/|\/$/g, '');
+
+        const sharedFiles = Object.values(mls.stor.files).filter((f: mls.stor.IFileInfo) =>
+            f.project === project &&
+            f.folder === sharedFolder &&
+            f.extension === '.ts'
+        );
+
+        for (const storFile of sharedFiles as mls.stor.IFileInfo[]) {
+            const model = await storFile.getOrCreateModel();
+            if (!model) continue;
+            const source: string = model.model.getValue();
+
+            const presentLangs = languages
+                .filter(lang => _hasLanguageInI18nBlock(source, lang.code))
+                .map(lang => lang.code);
+
+            if (presentLangs.length === 0) continue;
 
             // @ts-ignore
-            const sharedFiles = Object.values(mls.stor.files).filter((f: any) =>
-                f.project === project &&
-                f.folder === sharedFolder &&
-                f.extension === '.ts'
-            );
-
-            for (const storFile of sharedFiles as any[]) {
-                const model = await storFile.getOrCreateModel();
-                if (!model) continue;
-                const source: string = model.model.getValue();
-
-                const presentLangs = languages
-                    .filter(lang => _hasLanguageInI18nBlock(source, lang.code))
-                    .map(lang => lang.code);
-
-                if (presentLangs.length === 0) continue;
-
-                // @ts-ignore
-                const fileReference = mls.stor.convertFileToFileReference(storFile);
-                result.push({ languages: presentLangs, fileReference });
-            }
+            const fileReference = mls.stor.convertFileToFileReference(storFile);
+            result.push({ languages: presentLangs, fileReference });
         }
+
     }
 
     return result;
