@@ -4,7 +4,6 @@ import { html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { ServiceBase, IService, IToolbarContent, IServiceMenu } from '/_102027_/l2/serviceBase.js';
 import { getState, setState, subscribe, unsubscribe } from '/_102027_/l2/collabState.js';
-import { IDesignSystemTokens, getTokens } from '/_102027_/l2/designSystemBase.js';
 import { skills as listOfGroups } from '/_102020_/l2/skills/molecules/index.js';
 import { replaceComponentTag } from '/_102020_/l2/previewTextEditor.js';
 import { convertFileToTag, isPageFile } from '/_102020_/l2/utils.js';
@@ -64,13 +63,6 @@ interface IKnobConfig {
 
 // ─── Static configs ───────────────────────────────────────────────────
 
-const LAYOUT_CONFIG: IKnobConfig = {
-    key: 'layout',
-    min: 0,
-    max: 4,
-    labels: { 0: 'All', 1: 'standard', 2: 'compact', 3: 'tabs', 4: 'sidebar' },
-};
-
 const DISABLED_CONFIG = (key: string): IKnobConfig => ({
     key,
     min: 1,
@@ -105,6 +97,7 @@ export class ServiceGenome102020 extends ServiceBase {
     };
 
     async onServiceClick(_visible: boolean, _reinit: boolean, _el: IToolbarContent | null) {
+        this._initLayoutKnob();
         this._initDesignSystemKnob();
         const file = await this._getActual3File();
         await this._trySetActualModule(file);
@@ -122,9 +115,8 @@ export class ServiceGenome102020 extends ServiceBase {
     @state() private _moleculesValue: number | null = null;
     @state() private _selectedKnob: string = 'layout';
 
-    @state() private _dsConfig: IKnobConfig = {
-        key: 'designSystem', min: 1, max: 2, labels: { 1: 'Default', 2: '+' },
-    };
+    @state() private _layoutConfig: IKnobConfig = DISABLED_CONFIG('layout');
+    @state() private _dsConfig: IKnobConfig = DISABLED_CONFIG('designSystem');
 
     @state() private _moleculesConfig: IKnobConfig = DISABLED_CONFIG('molecules');
     @state() private _selectedMoleculeGroup: string = '';
@@ -144,26 +136,44 @@ export class ServiceGenome102020 extends ServiceBase {
         }
     }
 
-    // ─── Design System ────────────────────────────────────────────────
+    // ─── Layout & Design System init from project.js ─────────────────
 
-    private async _initDesignSystemKnob() {
-        if (!mls.actualProject) return;
-        const projectDS: IDesignSystemTokens[] = await getTokens(mls.actualProject);
+    private async _loadProjectConfig(): Promise<any> {
+        const project = mls.actualProject as number;
+        if (!project) return null;
+        try {
+            const mod = await import(`/_${project}_/l2/project.js`);
+            return mod?.projectConfig ?? null;
+        } catch { return null; }
+    }
+
+    private async _initLayoutKnob() {
+        const config = await this._loadProjectConfig();
+        const layoutsMap: Record<number, { name: string }> = config?.layouts ?? {};
+        const keys = Object.keys(layoutsMap).map(Number).sort((a, b) => a - b);
+        if (!keys.length) return;
 
         const labels: Record<number, string> = { 0: 'All' };
-        projectDS.forEach((ds, i) => { labels[i + 1] = ds.themeName; });
-        labels[projectDS.length + 1] = '+';
+        keys.forEach(k => { labels[k] = layoutsMap[k].name; });
 
-        this._dsConfig = {
-            key: 'designSystem',
-            min: 0,
-            max: projectDS.length + 1,
-            labels,
-        };
+        this._layoutConfig = { key: 'layout', min: 0, max: keys[keys.length - 1], labels };
+        // @ts-ignore
+        this.requestUpdate();
+    }
 
-        if (this._dsValue === null || this._dsValue > this._dsConfig.max) {
-            this._dsValue = 0;
-        }
+    private async _initDesignSystemKnob() {
+        const config = await this._loadProjectConfig();
+        const dsMap: Record<number, { name: string }> = config?.designSystems ?? {};
+        const keys = Object.keys(dsMap).map(Number).sort((a, b) => a - b);
+        if (!keys.length) return;
+
+        const labels: Record<number, string> = { 0: 'All' };
+        keys.forEach(k => { labels[k] = dsMap[k].name; });
+        labels[keys[keys.length - 1] + 1] = '+';
+
+        this._dsConfig = { key: 'designSystem', min: 0, max: keys[keys.length - 1] + 1, labels };
+
+        if (this._dsValue === null || this._dsValue > this._dsConfig.max) this._dsValue = 0;
         // @ts-ignore
         this.requestUpdate();
     }
@@ -303,7 +313,7 @@ export class ServiceGenome102020 extends ServiceBase {
 
     private _getKnobConfig(key: string): IKnobConfig {
         switch (key) {
-            case 'layout': return LAYOUT_CONFIG;
+            case 'layout': return this._layoutConfig;
             case 'designSystem': return this._dsConfig;
             case 'molecules': return this._moleculesConfig;
             default: return DISABLED_CONFIG(key);
@@ -399,6 +409,7 @@ export class ServiceGenome102020 extends ServiceBase {
     async connectedCallback() {
         super.connectedCallback();
         subscribe('previewL3.selectedTagName', this);
+        this._initLayoutKnob();
         this._initDesignSystemKnob();
         await this.setLastOpenedFileIfNeeded();
         mls.events.addEventListener([this.level], ['FileAction'], this._onFileActionGenome);
