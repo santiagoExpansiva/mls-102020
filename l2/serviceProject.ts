@@ -59,13 +59,6 @@ interface IKnobConfig {
 
 // ─── Static configs ───────────────────────────────────────────────────
 
-const DS_CONFIG: IKnobConfig = {
-    key: 'designSystem',
-    min: 1,
-    max: 3,
-    labels: { 1: 'Default', 2: 'Material', 3: 'Custom' },
-};
-
 const DEVICE_CONFIG: IKnobConfig = {
     key: 'device',
     min: 1,
@@ -138,7 +131,7 @@ export class ServiceProject102020 extends ServiceBase {
 
     @state() private _selectedKnob: string = 'module';
 
-    @state() private _dsConfig: IKnobConfig = { ...DS_CONFIG };
+    @state() private _dsConfig: IKnobConfig = DISABLED_CONFIG('designSystem');
     @state() private _deviceConfig: IKnobConfig = { ...DEVICE_CONFIG };
     @state() private _assetsConfig: IKnobConfig = { ...ASSETS_CONFIG };
 
@@ -159,7 +152,28 @@ export class ServiceProject102020 extends ServiceBase {
             this._modules = [];
             this._moduleConfig = DISABLED_CONFIG('module');
         }
+        this._initDsConfig(project);
         this.requestUpdate();
+    }
+
+    private async _initDsConfig(projectId: number): Promise<void> {
+        try {
+            const mod = await import(`/_${projectId}_/l2/project.js`);
+            const dsMap: Record<number, { name: string }> = mod?.projectConfig?.designSystems ?? {};
+            const keys = Object.keys(dsMap).map(Number).sort((a, b) => a - b);
+            const labels: Record<number, string> = { 0: 'All' };
+            keys.forEach(k => { labels[k] = dsMap[k].name; });
+            const customKey = keys.length ? keys[keys.length - 1] + 1 : 1;
+            labels[customKey] = '+';
+            this._dsConfig = { key: 'designSystem', min: 0, max: customKey, labels };
+            const actualDs = getAuraState().actualDesignSystem;
+            if (actualDs !== null && actualDs > 0 && actualDs < customKey) {
+                this._dsValue = actualDs;
+            } else if (this._dsValue === null) {
+                this._dsValue = 0;
+            }
+            this.requestUpdate();
+        } catch { /* ignore */ }
     }
 
     private _buildModuleConfig(modules: IModule[]): IKnobConfig {
@@ -334,6 +348,7 @@ export class ServiceProject102020 extends ServiceBase {
             <div class="flex flex-col flex-1">
                 <div class="flex flex-col gap-3 px-4 py-4 flex-1"
                     @select-ds=${(e: CustomEvent) => this._setKnobValue('designSystem', e.detail.value)}
+                    @ds-config=${(e: CustomEvent) => { this._dsConfig = { key: 'designSystem', min: e.detail.min, max: e.detail.max, labels: e.detail.labels }; this.requestUpdate(); }}
                     @select-assets=${(e: CustomEvent) => this._setKnobValue('assets', e.detail.value)}
                 >
                     ${this._renderContextStatusArea()}
@@ -355,11 +370,8 @@ export class ServiceProject102020 extends ServiceBase {
             case 'designSystem':
                 return html`
                     <plugins--select-design-system-102020
-                        .projectSelected=${true}
+                        .projectId=${getAuraState().actualProject}
                         .value=${this._dsValue}
-                        .labels=${this._dsConfig.labels}
-                        .min=${this._dsConfig.min}
-                        .max=${this._dsConfig.max}
                     ></plugins--select-design-system-102020>
                 `;
             case 'device':

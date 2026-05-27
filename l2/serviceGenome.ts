@@ -99,7 +99,6 @@ export class ServiceGenome102020 extends ServiceBase {
 
     async onServiceClick(_visible: boolean, _reinit: boolean, _el: IToolbarContent | null) {
         this._initLayoutKnob();
-        this._initDesignSystemKnob();
         const file = await this._getActual3File();
         await this._trySetActualModule(file);
         this._updateCurrentPage(file);
@@ -164,19 +163,14 @@ export class ServiceGenome102020 extends ServiceBase {
         this.requestUpdate();
     }
 
-    private async _initDesignSystemKnob() {
-        const config = await this._loadProjectConfig();
-        const dsMap: Record<number, { name: string }> = config?.designSystems ?? {};
-        const keys = Object.keys(dsMap).map(Number).sort((a, b) => a - b);
-        if (!keys.length) return;
-
-        const labels: Record<number, string> = { 0: 'All' };
-        keys.forEach(k => { labels[k] = dsMap[k].name; });
-        labels[keys[keys.length - 1] + 1] = '+';
-
-        this._dsConfig = { key: 'designSystem', min: 0, max: keys[keys.length - 1] + 1, labels };
-
-        if (this._dsValue === null || this._dsValue > this._dsConfig.max) this._dsValue = 0;
+    private _onDsConfig(e: CustomEvent) {
+        this._dsConfig = { key: 'designSystem', min: e.detail.min, max: e.detail.max, labels: e.detail.labels };
+        const actualDs = getAuraState().actualDesignSystem;
+        if (actualDs !== null && actualDs > 0 && actualDs < e.detail.max) {
+            this._dsValue = actualDs;
+        } else if (this._dsValue === null || this._dsValue > this._dsConfig.max) {
+            this._dsValue = 0;
+        }
         // @ts-ignore
         this.requestUpdate();
     }
@@ -417,7 +411,6 @@ export class ServiceGenome102020 extends ServiceBase {
         AuraInitState();
         subscribe('previewL3.selectedTagName', this);
         this._initLayoutKnob();
-        this._initDesignSystemKnob();
         await this.setLastOpenedFileIfNeeded();
         mls.events.addEventListener([this.level], ['FileAction'], this._onFileActionGenome);
     }
@@ -523,6 +516,8 @@ export class ServiceGenome102020 extends ServiceBase {
                     @select-layout=${(e: CustomEvent) => this._setKnobValue('layout', e.detail.value)}
                     @select-molecule=${(e: CustomEvent) => this._setKnobValue('molecules', e.detail.value)}
                     @molecule-replace-mode=${(e: CustomEvent) => { this._moleculeReplaceMode = e.detail.value; this.requestUpdate(); }}
+                    @ds-config=${(e: CustomEvent) => this._onDsConfig(e)}
+                    @select-ds=${(e: CustomEvent) => this._setKnobValue('designSystem', e.detail.value)}
                 >
                     ${this._renderContextStatusArea()}
                 </div>
@@ -549,11 +544,8 @@ export class ServiceGenome102020 extends ServiceBase {
             case 'designSystem':
                 return html`
                     <plugins--select-design-system-102020
-                        .projectSelected=${true}
+                        .projectId=${getAuraState().actualProject}
                         .value=${this._dsValue}
-                        .labels=${this._dsConfig.labels}
-                        .min=${this._dsConfig.min}
-                        .max=${this._dsConfig.max}
                     ></plugins--select-design-system-102020>
                 `;
             case 'molecules':
