@@ -158,6 +158,8 @@ export class ServiceGenome102020 extends ServiceBase {
         keys.forEach(k => { labels[k] = layoutsMap[k].name; });
 
         this._layoutConfig = { key: 'layout', min: 0, max: keys[keys.length - 1], labels };
+        const stateLayout = getAuraState().actualLayout;
+        this._layoutValue = (stateLayout !== null && stateLayout <= this._layoutConfig.max) ? stateLayout : 0;
         // @ts-ignore
         this.requestUpdate();
     }
@@ -395,11 +397,6 @@ export class ServiceGenome102020 extends ServiceBase {
             return;
         }
         this._isPageContext = isPageFile(file.folder ?? '');
-        if (this._isPageContext) {
-            const pageMatch = (file.folder ?? '').match(/\/page(\d)/);
-            if (pageMatch) this._layoutValue = parseInt(pageMatch[1]);
-        }
-        
         const storFiles = await mls.stor.getFiles({ ...file, level: 2, loadContent: false })
         if (storFiles.ts) this._actualPage = await storFiles.ts.getOrCreateModel();
     }

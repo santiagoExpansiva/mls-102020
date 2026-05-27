@@ -209,9 +209,6 @@ export class ServiceProject102020 extends ServiceBase {
         switch (key) {
             case 'module': {
                 this._moduleValue = value;
-                const mod = value !== null && value > 0 ? this._modules[value - 1] : null;
-                setAuraState('actualModule', mod?.path ?? null);
-                saveAuraProject();
                 break;
             }
             case 'designSystem':
