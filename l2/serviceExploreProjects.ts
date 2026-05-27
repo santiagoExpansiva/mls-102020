@@ -3,7 +3,7 @@
 import { html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { ServiceBase, IService, IToolbarContent, IServiceMenu } from '/_102027_/l2/serviceBase.js';
-import { AuraInitState, getAuraState } from '/_102020_/l2/auraState.js';
+import { AuraInitState, getAuraState, setAuraState, saveAuraProject } from '/_102020_/l2/auraState.js';
 
 import '/_102027_/l2/collabSelectKnob.js';
 import '/_102020_/l2/plugins/selectOrganization.js';
@@ -341,9 +341,17 @@ export class ServiceExploreProjects102020 extends ServiceBase {
             case 'designSystem':
                 this._dsValue = value;
                 break;
-            case 'language':
+            case 'language': {
                 this._langValue = value;
+                const langCode = (value !== null && value > 0 && value < this._langConfig.max)
+                    ? this._langConfig.labels[value] ?? null
+                    : null;
+                if (langCode) {
+                    setAuraState('actualLanguage', langCode);
+                    saveAuraProject();
+                }
                 break;
+            }
         }
         this.requestUpdate();
     }

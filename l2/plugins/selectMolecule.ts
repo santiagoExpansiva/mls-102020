@@ -11,9 +11,7 @@ const message_en = {
     title: 'Molecules',
     desc: 'Switch between molecule variants for the selected widget.',
     noMolecule: 'Select a web component in the preview to enable molecule variants.',
-    selectedOnly: 'Selected only',
-    allOccurrences: 'All occurrences',
-    replaceMode: 'Replace mode',
+    applyToAll: 'Apply to all occurrences',
 };
 type MessageType = typeof message_en;
 const messages: Record<string, MessageType> = {
@@ -22,17 +20,13 @@ const messages: Record<string, MessageType> = {
         title: 'Moléculas',
         desc: 'Alterne entre variantes de molécula para o widget selecionado.',
         noMolecule: 'Selecione um web component no preview para habilitar as variantes.',
-        selectedOnly: 'Somente selecionado',
-        allOccurrences: 'Todas as ocorrências',
-        replaceMode: 'Modo de substituição',
+        applyToAll: 'Aplicar a todas as ocorrências',
     },
     es: {
         title: 'Moléculas',
         desc: 'Cambia entre variantes de molécula para el widget seleccionado.',
         noMolecule: 'Seleccione un componente web en el preview para habilitar las variantes.',
-        selectedOnly: 'Solo seleccionado',
-        allOccurrences: 'Todas las ocurrencias',
-        replaceMode: 'Modo de reemplazo',
+        applyToAll: 'Aplicar a todas las ocurrencias',
     },
 };
 /// **collab_i18n_end**
@@ -130,31 +124,26 @@ export class PluginSelectMolecule extends StateLitElement {
     }
 
     private _renderReplaceModeToggle() {
-        const isSelected = this.replaceMode === 'selected';
+        const isAll = this.replaceMode === 'all';
         return html`
-            <div class="flex flex-col gap-1">
-                <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600 px-0.5">${this.msg.replaceMode}</span>
-                <div class="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    <button
-                        class="
-                            flex-1 text-xs py-1.5 transition-colors cursor-pointer
-                            ${isSelected
-                                ? 'bg-indigo-500 dark:bg-indigo-600 text-white font-medium'
-                                : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}
-                        "
-                        @click=${() => this._dispatchReplaceMode('selected')}
-                    >${this.msg.selectedOnly}</button>
-                    <button
-                        class="
-                            flex-1 text-xs py-1.5 transition-colors cursor-pointer
-                            border-l border-gray-200 dark:border-gray-700
-                            ${!isSelected
-                                ? 'bg-indigo-500 dark:bg-indigo-600 text-white font-medium'
-                                : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}
-                        "
-                        @click=${() => this._dispatchReplaceMode('all')}
-                    >${this.msg.allOccurrences}</button>
-                </div>
+            <div class="flex items-center justify-between gap-2 px-0.5">
+                <span class="text-xs text-gray-500 dark:text-gray-400">${this.msg.applyToAll}</span>
+                <button
+                    role="switch"
+                    aria-checked=${isAll}
+                    class="
+                        relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full
+                        border-2 border-transparent transition-colors duration-200
+                        ${isAll ? 'bg-indigo-500 dark:bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'}
+                    "
+                    @click=${() => this._dispatchReplaceMode(isAll ? 'selected' : 'all')}
+                >
+                    <span class="
+                        pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow
+                        transform transition duration-200
+                        ${isAll ? 'translate-x-4' : 'translate-x-0'}
+                    "></span>
+                </button>
             </div>
         `;
     }

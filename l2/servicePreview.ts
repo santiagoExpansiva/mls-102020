@@ -201,6 +201,9 @@ export class ServicePreview extends ServiceBase {
     if (key === 'preview.file') {
       this.changeFilePreview(value)
     }
+    if (key === 'aura.actualLanguage' && value) {
+      this.changeLanguagePreview(value);
+    }
   }
 
   private initStatesPreview() {
@@ -607,7 +610,7 @@ export class ServicePreview extends ServiceBase {
           'English': { acronym: 'en', name: 'English' }
         }
       } else {
-        config.languages.forEach((entry, index) => {
+        config.languages.forEach((entry) => {
           this.languages[`${entry.name}`] = {
             acronym: entry.language,
             name: entry.name,
@@ -626,6 +629,19 @@ export class ServicePreview extends ServiceBase {
     });
 
     if (this.menu.tools.languages) this.menu.tools.languages.options = languagesOptions;
+
+    AuraInitState();
+    const stateLang = getAuraState().actualLanguage;
+    if (stateLang) {
+      const idx = Object.values(this.languages).findIndex(l => l.acronym === stateLang);
+      if (idx >= 0) {
+        this.lang = stateLang;
+        this.menu.tools.languages.selected = idx;
+        globalState.globalVariation = idx;
+        if (window.top) (window.top.window as any).globalVariation = idx;
+      }
+    }
+
     if (this.menu.refresh) this.menu.refresh();
   }
 
@@ -852,6 +868,7 @@ export class ServicePreview extends ServiceBase {
     this.configureTools(false);
     subscribe('preview.language', this);
     subscribe('preview.file', this);
+    subscribe('aura.actualLanguage', this);
     window.addEventListener('task-change', this.onTaskChange);
   }
 
@@ -866,6 +883,7 @@ export class ServicePreview extends ServiceBase {
     this.clearPreview();
     unsubscribe('preview.language', this);
     unsubscribe('preview.file', this);
+    unsubscribe('aura.actualLanguage', this);
     window.removeEventListener('task-change', this.onTaskChange);
   }
 
