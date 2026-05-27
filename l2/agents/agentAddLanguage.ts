@@ -134,13 +134,18 @@ async function getPaths(languages: { code: string, name: string }[], project: nu
         if (!moduleConfig?.skills) continue;
 
         if (moduleConfig.web) {
-            const sharedFolder = `${mod.path}/${moduleConfig.web.sharedPath}`;
-            const sharedFiles = Object.values(mls.stor.files).filter((f: any) =>
+            
+            const sharedFolder = `${moduleConfig.web.sharedPath}`
+                .replace(/^\/?_\d+_\/l2\//, '')
+                .replace(/^\/|\/$/g, '');
+
+
+            const sharedFiles = Object.values(mls.stor.files).filter((f: mls.stor.IFileInfo) =>
                 f.project === project &&
                 f.folder === sharedFolder &&
                 f.extension === '.ts'
             );
-            for (const storFile of sharedFiles as any[]) {
+            for (const storFile of sharedFiles as mls.stor.IFileInfo[]) {
                 const model = await storFile.getOrCreateModel();
                 if (!model) continue;
                 const source: string = model.model.getValue();

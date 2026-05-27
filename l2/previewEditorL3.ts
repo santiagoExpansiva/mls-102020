@@ -467,7 +467,7 @@ class PreviewEditorL3 extends StateLitElement {
         .replace(/^\/?_\d+_\/l2\//, '')
         .replace(/^\/|\/$/g, '');
 
-      const sharedFolder = `${moduleName}/${sharedPath}`;
+      const sharedFolder = sharedPath;
 
       const level = service.isL3 ? 2 : service.level;
       const mlsAny = (globalThis as any).mls;
