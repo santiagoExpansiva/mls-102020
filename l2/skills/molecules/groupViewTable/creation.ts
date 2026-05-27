@@ -190,51 +190,7 @@ When \`pageSize > 0\`:
 
 ---
 
-## 11. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF hasSlot('Caption'): render caption
-
-2. IF loading: render Loading slot or default skeleton, RETURN
-
-3. Read TableHeader, TableBody, TableFooter from slot tags
-
-4. IF no TableBody rows: render Empty slot or default message, RETURN
-
-5. Render table:
-   a. Header:
-      - IF selectable: render select-all checkbox
-      - FOR each TableHead:
-        Render header cell text
-        IF sortable: render sort icon
-          @click → handleSort(key)
-          IF sortKey matches: show asc/desc indicator
-
-   b. Body:
-      FOR each TableRow in TableBody:
-        - IF selectable: render row checkbox
-          checked = row index in value
-          @change → toggleRowSelection(index)
-        - FOR each TableCell: render content (unsafeHTML)
-        - @click on row → emit rowClick (unless click was on checkbox)
-
-   c. Footer:
-      IF hasSlot('TableFooter'): render footer rows
-
-6. Propagate isEditing to web components inside cells
-
-7. IF pageSize > 0: render pagination controls
-   - Previous / page numbers / Next
-   - @click → update page, emit pageChange
-
-8. IF error !== '': render error message below table
-\`\`\`
-
----
-
-## 12. Accessibility (a11y)
+## 11. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -252,7 +208,7 @@ RENDER:
 
 ---
 
-## 13. Changelog
+## 12. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

@@ -196,45 +196,7 @@ for (let v = this.min; v <= this.max; v += this.step) {
 
 ---
 
-## 12. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. IF value is null: render "—"
-     ELSE: render selected rating visual (filled stars, highlighted emoji, etc.)
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render label
-
-  3. Determine items:
-     IF hasSlot('Item'): read items from slot tags
-     ELSE: auto-generate from min/max/step
-
-  4. Render option row:
-     FOR each item:
-       - Render visual (star icon, emoji content via unsafeHTML, number, etc.)
-       - Apply highlight:
-         IF hoverValue !== null: highlight based on hoverValue
-         ELSE: highlight based on value
-       - @mouseenter: set hoverValue = item.value (unless disabled/readonly)
-       - @mouseleave: set hoverValue = null
-       - @click: set value = item.value, emit \`change\` (unless disabled/readonly)
-       - @focus/@blur: emit focus/blur events
-
-  5. Below options:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 13. Accessibility (a11y)
+## 12. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -249,7 +211,7 @@ IF isEditing === true (Edit Mode):
 ---
 
 
-## 14. Changelog
+## 13. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

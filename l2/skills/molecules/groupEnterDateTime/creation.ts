@@ -159,53 +159,7 @@ this.dispatchEvent(new CustomEvent('change', {
 
 ---
 
-## 9. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render formatted datetime string or "—"
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles (disabled, error, loading)
-
-  2. IF hasSlot('Label'):
-     - Render label
-     - IF required: add indicator (*)
-
-  3. Input trigger:
-     - Show formatted value or placeholder
-     - Calendar + clock icon
-     - onClick: toggle isOpen
-
-  4. IF loading:
-     - Render loading indicator inside trigger
-     - Do NOT open picker while loading
-
-  5. IF isOpen:
-     - Render picker panel:
-       a. Date selection section (calendar grid)
-          - Month/year navigation
-          - Day grid — disable days outside minDatetime/maxDatetime
-       b. Time selection section
-          - Hours column
-          - Minutes column (filtered by minuteStep)
-       c. Confirm and Clear actions
-     - On confirm: set value, emit change, close panel
-     - On clear: set value = null, emit change, close panel
-     - On outside click: close panel without change
-
-  6. Below trigger:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 10. Value Handling
+## 9. Value Handling
 
 ### Parsing Input to Value
 
@@ -229,7 +183,7 @@ combined   → "YYYY-MM-DDTHH:mm:00"
 
 ---
 
-## 11. Accessibility (a11y)
+## 10. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -243,7 +197,7 @@ combined   → "YYYY-MM-DDTHH:mm:00"
 
 ---
 
-## 12. Possible Implementations
+## 11. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -253,7 +207,7 @@ combined   → "YYYY-MM-DDTHH:mm:00"
 
 ---
 
-## 13. Changelog
+## 12. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

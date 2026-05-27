@@ -155,47 +155,7 @@ this.dispatchEvent(new CustomEvent('change', {
 
 ---
 
-## 9. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render formatted time string or "—"
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'):
-     - Render label
-     - IF required: add indicator (*)
-
-  3. Input field:
-     - Masked text input (HH:mm or hh:mm AM/PM)
-     - Clock icon — onClick: toggle isOpen
-
-  4. IF loading: render loading indicator, do NOT open picker
-
-  5. IF isOpen:
-     - Hours column (00–23 or 01–12)
-     - Minutes column (filtered by minuteStep)
-     - IF showSeconds: seconds column (00–59)
-     - IF hour12: AM/PM selector
-     - Disable options outside minTime/maxTime
-     - Confirm and Clear actions
-     - On confirm: set value, emit change, close panel
-     - On outside click: close without change
-
-  6. Below input:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 10. Value Handling
+## 9. Value Handling
 
 ### minuteStep
 
@@ -219,7 +179,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 11. Accessibility (a11y)
+## 10. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -232,7 +192,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 12. Possible Implementations
+## 11. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -243,7 +203,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Changelog
+## 12. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

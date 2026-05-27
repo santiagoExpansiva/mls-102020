@@ -107,35 +107,7 @@ this.dispatchEvent(new CustomEvent('cardClick', {
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF loading: render skeleton placeholder matching card structure, RETURN
-
-2. Card container — apply, clickable, selected, disabled styles
-   - IF clickable AND NOT disabled: @click → emit \`cardClick\`
-   - IF clickable: cursor-pointer, hover effect
-
-3. IF hasSlot('CardHeader'):
-   Render header section:
-     - IF hasSlot('CardTitle'): render title (unsafeHTML)
-     - IF hasSlot('CardDescription'): render description (unsafeHTML)
-
-4. IF hasSlot('CardContent'):
-   Render content section (unsafeHTML)
-
-5. IF hasSlot('CardFooter'):
-   Render footer section (unsafeHTML)
-
-6. IF hasSlot('CardAction'):
-   Render action area (unsafeHTML)
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -147,7 +119,7 @@ RENDER:
 
 ---
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

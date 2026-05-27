@@ -128,47 +128,7 @@ this.dispatchEvent(new CustomEvent('change', {
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF hasSlot('Label'): render title
-
-2. IF loading: render loading placeholder, RETURN
-
-3. Read <Step> elements from template
-
-4. IF no steps: render empty, RETURN
-
-5. Render step indicators:
-   FOR each step (index):
-     a. Determine state:
-        - IF index === value: active
-        - IF step has \`completed\`: completed
-        - IF step has \`disabled\` OR (linear AND index > value AND not completed): disabled
-        - ELSE: pending
-
-     b. Render step indicator:
-        - Step number or checkmark (if completed)
-        - Step title
-        - IF description attribute: render description
-        - Apply state styles
-
-     c. IF not last step: render connector line between steps
-        - Filled/highlighted if next step is completed or active
-
-     d. @click on step:
-        IF disabled (component or step): ignore
-        IF linear AND step not reachable: ignore
-        ELSE: set value = index, emit \`change\`
-
-6. Render connector lines between step indicators
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -181,7 +141,7 @@ RENDER:
 ---
 
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

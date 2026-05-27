@@ -178,53 +178,7 @@ this.dispatchEvent(new CustomEvent('change', {
 
 ---
 
-## 11. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. IF value is '': render placeholder or "—"
-     ELSE: render selected item labels (comma-separated or as tags)
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render label
-
-  3. IF implementation is dropdown:
-     Trigger button:
-       - IF loading: render loading indicator, disable trigger
-       - IF value is not empty: render selected count, tags, or labels
-         ELSE: render Trigger slot content or placeholder
-       - @click: toggle isOpen (unless disabled/readonly/loading)
-       - @blur: emit \`blur\`
-       - @focus: emit \`focus\`
-
-  4. Item list (always visible for checkbox/chips, inside panel for dropdown):
-     - IF searchable: render search input bound to searchQuery
-     - IF groups exist:
-         FOR each group: render group label + group items
-         Render standalone items after groups
-       ELSE:
-         Render all items (filtered by searchQuery if searchable)
-     - FOR each item:
-         Show checked/selected state if item.value is in value
-         Dim if item.disabled
-         Dim if maxSelection reached and item is not selected
-         @click: IF NOT disabled → toggleItem(item.value)
-     - IF no items (or all filtered out): render Empty slot or default message
-
-  5. Below trigger/list:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 12. Accessibility (a11y)
+## 11. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -240,7 +194,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Changelog
+## 12. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

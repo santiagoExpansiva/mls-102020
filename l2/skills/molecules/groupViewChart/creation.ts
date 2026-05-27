@@ -109,39 +109,7 @@ this.dispatchEvent(new CustomEvent('pointClick', {
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF hasSlot('Label'): render chart title
-
-2. IF loading: render loading placeholder, RETURN
-
-3. Read data:
-   - series = read <Series> with nested <Point>
-   - standalonePoints = read root-level <Point>
-
-4. IF no series AND no standalonePoints: render Empty slot or default message, RETURN
-
-5. Render chart:
-   - Implementation-specific (bar, line, pie, etc.)
-   - IF showValues: render value labels on data points
-   - On each data point:
-     - @mouseenter: show tooltip with label, value, series name
-     - @mouseleave: hide tooltip
-     - @click: emit \`pointClick\` event
-
-6. IF showLegend AND series.length > 0:
-   Render legend with series name + color for each series
-
-7. IF showLegend AND standalonePoints.length > 0:
-   Render legend with label + color for each point
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -151,7 +119,7 @@ RENDER:
 
 ---
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

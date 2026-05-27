@@ -152,42 +152,7 @@ const suggestions = this.getSlots('Suggestion').map(el => ({
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF hasSlot('Label'): render label
-
-2. Search input row:
-   - Text input bound to query
-     - placeholder from prop
-     - @input: update query, debounce, emit \`search\`, set isOpen = true
-     - @keydown Enter: set value = selected suggestion value OR query text, emit \`change\`, isOpen = false
-     - @focus: emit \`focus\`, open suggestions if query is not empty
-     - @blur: emit \`blur\` (delay to allow suggestion click)
-   - IF query is not empty: render clear button
-     @click → query = '', value = null, emit \`clear\`
-   - IF loading: render loading indicator
-
-3. IF isOpen AND suggestions exist:
-   - Read <Suggestion> elements from template
-   - IF suggestions.length > 0:
-       FOR each suggestion:
-         Render label (unsafeHTML)
-         @click → value = suggestion.value, query = suggestion.label, isOpen = false, emit \`change\`
-   - ELSE: render Empty slot or default "No results" message
-
-4. IF disabled: block all interaction
-
-5. Below input:
-   IF error !== '': render error message
-   ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -202,7 +167,7 @@ RENDER:
 
 ---
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

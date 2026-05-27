@@ -195,48 +195,7 @@ private decrement() {
 
 ---
 
-## 11. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render formatted value or "—"
-     - Include Prefix/Suffix if slots exist
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render label
-
-  3. Input row:
-     - IF hasSlot('Prefix'): render prefix content
-     - Numeric input bound to rawValue
-       - type="text" (to control formatting)
-       - inputmode="decimal" (mobile keyboard)
-       - @input: update rawValue, parse and emit \`input\` event
-       - @blur: normalize rawValue, clamp, emit \`change\` event
-       - @focus: emit \`focus\` event
-     - IF hasSlot('Suffix'): render suffix content
-     - IF implementation is stepper: render − and + buttons
-
-  4. IF loading: render loading indicator, disable input and buttons
-
-  5. IF implementation is slider:
-     - Render range slider bound to value
-     - @input: update value and rawValue, emit \`input\` event
-     - @change: emit \`change\` event
-
-  6. Below input:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 12. Accessibility (a11y)
+## 11. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -250,7 +209,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Possible Implementations
+## 12. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -262,7 +221,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 14. Changelog
+## 13. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

@@ -156,48 +156,7 @@ The component must expose internal methods for controlling playback
 
 ---
 
-## 9. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. Container — apply width/height styles
-
-2. IF hasSlot('Label'): render label
-
-3. IF loading: render loading placeholder, RETURN
-
-4. Read sources and tracks from slot tags
-
-5. IF no sources: render error/empty state, RETURN
-
-6. Render media element:
-   - Video implementations: <video> with poster, sources, tracks
-   - Audio implementations: <audio> with sources
-   - Bind native events:
-     @play → isPlaying = true, emit \`play\`
-     @pause → isPlaying = false, emit \`pause\`
-     @ended → isPlaying = false, emit \`ended\`
-     @timeupdate → update currentTime, emit \`timeUpdate\`
-     @error → emit \`error\`
-     @loadedmetadata → set duration
-
-7. Render controls:
-   - Play/Pause button
-   - Progress bar (currentTime / duration) with seek on click
-   - Current time / duration labels (formatted as mm:ss)
-   - Volume slider
-   - Mute button
-   - IF video: fullscreen button
-   - IF tracks exist: subtitle toggle button
-
-8. IF disabled: dim controls, block interaction
-\`\`\`
-
----
-
-
-## 10. Accessibility (a11y)
+## 9. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -211,7 +170,7 @@ RENDER:
 ---
 
 
-## 11. Changelog
+## 10. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

@@ -113,34 +113,7 @@ this.dispatchEvent(new CustomEvent('action', {
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. Render <button> element:
-   - type from prop
-   - Apply size classes
-   - IF disabled OR loading: disable button
-
-2. IF loading:
-   Render loading indicator (spinner) in place of icon
-   IF hasSlot('Label'): render label (dimmed)
-
-3. IF NOT loading:
-   IF iconPosition === 'start':
-     IF hasSlot('Icon'): render icon content (unsafeHTML)
-     IF hasSlot('Label'): render label content (unsafeHTML)
-   ELSE:
-     IF hasSlot('Label'): render label content (unsafeHTML)
-     IF hasSlot('Icon'): render icon content (unsafeHTML)
-
-4. @click: IF NOT disabled AND NOT loading → emit \`action\`
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -152,7 +125,7 @@ RENDER:
 
 ---
 
-## 10. Possible Implementations
+## 9. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -166,7 +139,7 @@ All implementations share the same slot tag contract.
 
 ---
 
-## 11. Changelog
+## 10. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|
