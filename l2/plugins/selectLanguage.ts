@@ -105,10 +105,7 @@ export class PluginSelectLanguage extends StateLitElement {
     @state() config: mls.l5_common.ProjectConfig | undefined;
 
     private _unsubTasks: (() => void) | undefined;
-    private readonly _scope = 'language';
     private threadCache = new Map<string, Promise<any>>();
-
-    private get _pendingTasks(): ReadonlyMap<string, ITask> { return getTasksByScope(this._scope); }
 
     connectedCallback() {
         super.connectedCallback();
@@ -180,10 +177,10 @@ export class PluginSelectLanguage extends StateLitElement {
     private async _executeRemoveLanguage() {
         const lang = this._selectedLang;
         if (!lang || !this.selectedProject) return;
-        if (hasRunning(this._scope)) return;
+        if (hasRunning('language:remove')) return;
 
         const langObj = (allLanguages as ICollabLanguage[]).find(l => l.code === lang);
-        const taskKey = `${this._scope}:remove:${lang}`;
+        const taskKey = `language:remove:${lang}`;
         const prompt = JSON.stringify([{ languages: [{ code: lang, name: langObj?.name ?? lang }], projectId: this.selectedProject.project }]);
 
         setTask(taskKey, { status: 'running', startedAt: Date.now() });
@@ -239,10 +236,10 @@ export class PluginSelectLanguage extends StateLitElement {
 
     private async _executeAddLanguage() {
         if (this._addSelected.length === 0) return;
-        if (hasRunning(this._scope)) return;
+        if (hasRunning('language:add')) return;
 
         const langs = [...this._addSelected];
-        const taskKey = `${this._scope}:add:${langs.join('+')}`;
+        const taskKey = `language:add:${langs.join('+')}`;
         const langObjs = langs.map(code => {
             const obj = (allLanguages as ICollabLanguage[]).find(l => l.code === code);
             return { code, name: obj?.name ?? code };
@@ -327,9 +324,9 @@ export class PluginSelectLanguage extends StateLitElement {
                     ">${lang}</span>
                 </div>
                 ${(() => {
-                    const taskKey = `${this._scope}:remove:${lang}`;
-                    const removing = this._pendingTasks.get(taskKey)?.status === 'running';
-                    const isRunning = hasRunning(this._scope);
+                    const taskKey = `language:remove:${lang}`;
+                    const removing = getTask(taskKey)?.status === 'running';
+                    const isRunning = hasRunning('language:remove');
                     return html`
                         <fieldset class="rounded-lg border border-red-200 dark:border-red-800/40 px-3 py-2.5 flex flex-col gap-2">
                             <legend class="text-sm font-medium text-red-500 dark:text-red-400 px-1">${this.msg.removeTitle}</legend>
@@ -415,7 +412,8 @@ export class PluginSelectLanguage extends StateLitElement {
     }
 
     private _renderCustom() {
-        const isRunning = hasRunning(this._scope);
+        const isRunning = hasRunning('language:add');
+        const addTasks = getTasksByScope('language:add');
         const q = this._addSearch.toLowerCase();
         const alreadyAdded = new Set(this._languages);
         const selectedSet = new Set(this._addSelected);
@@ -527,10 +525,10 @@ export class PluginSelectLanguage extends StateLitElement {
                     @click=${() => this._executeAddLanguage()}
                 >${this.msg.add}</button>
 
-                ${this._pendingTasks.size > 0 ? html`
+                ${addTasks.size > 0 ? html`
                     <div class="flex flex-col gap-1">
-                        ${[...this._pendingTasks.entries()].map(([taskKey, task]) => {
-                            const codes = taskKey.split('+');
+                        ${[...addTasks.entries()].map(([taskKey, task]) => {
+                            const codes = taskKey.replace('language:add:', '').split('+');
                             return html`
                                 <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md
                                     ${task.status === 'running' ? 'bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-700'
