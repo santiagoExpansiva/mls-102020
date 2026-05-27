@@ -232,57 +232,7 @@ this.dispatchEvent(new CustomEvent('search', {
 
 ---
 
-## 10. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Parse value → { lat, lng } or null
-     IF value: find matching <Item> label or display raw "lat, lng"
-     ELSE: render Empty slot or "—"
-  3. IF showMap AND value: render map preview with pin at lat/lng
-  4. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render label
-
-  3. Search input row:
-     - Text input bound to searchQuery
-       - @input: update searchQuery, emit \`search\`, set isOpen=true
-       - @focus: emit \`focus\` event
-       - @blur: emit \`blur\` event
-       - placeholder from prop or i18n default
-     - IF allowGeolocation: render geolocation button
-       - IF hasSlot('Trigger'): use Trigger content as button label
-       - @click: call navigator.geolocation.getCurrentPosition()
-     - IF loading: render loading indicator, disable input and button
-
-  4. IF isOpen AND hasSlot('Suggestions'):
-     - Read items from <Suggestions> slot:
-       const items = Array.from(suggestionsEl.querySelectorAll('Item')).map(...)
-     - IF items.length > 0:
-         FOR each item: render address row (unsafeHTML for label)
-           Highlight if item.value === value
-           @click: set value = item.value, searchQuery = item.label
-                   isOpen = false, emit \`change\`
-     - ELSE: render Empty slot or default "No results" message
-
-  5. IF showMap AND value:
-     - Parse value → { lat, lng }
-     - Render map preview with pin at lat/lng
-
-  6. Below input:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 11. Accessibility (a11y)
+## 10. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -297,7 +247,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 12. Changelog
+## 11. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

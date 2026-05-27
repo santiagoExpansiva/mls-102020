@@ -144,38 +144,7 @@ this.dispatchEvent(new CustomEvent('toggle', {
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF hasSlot('Label'): render title
-
-2. IF loading: render loading placeholder, RETURN
-
-3. Read root-level <Node> elements from template
-
-4. IF no nodes: render Empty slot or default message, RETURN
-
-5. Render nodes recursively:
-   FOR each node:
-     a. Determine if node has children (nested <Node> elements)
-     b. Render indent based on depth level
-     c. IF has children: render toggle icon (expanded/collapsed)
-        ELSE: render leaf indicator or spacing
-     d. Render node content (free HTML via unsafeHTML, excluding nested <Node> tags)
-        @click on content area → emit \`nodeClick\` with { value } (unless disabled)
-     e. IF has children AND node is expanded:
-        Render children recursively (depth + 1)
-     f. Toggle click:
-        IF disabled (component or node): ignore
-        IF multiple=false: collapse siblings at same level
-        Toggle expanded state, emit \`toggle\` event
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -189,7 +158,7 @@ RENDER:
 
 ---
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

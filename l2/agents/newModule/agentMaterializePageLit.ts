@@ -26,7 +26,7 @@ async function beforePromptImplicit(
   context: mls.msg.ExecutionContext,
   userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
-
+  debugger;
 
   const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id:string };
   const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
@@ -275,11 +275,23 @@ async function saveFile(ref: string, src: string) {
 async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }, moduleName: string, device: string, type: string): Promise<string> {
 
   const project = info.project || 0;
+
   const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;
+  if (!mod || !mod.moduleGenome) throw new Error('[agentMaterializePageLit] Not found moduleGenome');
+  
   const genomeKey = Object.keys(mod.moduleGenome as Record<string, unknown>).find(k => k.startsWith(`${device}/`) && k.endsWith(`/${type}`));
   if (!genomeKey) throw new Error(`[agentMaterializePageLit] no genome key found for device "${device}" and type "${type}"`);
+
   const genome = mod.moduleGenome[genomeKey];
   if (!genome) throw new Error(`[agentMaterializePageLit] no genome config for key "${genomeKey}"`);
+
+  const prj = await import(`/_${project}_/l2/project.js`) as any;
+  if (!prj || !prj.projectConfig) throw new Error('[agentMaterializePageLit] Not found projectConfig');
+
+  if (!prj.projectConfig.layouts) throw new Error('[agentMaterializePageLit] Not found projectConfig layout dont config');
+
+  const layout = Object.values(prj.projectConfig.layouts).find((v: any) => v.name === genome.layout) as any;
+  if(!layout) throw new Error('[agentMaterializePageLit] Not found projectConfig layout dont config to:' + genome.layout);
 
   const fileName = info.item.outputPath.startsWith('/') ? info.item.outputPath.slice(1) : info.item.outputPath;
   const genomeKeyNorm = genomeKey.endsWith('/') ? genomeKey.slice(0, -1) : genomeKey;
@@ -287,7 +299,7 @@ async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, p
 
   const orch = getMaterializeOrchestrator(info.path);
   const user = await orch.getVar(info.path, info.item.specVar);
-  const skill = await orch.getSkill(genome.layoutSkill);
+  const skill = await orch.getSkill(layout.skill);
   const prompt = `##Skill\n${skill}\n\n##User data\n${user}\n\n##User info\n${JSON.stringify(info)}`;
 
   return prompt;

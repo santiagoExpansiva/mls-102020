@@ -188,45 +188,7 @@ this.dispatchEvent(new CustomEvent('change', {
 
 ---
 
-## 10. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render "startDate – endDate" formatted or "—"
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render overall label
-
-  3. Two date trigger inputs side by side:
-     - Left: LabelStart + startDate formatted or placeholder
-     - Right: LabelEnd + endDate formatted or placeholder
-     - Calendar icons on each
-
-  4. IF loading: render loading indicator, do NOT open calendar
-
-  5. IF isOpen:
-     - Single or dual-month calendar view
-     - Highlight range from startDate to endDate (or hoverDate preview)
-     - Disable days outside minDate/maxDate
-     - Visually indicate days that would violate minRangeDays/maxRangeDays
-     - IF allowSameDay=false: disable startDate from end selection
-     - Clear action
-     - On outside click: close without change
-
-  6. Below inputs:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 11. Value Handling
+## 10. Value Handling
 
 ### Range Validation
 
@@ -244,7 +206,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 12. Accessibility (a11y)
+## 11. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -257,7 +219,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Possible Implementations
+## 12. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -267,7 +229,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 14. Changelog
+## 13. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

@@ -125,34 +125,7 @@ The type drives the visual styling (colors, default icon). The component does no
 
 ---
 
-## 9. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF visible === false: render nothing, RETURN
-
-2. Container — apply type-based styles, position
-
-3. IF hasSlot('Icon'): render icon content (unsafeHTML)
-   ELSE: render default icon based on type
-
-4. Content area:
-   - IF hasSlot('Title'): render title (unsafeHTML)
-   - Render Message content (unsafeHTML)
-
-5. IF hasSlot('Action'): render action content (unsafeHTML)
-   @click on action area → emit \`action\`
-
-6. IF dismissible: render close button
-   @click → set visible = false, emit \`dismiss\`
-
-7. IF duration > 0: start auto-dismiss timer
-\`\`\`
-
----
-
-## 10. Accessibility (a11y)
+## 9. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -164,7 +137,7 @@ RENDER:
 ---
 
 
-## 11. Changelog
+## 10. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

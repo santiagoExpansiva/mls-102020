@@ -91,30 +91,7 @@ Exact dimensions are implementation-specific (bar height, ring diameter, spinner
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. Clamp value: IF value !== null → clamp to 0–100
-
-2. Container — apply size classes
-
-3. IF value === null (Indeterminate):
-   - Render animated indicator (CSS animation)
-   - aria-label from label prop or i18n default
-
-4. IF value !== null (Determinate):
-   - Render indicator with fill at value%
-   - IF showValue: render "value%" text
-   - aria-valuenow = value
-   - aria-valuemin = 0
-   - aria-valuemax = 100
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -125,7 +102,7 @@ RENDER:
 
 ---
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

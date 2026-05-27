@@ -151,40 +151,7 @@ this.dispatchEvent(new CustomEvent('capture', {
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF hasSlot('Label'): render label
-
-2. IF isOpen (camera active):
-   - Render <video> element with camera stream
-   - IF autoCapture: capture frames at captureInterval, emit \`capture\`
-   - IF NOT autoCapture: render manual capture button
-     @click → capture frame, emit \`capture\`
-   - Render close button → stop camera, isOpen = false, emit \`close\`
-   - IF loading: render processing overlay
-
-3. IF NOT isOpen:
-   - IF value is set:
-     IF hasSlot('Result'): render Result slot content (unsafeHTML)
-     ELSE: render value as text
-     Render "Scan again" button → clear value, open camera
-   - ELSE:
-     IF hasSlot('Trigger'): render Trigger content
-     ELSE: render default camera button
-     @click → open camera, isOpen = true, emit \`open\`
-     IF disabled: block interaction
-
-4. Below scanner:
-   IF error !== '': render error message
-   ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -197,7 +164,7 @@ RENDER:
 
 ---
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

@@ -137,35 +137,7 @@ firstUpdated() {
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF hasSlot('Label'): render component title
-
-2. IF loading: render loading placeholder, RETURN
-
-3. Read sections from slot tags
-
-4. IF no sections: render empty, RETURN
-
-5. FOR each section:
-   a. Render header row:
-      - Section title text
-      - Expand/collapse chevron icon (rotated when open)
-      - IF section disabled OR component disabled: dim, no click
-        ELSE: @click → handleToggle(index)
-
-   b. IF section is expanded (index in openSections):
-      Render content area:
-        - unsafeHTML(getSlotContent of this section)
-        - Apply expand animation (CSS transition on height/opacity)
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -177,7 +149,7 @@ RENDER:
 ---
 
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

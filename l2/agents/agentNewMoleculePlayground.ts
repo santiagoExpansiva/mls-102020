@@ -136,7 +136,8 @@ async function afterPromptStep(
         status
     };
 
-    return [...intents, updateStatus];
+    if (intents.length > 0) return intents;
+    return [updateStatus];
 
 }
 
@@ -168,7 +169,31 @@ async function processOutput(context: mls.msg.ExecutionContext, output: IResult)
         await updateStorFile(paramsHtml);
     }
 
-    return [];
+    if (context.isTest) return [];
+
+    const group = context.task?.iaCompressed?.longMemory['group'];
+    if (!group) return [];
+
+    const indexStep: mls.msg.AgentIntentAddStep = {
+        type: 'add-step',
+        messageId: context.message.orderAt,
+        threadId: context.message.threadId,
+        taskId: context.task?.PK || '',
+        parentStepId: 1,
+        stepTitle: `Index page: ${group}`,
+        step: {
+            type: 'agent',
+            stepId: 0,
+            interaction: null,
+            status: 'waiting_human_input',
+            nextSteps: [],
+            agentName: 'agentIndexGroupPage',
+            prompt: group,
+            rags: null,
+        }
+    };
+
+    return [indexStep];
 }
 
 async function updateStorFile(params: { project: number, shortName: string, level: number, folder: string, content: string, extension: string, versionRef: string }): Promise<void> {

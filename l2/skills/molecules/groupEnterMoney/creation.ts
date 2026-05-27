@@ -205,41 +205,7 @@ ON BLUR:
 
 ---
 
-## 11. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render Intl.NumberFormat-formatted value or "—"
-     - Include currency symbol per locale/showSymbol
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render label
-
-  3. Input row:
-     - IF showSymbol: render currency symbol (position follows locale)
-     - Text input bound to rawValue
-       - type="text"
-       - inputmode="decimal" (triggers numeric keyboard on mobile)
-       - @focus: select all, emit \`focus\` event
-       - @input: update rawValue, parse, emit \`input\` event
-       - @blur: normalize, clamp, reformat rawValue, emit \`change\` + \`blur\`
-
-  4. IF loading: render loading indicator, disable input
-
-  5. Below input:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 12. Accessibility (a11y)
+## 11. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -251,7 +217,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Possible Implementations
+## 12. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -262,7 +228,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 14. Changelog
+## 13. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

@@ -160,41 +160,7 @@ When the implementation supports drag and drop:
 
 ---
 
-## 10. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. Container — apply state styles (error, disabled, dragging)
-
-2. IF hasSlot('Label'): render label
-
-3. Drop zone / trigger area:
-   - IF hasSlot('Trigger'): render Trigger content
-     ELSE: render default icon + instruction text (i18n)
-   - Hidden <input type="file"> bound to accept and multiple
-   - @click on zone: trigger input.click() (unless disabled/loading)
-   - @dragover: preventDefault(), isDragging = true
-   - @dragleave: isDragging = false
-   - @drop: extract files, validate, add valid to value, emit reject for invalid
-   - @change on input: extract files, validate, add valid to value, emit reject for invalid
-
-4. IF value.length > 0: render file list
-   FOR each file in value:
-     - File name
-     - File size (formatted, e.g. "1.2 MB")
-     - Remove button → remove from value
-
-5. IF loading: render loading indicator, block interaction
-
-6. Below zone:
-   IF error !== '': render error message
-   ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 11. Accessibility (a11y)
+## 10. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -207,7 +173,7 @@ RENDER:
 
 ---
 
-## 12. Changelog
+## 11. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

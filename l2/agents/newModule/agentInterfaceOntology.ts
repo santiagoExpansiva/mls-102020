@@ -329,16 +329,14 @@ import type { AuraModuleFrontendDefinition, IPaths, IGenomeConfig } from '/_1020
 export const moduleGenome: Record<string, IGenomeConfig> = {
   'web/desktop/page11': {
     designSystem: 'default',
-    designSystemSkill:  '_102020_/l2/agents/newModule/skills/defaultDs.js',
     device: 'desktop',
-    layout: 'standart',
-    layoutSkill: '_102020_/l2/agents/newModule/skills/genPageRender.ts',
+    layout: 'standard',
   }
 } as const;
-
+  
 export const skills: IPaths = {
-  "web": {
-    sharedPath: 'web/shared',
+  web: {
+    sharedPath: '/_102020_/l2/${moduleName}/web/shared',
     sharedSkill: '/_102020_/l2/agents/newModule/skills/genPageShared.ts'
   }
 }

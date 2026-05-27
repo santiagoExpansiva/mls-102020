@@ -122,39 +122,7 @@ const tabs = this.getSlots('Tab').map(el => ({
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF hasSlot('Label'): render title
-
-2. IF loading: render loading placeholder, RETURN
-
-3. Read <Tab> elements from template
-
-4. IF no tabs: render empty, RETURN
-
-5. IF value is null: default to first non-disabled tab value
-
-6. Render tab indicators:
-   FOR each tab:
-     a. Apply active style if tab.value === value
-     b. IF tab.icon: render icon alongside title
-     c. IF tab.disabled OR component disabled: dim, no click
-        ELSE: @click → set value = tab.value, emit \`change\`
-
-7. Render content area:
-   - Find the <Tab> whose value === active value
-   - Render its innerHTML via unsafeHTML
-   - Only the active tab's content is rendered
-
-8. IF error !== '': render error message
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -166,7 +134,7 @@ RENDER:
 
 ---
 
-## 10. Possible Implementations
+## 9. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -180,7 +148,7 @@ All implementations share the same slot tag contract.
 
 ---
 
-## 11. Changelog
+## 10. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

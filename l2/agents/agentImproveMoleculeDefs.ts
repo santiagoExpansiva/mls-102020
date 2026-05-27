@@ -114,7 +114,7 @@ async function afterPromptStep(
         threadId: context.message.threadId,
         taskId: context.task?.PK || '',
         parentStepId: 1,
-        stepTitle: `Improving molecule: ${output.fileReference}`,
+        stepTitle: `Improving molecule: ${fileReference}`,
         step: {
             type: 'agent',
             stepId: 0,
@@ -122,7 +122,7 @@ async function afterPromptStep(
             status: 'waiting_human_input',
             nextSteps: [],
             agentName: "agentNewMoleculeMaterialize",
-            prompt: output.fileReference, //JSON.stringify({ page, prompt, position }),
+            prompt: fileReference, //JSON.stringify({ page, prompt, position }),
             rags: null,
         }
     };

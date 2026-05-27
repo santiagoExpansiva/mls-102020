@@ -200,50 +200,7 @@ The molecule enforces these rules visually during selection. The Page/Organism s
 
 ---
 
-## 11. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render formatted range or "—"
-     - If same day: abbreviate end to time only
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render overall label
-
-  3. Two datetime trigger inputs:
-     - Left: LabelStart + startDatetime formatted or placeholder
-     - Right: LabelEnd + endDatetime formatted or placeholder
-     - Calendar+clock icons on each
-
-  4. IF loading: render loading indicator, do NOT open pickers
-
-  5. IF activeField === 'start':
-     - Render start picker panel (calendar + time selector)
-     - Confirm / Clear actions
-     - On confirm: set startDatetime, emit startChange
-       - If endDatetime is null: switch activeField to 'end'
-       - Else: close (activeField = null)
-
-  6. IF activeField === 'end':
-     - Render end picker panel (calendar + time selector)
-     - Disable dates/times that violate constraints
-     - Confirm / Clear actions
-     - On confirm: set endDatetime, emit endChange + change, close
-
-  7. Below inputs:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 12. Accessibility (a11y)
+## 11. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -256,7 +213,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Possible Implementations
+## 12. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -266,7 +223,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 14. Changelog
+## 13. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

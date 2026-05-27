@@ -186,47 +186,7 @@ value:       "11987654321"
 
 ---
 
-## 12. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. IF inputType='password': render "••••••••"
-     ELSE IF value === '': render "—"
-     ELSE: render value as text
-     - Include Prefix/Suffix if slots exist
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render label
-
-  3. Input row:
-     - IF hasSlot('Prefix'): render prefix content
-     - IF rows > 1: render <textarea rows={rows}>
-       ELSE: render <input type={inputType}>
-       - bound to value (or rawDisplay when mask is set)
-       - placeholder, maxLength, autocomplete, required, disabled, readonly
-       - @input: update value (and rawDisplay if masked), emit \`input\` event
-       - @blur: emit \`change\` + \`blur\` events
-       - @focus: emit \`focus\` event
-     - IF hasSlot('Suffix'): render suffix content
-
-  4. IF loading: render loading indicator, disable input
-
-  5. IF rows > 1 AND maxLength is set: render character counter
-
-  6. Below input:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 13. Accessibility (a11y)
+## 12. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -239,7 +199,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 14. Possible Implementations
+## 13. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -252,7 +212,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 15. Changelog
+## 14. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

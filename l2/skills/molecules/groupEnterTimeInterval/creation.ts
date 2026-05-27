@@ -206,55 +206,7 @@ function toMinutes(time: string): number {
 
 ---
 
-## 11. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render "startTime – endTime" formatted or "—"
-     - IF allowOvernight and endTime < startTime: add "(+1)" to endTime
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render overall label
-
-  3. Two time inputs side by side:
-     - Left: LabelStart + startTime formatted or placeholder
-     - Right: LabelEnd + endTime formatted or placeholder
-     - Clock icons on each
-     - IF overnight: show "(+1)" badge next to end input
-
-  4. IF loading: render loading indicator, do NOT open pickers
-
-  5. IF activeField === 'start':
-     - Hours column + minutes column (filtered by minuteStep)
-     - IF showSeconds: seconds column
-     - IF hour12: AM/PM selector
-     - Disable options outside minTime/maxTime
-     - Confirm / Clear
-     - On confirm: set startTime, emit startChange
-       - IF endTime is null: switch activeField to 'end'
-       - ELSE: close (activeField = null)
-
-  6. IF activeField === 'end':
-     - Same structure as start picker
-     - IF allowOvernight=false: disable times ≤ startTime
-     - IF allowOvernight=true: all times valid, show overnight indicator
-     - Grey out times that violate minDurationMinutes/maxDurationMinutes
-     - On confirm: set endTime, emit endChange + change, close
-
-  7. Below inputs:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 12. Accessibility (a11y)
+## 11. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -267,7 +219,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Possible Implementations
+## 12. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -277,7 +229,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 14. Changelog
+## 13. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

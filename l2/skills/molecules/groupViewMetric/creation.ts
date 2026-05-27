@@ -92,32 +92,7 @@ The content inside \`<Trend>\` is free (arrow emoji, percentage text, SVG icon).
 
 ---
 
-## 8. Rendering Logic
-
-\`\`\`
-RENDER:
-
-1. IF loading: render skeleton placeholder, RETURN
-
-2. Container
-
-3. IF hasSlot('Icon'): render icon (unsafeHTML)
-
-4. IF hasSlot('Label'): render label (unsafeHTML)
-
-5. Render Value content (unsafeHTML) — main metric display
-
-6. IF hasSlot('Trend'):
-   - Read direction attribute
-   - Apply direction-based styling
-   - Render trend content (unsafeHTML)
-
-7. IF hasSlot('Helper'): render helper text (unsafeHTML)
-\`\`\`
-
----
-
-## 9. Accessibility (a11y)
+## 8. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -127,7 +102,7 @@ RENDER:
 
 ---
 
-## 10. Changelog
+## 9. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

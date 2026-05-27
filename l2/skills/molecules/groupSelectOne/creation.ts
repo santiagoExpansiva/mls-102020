@@ -176,84 +176,7 @@ this.dispatchEvent(new CustomEvent('change', {
 
 ---
 
-## 11. Rendering Logic
-
-### Reading items and groups inline
-
-Use \`getSlots\` directly inside \`render()\` — no helper methods needed:
-
-\`\`\`typescript
-// Read all items
-const items = this.getSlots('Item').map(el => ({
-  value: el.getAttribute('value') || '',
-  label: el.innerHTML,
-  disabled: el.hasAttribute('disabled'),
-}));
-
-// Read groups with their nested items
-const groups = this.getSlots('Group').map(group => ({
-  label: group.getAttribute('label') || '',
-  items: Array.from(group.querySelectorAll('Item')).map(el => ({
-    value: el.getAttribute('value') || '',
-    label: el.innerHTML,
-    disabled: el.hasAttribute('disabled'),
-  })),
-}));
-
-// Find selected item label
-const selectedLabel = items.find(i => i.value === this.value)?.label || null;
-
-// Filter when searchable
-const q = this.searchQuery.toLowerCase();
-const filtered = items.filter(i => i.label.toLowerCase().includes(q));
-\`\`\`
-
-### Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render selected item label or placeholder or "—"
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'): render label
-
-  3. Trigger button:
-     - IF loading: render loading indicator, disable trigger
-     - IF value is set: render selected item label
-       ELSE: render Trigger slot content or placeholder or "—"
-     - Chevron icon indicating open/closed state
-     - @click: toggle isOpen (unless disabled/readonly/loading)
-     - @blur: emit \`blur\` event
-     - @focus: emit \`focus\` event
-
-  4. IF isOpen:
-     Selector panel:
-     - IF searchable: render search input bound to searchQuery
-     - IF groups exist:
-         FOR each group: render group label + group items
-         Render standalone items after groups
-       ELSE:
-         Render all items (filtered by searchQuery if searchable)
-     - FOR each item:
-         Highlight if item.value === value (currently selected)
-         Dim if item.disabled
-         @click: IF NOT disabled → set value, isOpen=false, emit \`change\`
-     - IF no items (or all filtered out): render Empty slot or default message
-
-  5. Below trigger:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 12. Accessibility (a11y)
+## 11. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -268,7 +191,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Changelog
+## 12. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|

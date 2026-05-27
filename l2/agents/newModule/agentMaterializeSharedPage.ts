@@ -173,6 +173,8 @@ async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, p
 
   const project = info.project || 0;
   const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;
+  if (!mod || !mod.moduleGenome) throw new Error('[agentMaterializeSharedPage] Not found moduleGenome');
+
   const deviceSkills = mod.skills[device];
   if (!deviceSkills) throw new Error(`[agentMaterializeSharedPage] no skills config for device "${device}"`);
 

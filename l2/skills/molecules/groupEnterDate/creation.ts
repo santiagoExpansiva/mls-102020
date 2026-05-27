@@ -156,51 +156,7 @@ this.dispatchEvent(new CustomEvent('change', {
 
 ---
 
-## 9. Rendering Logic
-
-\`\`\`
-RENDER:
-
-IF isEditing === false (View Mode):
-  1. IF hasSlot('Label'): render label
-  2. Render formatted date string or "—"
-  3. RETURN
-
-IF isEditing === true (Edit Mode):
-  1. Container — apply state styles
-
-  2. IF hasSlot('Label'):
-     - Render label
-     - IF required: add indicator (*)
-
-  3. Input trigger:
-     - Show formatted value or placeholder
-     - Calendar icon
-     - onClick: toggle isOpen
-
-  4. IF loading: render loading indicator, do NOT open calendar
-
-  5. IF isOpen:
-     - Month/year navigation header (prev/next arrows)
-     - Weekday headers (respecting firstDayOfWeek)
-     - Day grid:
-       - Highlight today
-       - Highlight selected date
-       - Disable days outside minDate/maxDate
-     - IF showWeekNumbers: render week number column
-     - Clear action
-     - On day click: set value, emit change, close calendar
-     - On outside click: close without change
-     - On month navigate: emit monthChange, update viewMonth/viewYear
-
-  6. Below trigger:
-     IF error !== '': render error message
-     ELSE IF hasSlot('Helper'): render helper text
-\`\`\`
-
----
-
-## 10. Value Handling
+## 9. Value Handling
 
 ### Parsing
 
@@ -214,7 +170,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 11. Accessibility (a11y)
+## 10. Accessibility (a11y)
 
 | Requirement | Implementation |
 |-------------|----------------|
@@ -228,7 +184,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 12. Possible Implementations
+## 11. Possible Implementations
 
 | Component | Description |
 |-----------|-------------|
@@ -239,7 +195,7 @@ IF isEditing === true (Edit Mode):
 
 ---
 
-## 13. Changelog
+## 12. Changelog
 
 | Version | Date | Description |
 |---------|------|-------------|
