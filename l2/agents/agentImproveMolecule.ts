@@ -31,7 +31,7 @@ async function beforePromptImplicit(
     if (context.isTest) {
         const testData = JSON.parse(userPrompt) as { fileReference: string; prompt: string };
         if (!testData.fileReference || !testData.prompt) throw new Error(`[${agent.agentName}] Invalid test prompt structure: missing fileReference or prompt`);
-        data = { page: testData.fileReference.replace(/\.ts$/, ''), prompt: testData.prompt, position: 'left' };
+        data = { page: testData.fileReference.replace(/\.ts$/, ''), prompt: testData.prompt };
     } else {
         let pp = context.message.content
             .replace(`@@ ${agent.agentName}`, '')
@@ -60,7 +60,7 @@ async function beforePromptImplicit(
             taskTitle: `Evaluating improvement...`,
             threadId: context.message.threadId,
             userMessage: context.message.content,
-            longTermMemory: { page: data.page, position: data.position || 'left', prompt: data.prompt }
+            longTermMemory: { page: data.page, prompt: data.prompt }
         }
     };
     return [addMessageAI];
@@ -231,24 +231,15 @@ async function getContentByExtension(page: string, ext: 'ts' | 'less' | 'html' |
 
 const system1 = `
 <!-- modelType: codepro -->
-<!-- modelTypeList: geminiChat (2.5 pro), code (grok), deepseekchat, codeflash (gemini), deepseekreasoner, mini (4.1) ou nano (openai), codeinstruct (4.1), codereasoning(gpt5), code2 (kimi 2.5) -->
 
 You are an analyst responsible for evaluating whether an improvement request to an existing web component requires updating its functional/visual requirements (defs) or only its implementation.
 
-## Current molecule requirements (.defs.ts)
-\`\`\`
-{{currentDefs}}
-\`\`\`
-
-## Current molecule implementation (.ts)
-\`\`\`typescript
-{{currentTs}}
-\`\`\`
 
 ## Your task
 
 Analyze the improvement request and decide:
 
+### Option 1
 **NEEDS DEFS UPDATE** if the request:
 - Adds, removes, or changes a functional requirement
 - Changes observable behavior (new state, new event, new slot tag, new property)
@@ -258,6 +249,7 @@ Analyze the improvement request and decide:
 In this case, return a \`clarification\` output with the FULL updated requirements (not just the changed parts).
 Pre-populate all fields from the existing defs — only update what the improvement request changes.
 
+### Option 2
 **DIRECT IMPROVEMENT** if the request:
 - Only changes visual style (colors, spacing, typography)
 - Only changes layout or animation details
@@ -265,6 +257,17 @@ Pre-populate all fields from the existing defs — only update what the improvem
 - Only adjusts an internal implementation detail
 
 In this case, return a \`flexible\` output with the original page and prompt.
+
+## Context
+### Current molecule requirements (.defs.ts)
+\`\`\`
+{{currentDefs}}
+\`\`\`
+
+### Current molecule implementation (.ts)
+\`\`\`typescript
+{{currentTs}}
+\`\`\`
 
 ## Output format
 You must return the object strictly as JSON
@@ -279,7 +282,7 @@ export type Output =
     } |
     {
         type: "flexible";
-        result: { page: string; prompt: string; position: string };
+        result: IDataPrompt;
     }
 
 export interface TClarification {
@@ -292,8 +295,7 @@ export interface TClarification {
 }
 
 interface IDataPrompt {
-    page: string;
-    prompt: string;
-    position: 'left' | 'right';
+    page: string; // .ts final
+    prompt: string; // original user prompt    
 }
 //#endregion
