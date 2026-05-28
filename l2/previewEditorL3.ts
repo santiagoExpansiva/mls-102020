@@ -37,7 +37,7 @@ class PreviewEditorL3 extends StateLitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.addEventListener('click', this.onClick);
+    this.addEventListener('click', this.onClick, true);
     this.addEventListener('mouseover', this.onHover);
     this.addEventListener('mouseout', this.onHoverOut);
 
@@ -47,7 +47,7 @@ class PreviewEditorL3 extends StateLitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.removeEventListener('click', this.onClick);
+    this.removeEventListener('click', this.onClick, true);
     this.removeEventListener('mouseover', this.onHover);
     this.removeEventListener('mouseout', this.onHoverOut);
     window.removeEventListener('scroll', this.onScrollResize);
@@ -153,6 +153,15 @@ class PreviewEditorL3 extends StateLitElement {
         background: rgba(245, 166, 35, 0.08) !important;
         border-radius: 2px;
         padding: 0 2px;
+      }
+
+      @keyframes l3-error-flash {
+        0%, 100% { outline: 2px solid transparent; background: transparent; }
+        20%, 60% { outline: 2px solid #e53935; background: rgba(229,57,53,0.12); }
+      }
+      .l3-edit-error {
+        animation: l3-error-flash 600ms ease;
+        border-radius: 2px;
       }
     `;
     document.head.appendChild(style);
@@ -328,7 +337,7 @@ class PreviewEditorL3 extends StateLitElement {
       setState('previewL3.editMode', 'select');
 
       if (newText !== oldText) {
-        this.applyTextEditToSource(oldText, newText, selectableEl, occurrenceIndex);
+        this.applyTextEditToSource(oldText, newText, selectableEl, occurrenceIndex, editTarget);
       }
 
       editTarget.removeEventListener('blur', onBlur);
@@ -387,7 +396,7 @@ class PreviewEditorL3 extends StateLitElement {
    *
    * 3. Attribute on a wc written by the page (future, not yet handled here)
    */
-  private async applyTextEditToSource(oldText: string, newText: string, el: HTMLElement, occurrenceIndex: number = 0) {
+  private async applyTextEditToSource(oldText: string, newText: string, el: HTMLElement, occurrenceIndex: number = 0, editTarget?: HTMLElement) {
     const pageComponent = this.findPageComponent();
     if (!pageComponent) return;
 
@@ -422,7 +431,14 @@ class PreviewEditorL3 extends StateLitElement {
       languages: origin.languages.map(l => ({ lang: l.lang, value: l.value, offset: l.startOffset + '-' + l.endOffset })),
     } : origin);
 
-    if (origin.type === 'dynamic') return;
+    if (origin.type === 'dynamic') {
+      if (editTarget) {
+        editTarget.textContent = oldText;
+        editTarget.classList.add('l3-edit-error');
+        setTimeout(() => editTarget.classList.remove('l3-edit-error'), 650);
+      }
+      return;
+    }
 
     const result = applyTextEdit(origin, newText, activeSource, lang);
 

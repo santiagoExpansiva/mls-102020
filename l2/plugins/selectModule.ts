@@ -100,12 +100,12 @@ export class PluginSelectModule extends StateLitElement {
     }
 
     private _doSelectModule(name: string) {
-        setLastModule(getAuraState().actualProject, name);
-        // @ts-ignore
+        const actualPrj = getAuraState().actualProject
+        if (!actualPrj) return;
+        setLastModule(actualPrj, name);
         mls.setActualModule(name);
         setAuraState('actualModule', name);
         saveAuraProject();
-        // @ts-ignore
         this.requestUpdate();
     }
 

@@ -8,6 +8,10 @@ export interface ITask {
     status: TaskStatus;
     startedAt: number;
     message?: string;
+    messageId?: string;
+    taskId?: string;
+    taskData?: any;
+    taskMessage?: any;
 }
 
 // ─── Module-level store ───────────────────────────────────────────────
