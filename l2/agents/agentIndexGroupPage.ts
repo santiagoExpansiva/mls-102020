@@ -148,7 +148,7 @@ async function buildPrompts(agentName: string, group: string): Promise<{ systemP
     const groupEntry = skillList.find((s) => s.name === group);
     if (!groupEntry) throw new Error(`(${agentName})[buildPrompts] group not found in skills index: ${group}`);
 
-    const creationSkill = await getGroupCreationSkill(agentName, groupEntry.skillReference);
+    const usageSkill = await getGroupUsageSkill(agentName, groupEntry.skillUsageReference);
     const moleculeFiles = getMoleculeFiles(group);
 
     if (moleculeFiles.length === 0)
@@ -160,7 +160,7 @@ async function buildPrompts(agentName: string, group: string): Promise<{ systemP
         .replace('{{ skill }}', indexGroupPageSkill)
         .replace('{{ groupName }}', group)
         .replace('{{ groupDescription }}', groupEntry.description)
-        .replace('{{ creationSkill }}', creationSkill)
+        .replace('{{ usageSkill }}', usageSkill)
         .replace('{{ moleculeFiles }}', moleculeFiles.join('\n'))
         .replace('{{ actualProjectId }}', mls.actualProject.toString())
         .replace('{{ fileReference }}', fileReference);
@@ -183,10 +183,10 @@ function getMoleculeFiles(group: string): string[] {
         .map((sf) => sf.shortName);
 }
 
-async function getGroupCreationSkill(agentName: string, skillReference: string): Promise<string> {
+async function getGroupUsageSkill(agentName: string, skillReference: string): Promise<string> {
     const module = await import(skillReference);
-    if (!module || !module.skill) throw new Error(`(${agentName})[getGroupCreationSkill] skill not found at: ${skillReference}`);
-    if (typeof module.skill !== 'string') throw new Error(`(${agentName})[getGroupCreationSkill] invalid skill type at: ${skillReference}`);
+    if (!module || !module.skill) throw new Error(`(${agentName})[getGroupUsageSkill] skill not found at: ${skillReference}`);
+    if (typeof module.skill !== 'string') throw new Error(`(${agentName})[getGroupUsageSkill] invalid skill type at: ${skillReference}`);
     return module.skill;
 }
 
@@ -270,10 +270,16 @@ You are a Senior Frontend Engineer generating a showcase index page for a molecu
 ## Group: {{ groupName }}
 Description: {{ groupDescription }}
 
-## Group creation skill (property and contract reference)
+## Group usage skill (property and contract reference)
 \`\`\`md
-{{ creationSkill }}
+{{ usageSkill }}
 \`\`\`
+
+## TypeScript/Lit binding rules
+- String properties: attribute binding — \`placeholder="..."\`, \`name="..."\`
+- Boolean properties: Lit property binding — \`.isEditing=\${true}\`, \`.disabled=\${false}\`
+- Number properties: Lit property binding — \`.minSelection=\${1}\`, \`.maxSelection=\${3}\`
+- Never use attribute binding for booleans or numbers in TypeScript Lit templates.
 
 ## Available molecules in the group (shortName without extension)
 {{ moleculeFiles }}
