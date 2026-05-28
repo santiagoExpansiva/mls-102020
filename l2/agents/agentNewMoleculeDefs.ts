@@ -161,7 +161,6 @@ export const skill = \`${skillNormalized}\`;
 
 const system1 = `
 <!-- modelType: codepro -->
-<!-- modelTypeList: geminiChat (2.5 pro), code (grok), deepseekchat, codeflash (gemini), deepseekreasoner, mini (4.1) ou nano (openai), codeinstruct (4.1), codereasoning(gpt5), code2 (kimi 2.5) -->
 
 You are a planner responsible for defining a \`skill.md\`.
 

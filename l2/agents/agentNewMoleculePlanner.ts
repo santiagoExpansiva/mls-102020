@@ -75,7 +75,7 @@ async function beforePromptStep(
     hookSequential: number,
     args?: string
 ): Promise<mls.msg.AgentIntent[]> {
-
+debugger;
     if (!args) throw new Error(`(${agent.agentName})[beforePromptStep] args invalid`);
     if (!mls.actualProject) throw new Error(`(${agent.agentName})[beforePromptStep] project invalid: ${mls.actualProject}`);
     const data: { group: string, prompt: string } = JSON.parse(args);
@@ -111,7 +111,7 @@ async function afterPromptStep(
     step: mls.msg.AIAgentStep,
     hookSequential: number,
 ): Promise<mls.msg.AgentIntent[]> {
-
+debugger
 
     if (!agent || !context || !step) throw new Error(`[afterPromptStep] invalid params, agent:${!!agent}, context:${!!context}, step:${!!step}`);
 
@@ -131,7 +131,7 @@ async function beforeClarificationStep(
     hookSequential: number,
     json: ClarificationData
 ): Promise<HTMLElement> {
-
+debugger
     if (!context.task) throw new Error(`[beforeClarificationStep] invalid task: undefined`)
 
     const intentsToClarification: mls.msg.AgentIntent[] = processOutput(agent, context, parentStep, step, hookSequential, json);
@@ -237,7 +237,6 @@ async function getBaseMolecule() {
 
 const system1 = `
 <!-- modelType: codeinstruct -->
-<!-- modelTypeList: geminiChat (2.5 pro), code (grok), deepseekchat, codeflash (gemini), deepseekreasoner, mini (4.1) ou nano (openai), codeinstruct (4.1), codereasoning(gpt5), code2 (kimi 2.5) -->
 
 You are a requirements analyst responsible for defining the functional and visual requirements of a new web component (molecule) that will be built following an existing group contract.
 
@@ -278,18 +277,18 @@ Suggest the name of molecule and put in 'fileReference'. Format: _{{project}}_/l
 
 ## CONTEXT
 
-## How molecules works in collab.codes
+### How molecules works in collab.codes
 \`\`\`md
 {{ skillMolecule }}
 \`\`\`
 
-## GroupName: {{ group }}
+### GroupName: {{ group }}
 
 \`\`\`md
 {{ groupSkill }}
 \`\`\`
 
-## Molecule Class Base
+### Molecule Class Base
 \`\`\`typescript
 {{systemBaseMolecule}}
 \`\`\`

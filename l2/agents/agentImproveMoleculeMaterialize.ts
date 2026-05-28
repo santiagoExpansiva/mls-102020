@@ -51,7 +51,7 @@ async function beforePromptImplicit(
             taskTitle: `Improving molecule...`,
             threadId: context.message.threadId,
             userMessage: context.message.content,
-            longTermMemory: { page: data.page, position: data.position || 'left' }
+            longTermMemory: { page: data.page }
         }
     };
     return [addMessageAI];
@@ -98,7 +98,7 @@ async function preparePrompts(context: mls.msg.ExecutionContext, data: IDataProm
     const groupMatch = defsContent.match(/export const group = '([^']+)'/);
     const group = groupMatch?.[1] || '';
     const groupSkill = group ? await getGroupSkill(group) : '';
-    if (context.task) await appendLongTermMemory(context, { page: data.page, position: data.position || 'left' });
+    if (context.task) await appendLongTermMemory(context, { page: data.page });
     return {
         systemContext: currentTs || '(no ts file found)',
         humanContent: data.prompt,
@@ -244,37 +244,11 @@ async function getContentByExtension(page: string, ext: 'ts' | 'less' | 'html' |
 
 const system1 = `
 <!-- modelType: codeinstruct -->
-<!-- modelTypeList: geminiChat (2.5 pro), code (grok), deepseekchat, codeflash (gemini), deepseekreasoner, mini (4.1) ou nano (openai), codeinstruct (4.1), codereasoning(gpt5), code2 (kimi 2.5) -->
 
 You are an agent specialized in applying targeted improvements to an existing Lit web component molecule.
 
 You will receive the current TypeScript source and a specific improvement request.
 Apply only what is asked — preserve all existing behaviors, structure, and style not mentioned.
-
-## Aura Overview
-\`\`\`
-{{systemSkillAura}}
-\`\`\`
-
-## Molecule Generation Skill
-\`\`\`
-{{systemSkillMolecule}}
-\`\`\`
-
-## Molecule Class Base
-\`\`\`typescript
-{{systemBaseMolecule}}
-\`\`\`
-
-## Group Contract
-\`\`\`
-{{systemSkillGroup}}
-\`\`\`
-
-## Current molecule source
-\`\`\`typescript
-{{currentTs}}
-\`\`\`
 
 ## RULES
 1. Return the complete updated TypeScript source.
@@ -294,6 +268,34 @@ Set \`needsPlayground: false\` if only internal behavior changed:
 - Bug fix in logic not related to rendering
 - Style-only change (CSS variables, colors, spacing, typography)
 - Refactor with no observable difference from outside the component
+
+## Context
+
+
+### Aura Overview
+\`\`\`
+{{systemSkillAura}}
+\`\`\`
+
+### Molecule Generation Skill
+\`\`\`
+{{systemSkillMolecule}}
+\`\`\`
+
+### Molecule Class Base
+\`\`\`typescript
+{{systemBaseMolecule}}
+\`\`\`
+
+### Group Contract
+\`\`\`
+{{systemSkillGroup}}
+\`\`\`
+
+### Current molecule source
+\`\`\`typescript
+{{currentTs}}
+\`\`\`
 
 ## Output format
 You must return the object strictly as JSON
@@ -315,6 +317,5 @@ interface IResult {
 interface IDataPrompt {
     page: string;
     prompt: string;
-    position: 'left' | 'right';
 }
 //#endregion

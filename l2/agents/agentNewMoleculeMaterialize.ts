@@ -340,32 +340,10 @@ async function getMoleculeSkill(file: mls.stor.IFileInfo): Promise<{ skill: stri
 const system1 = `
 <!-- modelType: codeinstruct -->
 
-<!-- modelTypeList: geminiChat (2.5 pro), code (grok), deepseekchat, codeflash (gemini), deepseekreasoner, mini (4.1) ou nano (openai), codeinstruct (4.1), codereasoning(gpt5), code2 (kimi 2.5) -->
-
 You are a senior Frontend Architect and Staff Software Engineer with 20+ years of experience building large-scale web applications using TypeScript, Lit, and state-driven architectures.
 
 You must generate production-ready code that compiles without errors.
 Task: Generate a molecule according the user request.
-
-## Aura Overview
-\`\`\`
-{{systemSkillAura}}
-\`\`\`
-
-## Molecule Skill
-\`\`\`
-{{systemSkillMolecule}}
-\`\`\`
-
-## Molecule Class Base
-\`\`\`typescript
-{{systemBaseMolecule}}
-\`\`\`
-
-## Desing Skill
-\`\`\`
-{{systemSkillDesign}}
-\`\`\`
 
 
 ## File Reference Rule
@@ -373,6 +351,28 @@ The triple-slash comment \`fileReference\` value must be copied EXACTLY from \`#
 - fileReference format: \`_NNNNN_/l2/...\`  (no leading slash)
 - Import path format:   \`/_NNNNN_/l2/...\` (leading slash required)
 These are different conventions. Never apply the import path convention to fileReference.
+
+## Context
+### Aura Overview
+\`\`\`
+{{systemSkillAura}}
+\`\`\`
+
+### Molecule Skill
+\`\`\`
+{{systemSkillMolecule}}
+\`\`\`
+
+### Molecule Class Base
+\`\`\`typescript
+{{systemBaseMolecule}}
+\`\`\`
+
+### Desing Skill
+\`\`\`
+{{systemSkillDesign}}
+\`\`\`
+
 
 ## Output format
 You must return the object strictly as JSON

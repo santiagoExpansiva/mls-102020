@@ -108,8 +108,6 @@ async function afterPromptStep(
 
 const system1 = `
 <!-- modelType: deepseekchat -->
-<!-- modelTypeList: geminiChat (2.5 pro), code (grok), deepseekchat, codeflash (gemini), deepseekreasoner, mini (4.1) ou nano (openai), codeinstruct (4.1), codereasoning(gpt5), code2 (kimi 2.5) -->
-
 
 Tasks: Understand the purpose of the widget by analyzing the original user prompt and identify the correct group 
 If the original prompt is not about creating a web component, return an error asking the user to redo the request.
