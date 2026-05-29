@@ -275,6 +275,12 @@ export class ServiceGenome102020 extends ServiceBase {
     }
 
     private async _onMoleculesChanged(value: number | null) {
+
+        const file = await this._getActual3File();
+        if (!file) return;
+        const storFiles = await mls.stor.getFiles({ ...file, level: 2, loadContent: false })
+        if (storFiles.ts) this._actualPage = await storFiles.ts.getOrCreateModel();
+
         if (!value || !this._actualPage) return;
         const selectedFile = this._selectedMoleculeFiles[value - 1];
         if (!selectedFile) return;
@@ -410,8 +416,7 @@ export class ServiceGenome102020 extends ServiceBase {
             return;
         }
         this._isPageContext = isPageFile(file.folder ?? '');
-        const storFiles = await mls.stor.getFiles({ ...file, level: 2, loadContent: false })
-        if (storFiles.ts) this._actualPage = await storFiles.ts.getOrCreateModel();
+
     }
 
     private _onFileActionGenome = async (ev: mls.events.IEvent) => {
