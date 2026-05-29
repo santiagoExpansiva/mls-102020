@@ -615,6 +615,8 @@ export function buildTemplateMap(source: string): ITemplateExpression[] {
 /**
  * Extrai a chave i18n de uma expressão como 'this.msg.login' ou 'this.msg["login"]'
  * Retorna null se não for um padrão i18n reconhecido.
+ *
+ * Reconhece também o helper t(): t('login') / this.t('login')
  */
 function extractI18nKeyFromExpression(expression: string): string | null {
   // this.msg.key
@@ -624,6 +626,10 @@ function extractI18nKeyFromExpression(expression: string): string | null {
   // this.msg['key'] ou this.msg["key"]
   const bracketMatch = expression.match(/^this\.msg\[['"](\w+)['"]\]$/);
   if (bracketMatch) return bracketMatch[1];
+
+  // t('key') ou this.t('key')
+  const tMatch = expression.match(/^(?:this\.)?t\(\s*['"](\w+)['"]\s*\)$/);
+  if (tMatch) return tMatch[1];
 
   return null;
 }
@@ -692,6 +698,57 @@ export function findTextOriginByIndex(text: string, source: string, expressionIn
   return findTextOrigin(text, source);
 }
 
+// --- Resolução determinística por chave (data-i18n-key) ---
+
+/**
+ * Resolve a origem i18n DIRETAMENTE pela chave, sem qualquer ambiguidade.
+ *
+ * Este é o caminho 100% correto: usado quando o DOM carrega a chave via
+ * data-i18n-key (emitido pelo helper t()). Não depende de contagem de
+ * ocorrência, de ordem no DOM, nem de o texto bater com algum literal —
+ * portanto resolve corretamente chaves distintas com o MESMO valor
+ * (ex: formaPagamento vs colFormaPagamento).
+ *
+ * @param key - Chave i18n (ex: 'colFormaPagamento')
+ * @param source - Conteúdo completo do arquivo .ts
+ * @param _lang - Idioma atual (não usado na resolução; a edição por idioma
+ *                acontece em applyTextEdit). Mantido por simetria de assinatura.
+ */
+export function findTextOriginByKey(key: string, source: string, _lang?: string): TextOrigin {
+  if (!key) return { type: 'dynamic', reason: 'No i18n key' };
+
+  const i18nBlock = extractI18nBlock(source);
+  if (!i18nBlock) return { type: 'dynamic', reason: 'No i18n block in source' };
+
+  const messageObjects = parseMessageObjects(source, i18nBlock);
+  if (messageObjects.length === 0) return { type: 'dynamic', reason: 'No message objects in source' };
+
+  const languages: II18nEntry[] = [];
+  for (const obj of messageObjects) {
+    const entry = obj.entries[key];
+    if (entry) {
+      languages.push({
+        objectName: obj.name,
+        lang: obj.lang,
+        value: entry.value,
+        startOffset: entry.startOffset,
+        endOffset: entry.endOffset,
+      });
+    }
+  }
+
+  if (languages.length === 0) {
+    return { type: 'dynamic', reason: `i18n key "${key}" not found in source` };
+  }
+
+  return {
+    type: 'i18n',
+    key,
+    templateExpression: findTemplateExpression(key, source) || `this.msg.${key}`,
+    languages,
+  };
+}
+
 // --- Occurrence-based disambiguation ---
 
 /**
@@ -756,6 +813,10 @@ export function findAllI18nMatches(text: string, source: string, lang?: string):
 /**
  * Resolves text origin using DOM occurrence index to disambiguate
  * when multiple i18n keys have the same value.
+ *
+ * NOTA: este é o caminho de FALLBACK, usado apenas para texto que não foi
+ * tagueado com data-i18n-key. Para resolução determinística, prefira
+ * findTextOriginByKey.
  * 
  * @param text - Visible text
  * @param source - Full .ts source  
@@ -776,14 +837,22 @@ export function findTextOriginByOccurrence(
   if (matches.length > 1 && occurrenceIndex >= 0) {
     const templateMap = buildTemplateMap(source);
 
-    const matchesWithPos = matches.map(m => {
-      const templateIdx = templateMap.findIndex(expr => expr.i18nKey === m.key);
-      return { ...m, templateIdx };
-    }).filter(m => m.templateIdx >= 0)
-      .sort((a, b) => a.templateIdx - b.templateIdx);
+    // Ordena os matches pela posição no template. Chaves não encontradas no
+    // template (templateIdx = -1) NÃO são descartadas: vão para o fim em ordem
+    // de declaração — descartá-las fazia toda edição colapsar em matches[0].
+    const ordered = matches
+      .map((m, declIdx) => {
+        const templateIdx = templateMap.findIndex(expr => expr.i18nKey === m.key);
+        return { ...m, declIdx, templateIdx };
+      })
+      .sort((a, b) => {
+        const ta = a.templateIdx < 0 ? Number.MAX_SAFE_INTEGER : a.templateIdx;
+        const tb = b.templateIdx < 0 ? Number.MAX_SAFE_INTEGER : b.templateIdx;
+        return ta !== tb ? ta - tb : a.declIdx - b.declIdx;
+      });
 
-    if (occurrenceIndex < matchesWithPos.length) {
-      return matchesWithPos[occurrenceIndex].origin;
+    if (occurrenceIndex < ordered.length) {
+      return ordered[occurrenceIndex].origin;
     }
   }
 
