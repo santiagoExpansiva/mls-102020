@@ -26,7 +26,6 @@ async function beforePromptImplicit(
   context: mls.msg.ExecutionContext,
   userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
-  debugger;
 
   const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id:string };
   const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;

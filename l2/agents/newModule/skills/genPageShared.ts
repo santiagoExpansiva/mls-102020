@@ -106,6 +106,7 @@ Required i18n keys (add more as needed by the page content):
 - One success label per write routine (e.g. \`savedSuccessfully\`, \`confirmedSuccessfully\`)
 - Labels for form fields visible in the page (infer from entity fields)
 - \`reload\`, \`save\`, \`saving\`, \`confirm\`, \`confirming\` as applicable
+- Never types "const message_pt = { *** } as const"
 
 ### 4. Base class
 \`\`\`typescript
@@ -171,6 +172,10 @@ export class {ModuleName}{PageName}Base extends CollabLitElement {
   // ── form submit handlers (one per write routine that originates from a form) ──
 }
 \`\`\`
+
+Note: 
+1- Always implement loadInitialData.
+2- Always verify that all necessary fields and states are correlated and free of programming errors.
 
 ---
 
