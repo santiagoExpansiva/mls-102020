@@ -1,0 +1,359 @@
+/// <mls fileReference="_102020_/l2/agents/molecules/agentNewMoleculePlannerClarification.less" enhancement="enhancementStyle"/>
+
+agents--agent-new-molecule-planner-clarification-102020 {
+    display: block;
+    font-family: @font-family-primary;
+    font-size: @font-size-16;
+    line-height: @line-height-medium;
+    color: @text-primary-color;
+
+    .clarification-container {
+        background: @bg-primary-color;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    .clarification-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: @space-16 @space-24;
+        background: @bg-secondary-color-lighter;
+        border-bottom: 1px solid @grey-color;
+    }
+
+    .clarification-title {
+        margin: 0;
+        font-size: @font-size-24;
+        font-weight: @font-weight-bold;
+        color: @text-primary-color-darker;
+    }
+
+    .clarification-group {
+        padding: @space-8 @space-16;
+        background: @text-secondary-color;
+        color: @bg-primary-color;
+        border-radius: 16px;
+        font-size: @font-size-12;
+        font-weight: @font-weight-bold;
+        text-transform: uppercase;
+    }
+
+    .clarification-body {
+        padding: @space-24;
+    }
+
+    .info-section {
+        margin-bottom: @space-32;
+    }
+
+    .field {
+        margin-bottom: @space-24;
+    }
+
+    .field-label {
+        display: block;
+        margin-bottom: @space-8;
+        font-size: @font-size-12;
+        font-weight: @font-weight-bold;
+        color: @text-primary-color-lighter;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .field-value {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: @space-16;
+        background: @bg-secondary-color-lighter;
+        border: 1px solid @grey-color;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all @transition-slow ease;
+
+        &:hover {
+            border-color: @text-secondary-color;
+            background: @bg-primary-color;
+
+            .edit-icon {
+                opacity: 1;
+            }
+        }
+    }
+
+    .field-value-readonly {
+        padding: @space-16;
+        background: @grey-color-lighter;
+        border: 1px solid @grey-color;
+        border-radius: 6px;
+
+        code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: @font-size-12;
+            color: @text-secondary-color-darker;
+            word-break: break-all;
+        }
+    }
+
+    .value-text {
+        flex: 1;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .edit-icon {
+        margin-left: @space-16;
+        color: @text-secondary-color;
+        opacity: 0.3;
+        transition: opacity @transition-slow ease;
+    }
+
+    .edit-container {
+        width: 100%;
+    }
+
+    .edit-input,
+    .edit-textarea {
+        width: 100%;
+        padding: @space-16;
+        font-family: @font-family-primary;
+        font-size: @font-size-16;
+        line-height: @line-height-medium;
+        color: @text-primary-color;
+        background: @bg-primary-color;
+        border: 2px solid @text-secondary-color;
+        border-radius: 6px;
+        box-sizing: border-box;
+        resize: vertical;
+        transition: border-color @transition-slow ease;
+
+        &:focus {
+            outline: none;
+            border-color: @text-secondary-color-darker;
+        }
+    }
+
+    .edit-textarea {
+        min-height: 100px;
+    }
+
+    .edit-actions {
+        display: flex;
+        gap: @space-8;
+        margin-top: @space-8;
+        justify-content: flex-end;
+    }
+
+    .btn {
+        padding: @space-8 @space-16;
+        font-family: @font-family-primary;
+        font-size: @font-size-12;
+        font-weight: @font-weight-bold;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all @transition-slow ease;
+    }
+
+    .btn-save {
+        background: @success-color;
+        color: @bg-primary-color;
+
+        &:hover {
+            background: @success-color-hover;
+        }
+    }
+
+    .btn-cancel {
+        background: @grey-color;
+        color: @text-primary-color;
+
+        &:hover {
+            background: @grey-color-darker;
+        }
+    }
+
+    .btn-add {
+        width: 100%;
+        padding: @space-16;
+        margin-top: @space-16;
+        background: transparent;
+        color: @text-secondary-color;
+        border: 2px dashed @grey-color;
+        border-radius: 6px;
+
+        &:hover {
+            border-color: @text-secondary-color;
+            background: @bg-secondary-color-lighter;
+        }
+    }
+
+    .btn-primary {
+        background: @text-secondary-color;
+        color: @bg-primary-color;
+
+        &:hover {
+            background: @text-secondary-color-hover;
+        }
+    }
+
+    .btn-secondary {
+        background: transparent;
+        color: @text-primary-color;
+        border: 1px solid @grey-color-darker;
+
+        &:hover {
+            background: @grey-color-lighter;
+        }
+    }
+
+    .btn-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        font-size: @font-size-12;
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        opacity: 0;
+        transition: all @transition-slow ease;
+    }
+
+    .btn-edit {
+        color: @text-secondary-color;
+
+        &:hover {
+            background: @text-secondary-color;
+            color: @bg-primary-color;
+        }
+    }
+
+    .btn-delete {
+        color: @error-color;
+
+        &:hover {
+            background: @error-color;
+            color: @bg-primary-color;
+        }
+    }
+
+    .requirements-section {
+        display: flex;
+        flex-direction: column;
+        gap: @space-24;
+    }
+
+    .section {
+        border: 1px solid @grey-color;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        padding: @space-16 @space-24;
+        background: @bg-secondary-color-lighter;
+        cursor: pointer;
+        user-select: none;
+        transition: background @transition-slow ease;
+
+        &:hover {
+            background: @grey-color-light;
+        }
+    }
+
+    .section-title {
+        flex: 1;
+        font-size: @font-size-16;
+        font-weight: @font-weight-bold;
+        color: @text-primary-color-darker;
+    }
+
+    .section-count {
+        margin-right: @space-16;
+        padding: 4px 10px;
+        background: @text-secondary-color;
+        color: @bg-primary-color;
+        border-radius: 12px;
+        font-size: @font-size-12;
+        font-weight: @font-weight-bold;
+    }
+
+    .section-toggle {
+        color: @text-primary-color-lighter;
+        font-size: @font-size-12;
+    }
+
+    .requirements-list {
+        list-style: none;
+        margin: 0;
+        padding: @space-16;
+    }
+
+    .requirement-item {
+        margin-bottom: @space-8;
+
+        &:last-child {
+            margin-bottom: 0;
+        }
+    }
+
+    .requirement-content {
+        display: flex;
+        align-items: flex-start;
+        padding: @space-16;
+        background: @bg-primary-color;
+        border: 1px solid @grey-color;
+        border-radius: 6px;
+        transition: all @transition-slow ease;
+
+        &:hover {
+            border-color: @grey-color-darker;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+
+            .btn-icon {
+                opacity: 1;
+            }
+        }
+    }
+
+    .requirement-index {
+        min-width: 28px;
+        font-weight: @font-weight-bold;
+        color: @text-secondary-color;
+    }
+
+    .requirement-text {
+        flex: 1;
+        cursor: pointer;
+        word-break: break-word;
+
+        &:hover {
+            color: @text-secondary-color;
+        }
+    }
+
+    .requirement-actions {
+        display: flex;
+        gap: 4px;
+        margin-left: @space-16;
+    }
+
+    .clarification-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: @space-16;
+        padding: @space-16 @space-24;
+        background: @bg-secondary-color-lighter;
+        border-top: 1px solid @grey-color;
+    }
+}
+
+
