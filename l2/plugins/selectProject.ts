@@ -241,12 +241,12 @@ export class PluginSelectProject extends StateLitElement {
                                 transition-colors whitespace-nowrap cursor-pointer
                             "
                             @click=${() => {
+                                saveAuraProject();
                                 mls.setActualProject(project.project);
                                 const orgIndex = mls.l5.getProjectOrgIndex(project.project);
                                 mls.l5.setActualOrg(orgIndex);
                                 setProjectDetails(project.project);
                                 setAuraState('actualProject', project.project);
-                                saveAuraProject();
                                 window.location.reload();
                             }}
                         >${this.msg.selectBtn}</button>`

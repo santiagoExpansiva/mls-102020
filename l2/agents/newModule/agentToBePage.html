@@ -1,0 +1,344 @@
+<plugin-agent-playground-100554  style="display:none"> <promptcustom type="memory" group="A"> ## Page
+    {
+      "screenId": "store-location",
+      "pageName": "storeLocation",
+      "actor": "customer",
+      "purpose": "Endereço completo, horário de funcionamento, mapa e canais de contato da unidade",
+      "sections": [
+        {
+          "sectionName": "main",
+          "mode": "stack",
+          "organisms": [
+            {
+              "organismName": "storeLocationAddressMap",
+              "purpose": "Exibe endereço, mapa e horários de funcionamento da loja",
+              "rulesApplied": [
+                "rule_lang_ptbr_only",
+                "rule_brazil_target",
+                "rule_essential_features",
+                "rule_design_clean_modern_responsive"
+              ]
+            },
+            {
+              "organismName": "storeLocationContactSummary",
+              "purpose": "Exibe canais de contato da unidade",
+              "rulesApplied": [
+                "rule_lang_ptbr_only",
+                "rule_brazil_target",
+                "rule_essential_features",
+                "rule_design_clean_modern_responsive"
+              ]
+            }
+          ]
+        }
+      ]
+}
+
+## ToBe
+### general details from module
+{
+  "meta": {
+    "userLanguage": "pt",
+    "userPrompt": "criar site petShop , linguagem br, para executar no brasil\nnão gerar agendamento serviços, e não permitir adoção\ncriar site modelo matriz"
+  },
+  "ontology": {
+    "entities": {
+      "User": {
+        "description": "Usuário do site (cliente ou membro da equipe do pet shop) com permissões para navegar ou administrar conteúdo.",
+        "fields": {
+          "userId": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "values": [
+              "customer",
+              "staff"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "required": false
+          },
+          "email": {
+            "type": "string",
+            "required": false
+          }
+        },
+        "rules": [
+          "rule_lang_ptbr_only",
+          "rule_roles_customer_staff"
+        ]
+      },
+      "StoreInfo": {
+        "description": "Informações institucionais e de operação da loja (unidade).",
+        "fields": {
+          "storeId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string",
+            "required": false
+          },
+          "state": {
+            "type": "string",
+            "required": false
+          },
+          "country": {
+            "type": "string",
+            "values": [
+              "BR"
+            ]
+          },
+          "businessHours": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "required": false
+          },
+          "whatsapp": {
+            "type": "string",
+            "required": false
+          },
+          "email": {
+            "type": "string",
+            "required": false
+          },
+          "mapLink": {
+            "type": "string",
+            "required": false
+          }
+        },
+        "rules": [
+          "rule_brazil_target"
+        ]
+      },
+      "Product": {
+        "description": "Produto exibido no site com detalhes e categorização.",
+        "fields": {
+          "productId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "required": false
+          },
+          "categoryId": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "required": false,
+            "constraints": "Opcional, caso o site exiba preços."
+          },
+          "currency": {
+            "type": "string",
+            "required": false,
+            "values": [
+              "BRL"
+            ]
+          },
+          "images": {
+            "type": "string[]",
+            "required": false
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "sku": {
+            "type": "string",
+            "required": false
+          },
+          "animal": {
+            "type": "string",
+            "required": false
+          },
+          "brand": {
+            "type": "string",
+            "required": false
+          },
+          "age": {
+            "type": "string",
+            "required": false
+          },
+          "specialNeeds": {
+            "type": "boolean",
+            "required": false
+          },
+          "availabilityStatus": {
+            "type": "string",
+            "required": false,
+            "values": [
+              "Em estoque",
+              "Sob consulta"
+            ]
+          },
+          "isPromotional": {
+            "type": "boolean",
+            "required": false
+          },
+          "isFeatured": {
+            "type": "boolean",
+            "required": false
+          }
+        },
+        "rules": [
+          "rule_no_service_booking",
+          "rule_no_adoption"
+        ]
+      },
+      "ProductCategory": {
+        "description": "Categoria de produtos para navegação e organização do catálogo.",
+        "fields": {
+          "categoryId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "required": false
+          },
+          "parentCategoryId": {
+            "type": "string",
+            "required": false
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ContentPage": {
+        "description": "Página de conteúdo gerenciável (ex: sobre, políticas, informações).",
+        "fields": {
+          "pageId": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "isPublished": {
+            "type": "boolean"
+          }
+        },
+        "rules": [
+          "rule_tone_friendly_informative"
+        ]
+      },
+      "ContactMessage": {
+        "description": "Mensagem enviada pelo formulário de contato.",
+        "fields": {
+          "messageId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "required": false
+          },
+          "subject": {
+            "type": "string",
+            "required": false
+          },
+          "message": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "constraints": "ISO-8601"
+          }
+        }
+      },
+      "BlogPost": {
+        "description": "Post do blog com dicas e notícias sobre pets.",
+        "fields": {
+          "postId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string",
+            "required": false
+          },
+          "body": {
+            "type": "string"
+          },
+          "coverImage": {
+            "type": "string",
+            "required": false
+          },
+          "tags": {
+            "type": "string[]",
+            "required": false
+          },
+          "publishedAt": {
+            "type": "string",
+            "required": false,
+            "constraints": "ISO-8601; ausente quando rascunho."
+          },
+          "isPublished": {
+            "type": "boolean"
+          }
+        },
+        "rules": [
+          "rule_tone_friendly_informative"
+        ]
+      },
+      "Branding": {
+        "description": "Configuração de identidade visual reutilizável para o site modelo matriz.",
+        "fields": {
+          "brandingId": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string"
+          },
+          "primaryColors": {
+            "type": "string[]",
+            "constraints": "Deve incluir tons de verde e azul."
+          },
+          "accentColors": {
+            "type": "string[]",
+            "constraints": "Deve incluir detalhes em amarelo."
+          },
+          "styleNotes": {
+            "type": "string",
+            "required": false
+          }
+        },
+        "rules": [
+          "rule_branding_colors",
+          "rule_design_clean_modern_responsive",
+          "rule_template_matrix_replicable"
+        ]
+      }
+    }
+  }
+} </promptcustom> </plugin-agent-playground-100554>

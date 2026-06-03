@@ -524,30 +524,30 @@ export class ServicePreview extends ServiceBase {
       return;
     }
 
+
     try {
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (!doc) return;
 
       const domVirtual = document.createElement('div');
       domVirtual.innerHTML = this.actualFiles.htmlContent;
+      doc.body.innerHTML = '';
 
       if (this.isL3) {
-        // L3: wrapa no component editor - toda lógica L3 fica no widget
-        doc.body.innerHTML = `
-          <preview-editor-l3-102020>
-            ${domVirtual.innerHTML}
-          </preview-editor-l3-102020>
-        `;
+        const l3P = document.createElement('preview-editor-l3-102020');
+        l3P.innerHTML = domVirtual.innerHTML;
+        doc.body.appendChild(l3P);
+
       } else if (this.isL4) {
-        // L4: wrapa no component editor L4
-        doc.body.innerHTML = `
-          <preview-editor-l4-102020>
-            ${domVirtual.innerHTML}
-          </preview-editor-l4-102020>
-        `;
+        const l4P = document.createElement('preview-editor-l4-102020');
+        l4P.innerHTML = domVirtual.innerHTML;
+        doc.body.appendChild(l4P);
+
+
       } else {
-        // L2: conteúdo direto
-        doc.body.innerHTML = domVirtual.innerHTML;
+        const l2P = document.createElement('preview-editor-l2-102020');
+        l2P.innerHTML = domVirtual.innerHTML;
+        doc.body.appendChild(l2P);
       }
 
       let ret = await getDependenciesByHtml(this.actualFiles.html, this.actualFiles.htmlContent, this.actualTheme, true);

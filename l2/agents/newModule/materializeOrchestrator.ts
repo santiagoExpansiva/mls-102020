@@ -3,7 +3,7 @@
 import { getMaterializeIndex } from '/_102027_/l2/defsAST.js'
 import { collabImport } from '/_102027_/l2/collabImport.js';
 import { createStorFile, IReqCreateStorFile } from '/_102027_/l2/libStor.js';
-import { createModelAnyFile } from '/_102027_/l2/libModel.js'; 
+import { createModelAnyFile } from '/_102027_/l2/libModel.js';
 
 const cacheMaterializeOrchestrator = new Map<string, MaterializeOrchestrator>();
 const buildCache = new Map<string, Record<string, any>>();
@@ -56,20 +56,20 @@ export class MaterializeOrchestrator {
         if (!sfInfo) return;
 
         const key = mls.stor.getKeyToFile(sfInfo);
-        const sf = mls.stor.files[key]; 
+        const sf = mls.stor.files[key];
         if (!sf) return;
 
         const data = await sf.getContent() as string;
         this.items = getMaterializeIndex(data);
     }
 
-    public async getToExecuteOnlyMaterialize(id: string): Promise<mls.defs.MaterializeEntry|undefined> { 
+    public async getToExecuteOnlyMaterialize(id: string): Promise<mls.defs.MaterializeEntry | undefined> {
 
         if (!this.items.length) await this.loadItems();
         const item = this.items.find((i) => i.id === id);
         if (item) item.dependsOn = [];
         return item;
-        
+
     }
 
     isAllCompleted(): boolean {
@@ -178,11 +178,15 @@ export class MaterializeOrchestrator {
                 try {
                     const f = mls.stor.convertFileReferenceToFile(filePath);
                     if (!f) continue;
-                    const module = await collabImport(f as any);
+                    let module = await collabImport(f as any);
 
-                    if (!module) {
-                        console.info(`Módulo não registrado: ${filePath}`);
-                        continue;
+                    if (!module || !(exportName in module)) {
+                        module = await this.getModuleByBuild(filePath);
+
+                        if (!module || !(exportName in module)) {
+                            throw new Error(`Módulo não registrado: ${filePath} var:${exportName}`);
+                        }
+
                     }
 
                     let replacement;
@@ -210,6 +214,38 @@ export class MaterializeOrchestrator {
         }
 
         return result;
+    }
+
+    async getModuleByBuild(path: string) {
+
+        console.info('Needed esbuild processTemplate:' + path);
+
+        const f = mls.stor.convertFileReferenceToFile(path);
+        if (!f) return null;
+
+        const key = mls.stor.getKeyToFile(f);
+        const sf = mls.stor.files[key];
+        if (!sf) return null;
+
+        const src = await sf.getContent() as string;
+
+        const esbuild = await getEsbuild();
+        const result = await esbuild.transform(src, {
+            loader: 'ts',
+            format: 'esm',
+            target: 'esnext',
+        });
+
+        const blob = new Blob([result.code], { type: 'text/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        try {
+            const mod = await import(blobUrl);
+
+            return mod;
+        } finally {
+
+        }
     }
 
 
@@ -331,10 +367,10 @@ export class MaterializeOrchestrator {
 
             // Módulo não tinha a variável — tenta buildar via esbuild
             const built = await this.buildAndExtract(path, variable);
+            console.info(built);
             if (built !== null) return built;
 
-            console.warn(`[getVar] Variable não encontrada após build: ${path}; ${variable}`);
-            return '';
+            throw new Error(`[getVar] Not found variable after build: ${path}; ${variable}`);
 
         } catch (err) {
             console.error(`Erro em ${path}`, err);

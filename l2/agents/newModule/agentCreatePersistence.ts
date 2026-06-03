@@ -190,7 +190,7 @@ async function generateConfig(moduleName: string) {
   "workspaceDependencies": {
     "102029": {
       "repo": "https://github.com/expansiva/mls-102029.git",
-      "commit": "df672f8fefc28293a9beab9a320604ecd841b5a6"
+      "commit": "7b65a3cac3969eeaa511de67ffcabfc859288b4d"
     },
     "102033": {
       "repo": "https://github.com/expansiva/mls-102033.git",

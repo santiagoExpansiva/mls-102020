@@ -26,16 +26,15 @@ async function beforePromptImplicit(
   context: mls.msg.ExecutionContext,
   userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
-  debugger;
 
-  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id:string };
+  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id: string };
   const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
   const device = info.device || context.task?.iaCompressed?.longMemory['device'] as string || 'web';
   const type = info.type || context.task?.iaCompressed?.longMemory['type'] as string || 'page11';
 
-  info.project = mls.actualProject || 0; 
+  info.project = mls.actualProject || 0;
   const orch = getMaterializeOrchestrator(info.path);
-  info.item = await orch.getToExecuteOnlyMaterialize(info.id) as mls.defs.MaterializeEntry;  
+  info.item = await orch.getToExecuteOnlyMaterialize(info.id) as mls.defs.MaterializeEntry;
 
   const prompt = await getSkill(info, moduleName, device, type);
 
@@ -51,7 +50,7 @@ async function beforePromptImplicit(
       taskTitle: agent.agentDescription,
       threadId: context.message.threadId,
       userMessage: info.path,
-      longTermMemory: { moduleName: info.moduleName, device, type, onlyStep:"true" }
+      longTermMemory: { moduleName: info.moduleName, device, type, onlyStep: "true" }
     }
   };
 
@@ -134,7 +133,7 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
   const onlyThisStep = (context.task?.iaCompressed?.longMemory['onlyStep'] as string || 'false') === 'true';
 
   output.outputPath = output.outputPath.startsWith('/') ? output.outputPath.slice(1) : output.outputPath;
-  
+
   const orch = getMaterializeOrchestrator(output.path);
   await orch.createStorFile(output.outputPath, parseAISource(output.srcFile));
 
@@ -176,7 +175,7 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
         }
       };
 
-      if(!onlyThisStep) newSteps.push(newStep);
+      if (!onlyThisStep) newSteps.push(newStep);
 
     })
 
@@ -278,7 +277,7 @@ async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, p
 
   const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;
   if (!mod || !mod.moduleGenome) throw new Error('[agentMaterializePageLit] Not found moduleGenome');
-  
+
   const genomeKey = Object.keys(mod.moduleGenome as Record<string, unknown>).find(k => k.startsWith(`${device}/`) && k.endsWith(`/${type}`));
   if (!genomeKey) throw new Error(`[agentMaterializePageLit] no genome key found for device "${device}" and type "${type}"`);
 
@@ -291,16 +290,26 @@ async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, p
   if (!prj.projectConfig.layouts) throw new Error('[agentMaterializePageLit] Not found projectConfig layout dont config');
 
   const layout = Object.values(prj.projectConfig.layouts).find((v: any) => v.name === genome.layout) as any;
-  if(!layout) throw new Error('[agentMaterializePageLit] Not found projectConfig layout dont config to:' + genome.layout);
+  if (!layout) throw new Error('[agentMaterializePageLit] Not found projectConfig layout dont config to:' + genome.layout);
+
+  const designSystem = Object.values(prj.projectConfig.designSystems).find((ds: any) => ds.name === genome.designSystem) as any;
+  if (!designSystem) throw new Error('[agentMaterializePageLit] Not found projectConfig designSystem dont config to:' + genome.designSystem);
 
   const fileName = info.item.outputPath.startsWith('/') ? info.item.outputPath.slice(1) : info.item.outputPath;
   const genomeKeyNorm = genomeKey.endsWith('/') ? genomeKey.slice(0, -1) : genomeKey;
   info.item.outputPath = `_${project}_/l2/${moduleName}/${genomeKeyNorm}/${fileName}`;
 
+  const pathSkill = (layout.skill.startsWith('/') ? layout.skill.slice(1) : layout.skill).replace('.js', '.ts');
+  const pathDS = (designSystem.skill.startsWith('/') ? designSystem.skill.slice(1) : designSystem.skill).replace('.js', '.ts');
+
   const orch = getMaterializeOrchestrator(info.path);
   const user = await orch.getVar(info.path, info.item.specVar);
-  const skill = await orch.getSkill(layout.skill);
-  const prompt = `##Skill\n${skill}\n\n##User data\n${user}\n\n##User info\n${JSON.stringify(info)}`;
+  const skill = await orch.getSkill(pathSkill);
+  const dsSkill = await orch.getSkill(pathDS);
+  
+  const designSystemSection = dsSkill ? `\n\n##Design System\n${dsSkill}` : '';
+
+  const prompt = `##Skill\n${skill}${designSystemSection}\n\n##User data\n${user}\n\n##User info\n${JSON.stringify(info)}`;
 
   return prompt;
 }

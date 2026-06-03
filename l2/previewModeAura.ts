@@ -47,6 +47,7 @@ export class PreviewModeAura {
         this.mountLinks(this.json, this.ifr);
         this.mountTailwindDarkMode(this.ifr);
         this.mountTokens(this.json.tokens || '', this.file);
+        this.addGlobalCss(this.json.globalCss);
         this.addJsReference(this.ifr, this.level || '2');
         const s = document.createElement('script') as HTMLScriptElement;
         s.textContent = result.outputFiles[0].text;
@@ -390,6 +391,24 @@ export class PreviewModeAura {
         if (!file) return 'ds_tokens';
         const { project } = file
         return '_' + project + '_ds_tokens';
+    }
+
+    private addGlobalCss(globalCss: string) {
+        if (!globalCss) return
+        try {
+            const iframe = window.preview.iframe;
+            if (!iframe || !iframe.contentDocument) return;
+            const oldStyle = iframe.contentDocument.querySelector('style#global_css');
+            if (oldStyle) oldStyle.remove();
+            const style = document.createElement('style');
+            style.textContent = globalCss;
+            style.id = 'global_css';
+            style.type = "text/tailwindcss";
+            iframe.contentDocument.head.appendChild(style);
+
+        } catch (e: any) {
+            console.info('Error mountTokens: ' + e.message);
+        }
     }
 
     private addJsReference(ifr: HTMLIFrameElement, level: string) {

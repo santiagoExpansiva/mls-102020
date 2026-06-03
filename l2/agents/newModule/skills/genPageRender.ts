@@ -57,7 +57,9 @@ Do NOT invent state, methods, or msg keys that do not exist in the shared source
 
 ---
 
-## Render structure — how to map organisms to markup
+## Render structure — how to map organisms to markup and base Class
+
+Always use the fields that exist in the base class; if they don't exist, don't create or add them.
 
 For each organism in \`definition.pages[0].sections[].organisms[]\`:
 

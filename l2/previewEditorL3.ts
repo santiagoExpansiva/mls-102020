@@ -3,7 +3,7 @@
 import { StateLitElement } from '/_102027_/l2/stateLitElement.js';
 import { customElement } from 'lit/decorators.js';
 import { setState, initState, getState, subscribe, unsubscribe } from '/_102027_/l2/collabState.js';
-import {  findTextOriginByOccurrence, applyTextEdit } from '/_102020_/l2/previewTextEditor.js';
+import { findTextOriginByOccurrence, findTextOriginByKey, applyTextEdit, type TextOrigin } from '/_102020_/l2/previewTextEditor.js';
 
 @customElement('preview-editor-l3-102020')
 class PreviewEditorL3 extends StateLitElement {
@@ -37,19 +37,22 @@ class PreviewEditorL3 extends StateLitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.addEventListener('click', this.onClick, true);
-    this.addEventListener('mouseover', this.onHover);
-    this.addEventListener('mouseout', this.onHoverOut);
-
+    this.addEventListener('click', this.onHostClick, true);
+    this.addEventListener('pointerdown', this.onHostPointerDown, true);
+    this.addEventListener('mousedown', this.onHostPointerDown, true);
+    this.addEventListener('mousemove', this.onHostMouseMove);
+    this.addEventListener('mouseleave', this.onHostMouseLeave);
     subscribe('previewL3.editMode', this);
     subscribe('previewL3.selectedElement', this);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.removeEventListener('click', this.onClick, true);
-    this.removeEventListener('mouseover', this.onHover);
-    this.removeEventListener('mouseout', this.onHoverOut);
+    this.removeEventListener('click', this.onHostClick, true);
+    this.removeEventListener('pointerdown', this.onHostPointerDown, true);
+    this.removeEventListener('mousedown', this.onHostPointerDown, true);
+    this.removeEventListener('mousemove', this.onHostMouseMove);
+    this.removeEventListener('mouseleave', this.onHostMouseLeave);
     window.removeEventListener('scroll', this.onScrollResize);
     window.removeEventListener('resize', this.onScrollResize);
 
@@ -177,15 +180,37 @@ class PreviewEditorL3 extends StateLitElement {
 
   // --- Eventos principais ---
 
-  private onClick = (e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (this.isL3Control(target)) return;
+  private onHostPointerDown = (e: Event) => {
+    e.stopPropagation(); // Page NEVER receives pointer events in any mode
+
+    const mode = getState('previewL3.editMode');
+    if (mode !== 'text' || !(e instanceof MouseEvent) || !this._editSpan) return;
+
+    // In text mode: reposition cursor or end editing
+    if (document.caretRangeFromPoint) {
+      const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (range && this._editSpan.contains(range.startContainer)) {
+        this._editSpan.focus();
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      } else {
+        this._editSpan.blur();
+      }
+    } else {
+      this._editSpan.blur();
+    }
+  }
+
+  private onHostClick = (e: MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault(); // Prevent link navigation and other default browser actions
 
     const currentMode = getState('previewL3.editMode');
     if (currentMode === 'text') return;
 
-    e.preventDefault();
-    e.stopPropagation();
+    const target = e.target as HTMLElement;
+    if (!target || this.isL3Control(target) || (target as unknown) === this) return;
 
     const selectableEl = this.resolveSelectableElement(target);
 
@@ -200,13 +225,22 @@ class PreviewEditorL3 extends StateLitElement {
 
     const textResult = this.findClickedTextNode(e, target);
     if (textResult) {
-      const pageTag = this.findPageComponent();
-      const clickedText = (textResult.textNode.textContent || '').trim();
-      const occurrenceIndex = pageTag
-        ? this.getTextOccurrenceIndex(textResult.textNode, clickedText, pageTag)
-        : 0;
+      // 1. Caminho preferencial: chave i18n vinda do data-i18n-key (helper t()).
+      //    Resolução 100% determinística — sem contagem de ocorrência.
+      const i18nKey = this.resolveI18nKey(textResult.textNode);
+
+      // 2. Fallback (texto não tagueado): heurística por ocorrência no DOM.
+      let occurrenceIndex = 0;
+      if (!i18nKey) {
+        const pageTag = this.findPageComponent();
+        const clickedText = (textResult.textNode.textContent || '').trim();
+        occurrenceIndex = pageTag
+          ? this.getTextOccurrenceIndex(textResult.textNode, clickedText, pageTag)
+          : 0;
+      }
+
       setState('previewL3.editMode', 'text');
-      this.enableTextEdit(selectableEl, textResult.textNode, textResult.offset, occurrenceIndex);
+      this.enableTextEdit(selectableEl, textResult.textNode, textResult.offset, occurrenceIndex, i18nKey);
     }
   }
 
@@ -232,12 +266,17 @@ class PreviewEditorL3 extends StateLitElement {
     return target;
   }
 
-  private onHover = (e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (this.isL3Control(target)) return;
+  private _lastHoveredEl: HTMLElement | null = null;
 
+  private onHostMouseMove = (e: MouseEvent) => {
     const mode = getState('previewL3.editMode');
     if (mode === 'text') return;
+
+    const target = e.target as HTMLElement;
+    if (!target || target === this._lastHoveredEl) return;
+    if (this.isL3Control(target) || (target as unknown) === this) return;
+
+    this._lastHoveredEl = target;
 
     if (mode === 'inspect') {
       this.drawBoxModel(target);
@@ -248,10 +287,11 @@ class PreviewEditorL3 extends StateLitElement {
     setState('previewL3.hoveredElement', this.buildSelector(target));
   }
 
-  private onHoverOut = () => {
+  private onHostMouseLeave = () => {
     const mode = getState('previewL3.editMode');
     if (mode === 'text') return;
 
+    this._lastHoveredEl = null;
     this.clearHover();
     setState('previewL3.hoveredElement', null);
   }
@@ -285,41 +325,71 @@ class PreviewEditorL3 extends StateLitElement {
     return null;
   }
 
+  /**
+   * Lê a chave i18n do ancestral mais próximo marcado com data-i18n-key
+   * (emitido pelo helper t()). Retorna null para texto não tagueado, que
+   * então cai no fallback baseado em ocorrência.
+   */
+  private resolveI18nKey(textNode: Text): string | null {
+    let el: HTMLElement | null = textNode.parentElement;
+    while (el && el !== this) {
+      const key = el.getAttribute('data-i18n-key');
+      if (key) return key;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
   // --- Edição de texto ---
 
   /**
    * Edita um text node específico, isolando-o num span temporário.
-   * O expressionIndex é resolvido ANTES de entrar aqui (enquanto o DOM ainda está intacto).
+   * A chave i18n (se houver) é resolvida ANTES de entrar aqui (data-i18n-key);
+   * caso contrário, usa-se o occurrenceIndex resolvido com o DOM intacto.
    */
   // Pending unlock timer — cancelled if a new edit starts before it fires
   private _moleculeUnlockTimer: number | null = null;
+  private _editSpan: HTMLSpanElement | null = null;
 
-  private enableTextEdit(selectableEl: HTMLElement, textNode: Text, caretOffset: number = 0, occurrenceIndex: number = 0) {
+  private enableTextEdit(
+    selectableEl: HTMLElement,
+    textNode: Text,
+    caretOffset: number = 0,
+    occurrenceIndex: number = 0,
+    i18nKey: string | null = null,
+  ) {
     const oldText = (textNode.textContent || '').trim();
     if (!oldText) return;
 
-    const editTarget = textNode.parentElement;
-    if (!editTarget) return;
+    const editParent = textNode.parentElement;
+    if (!editParent) return;
 
-    // Cancel any pending unlock from a previous edit so we don't accidentally
-    // release the lock while this new edit is still active.
     if (this._moleculeUnlockTimer !== null) {
       clearTimeout(this._moleculeUnlockTimer);
       this._moleculeUnlockTimer = null;
     }
 
-    const moleculeHost = this.findMoleculeHost(editTarget);
+    const moleculeHost = this.findMoleculeHost(editParent);
     if (moleculeHost) moleculeHost._mutationLock = true;
 
-    editTarget.contentEditable = 'true';
-    editTarget.style.outline = '2px solid #f5a623';
-    editTarget.focus();
+    // Replace the text node with an isolated contenteditable span.
+    // This prevents the native button Space→click behavior since
+    // focus goes to the span, not the button.
+    const span = document.createElement('span');
+    span.className = 'l3-edit-span';
+    span.contentEditable = 'true';
+    span.textContent = oldText;
+    editParent.replaceChild(span, textNode);
+    this._editSpan = span;
 
-    // Place caret at the click position
-    if (textNode && document.createRange) {
+    span.focus();
+
+    // Place caret at click position
+    const innerTextNode = span.firstChild;
+    if (innerTextNode && document.createRange) {
       const range = document.createRange();
-      const clampedOffset = Math.min(caretOffset, (textNode.textContent || '').length);
-      range.setStart(textNode, clampedOffset);
+      const clampedOffset = Math.min(caretOffset, (innerTextNode.textContent || '').length);
+      range.setStart(innerTextNode, clampedOffset);
       range.collapse(true);
       const sel = window.getSelection();
       sel?.removeAllRanges();
@@ -327,24 +397,25 @@ class PreviewEditorL3 extends StateLitElement {
     }
 
     const onBlur = () => {
-      const newText = (editTarget.textContent || '').trim();
+      const newText = (span.textContent || '').trim();
 
-      // Remove contenteditable WHILE lock is still active so the attribute
-      // mutation is absorbed by the still-locked observer.
-      editTarget.removeAttribute('contenteditable');
-      editTarget.style.outline = '';
+      // Optimistic update: show newText immediately so the user sees the change.
+      // On error (dynamic origin), applyTextEditToSource will revert via restoredNode.
+      const restoredNode = document.createTextNode(newText !== oldText ? newText : oldText);
+      if (span.parentElement) {
+        span.parentElement.replaceChild(restoredNode, span);
+      }
+      this._editSpan = null;
 
       setState('previewL3.editMode', 'select');
 
       if (newText !== oldText) {
-        this.applyTextEditToSource(oldText, newText, selectableEl, occurrenceIndex, editTarget);
+        this.applyTextEditToSource(oldText, newText, selectableEl, occurrenceIndex, editParent, restoredNode, i18nKey);
       }
 
-      editTarget.removeEventListener('blur', onBlur);
-      editTarget.removeEventListener('keydown', onKeydown);
+      span.removeEventListener('blur', onBlur);
+      span.removeEventListener('keydown', onKeydown);
 
-      // Schedule unlock — delayed past the molecule debounce (16ms).
-      // Stored so a rapid second click can cancel it before it fires.
       this._moleculeUnlockTimer = window.setTimeout(() => {
         this._moleculeUnlockTimer = null;
         if (moleculeHost) moleculeHost._mutationLock = false;
@@ -352,19 +423,19 @@ class PreviewEditorL3 extends StateLitElement {
     };
 
     const onKeydown = (e: KeyboardEvent) => {
+      e.stopPropagation();
       if (e.key === 'Enter') {
         e.preventDefault();
-        editTarget.blur();
+        span.blur();
       }
       if (e.key === 'Escape') {
         e.preventDefault();
-        editTarget.textContent = oldText;
-        editTarget.blur();
+        span.blur(); // onBlur always restores oldText
       }
     };
 
-    editTarget.addEventListener('blur', onBlur);
-    editTarget.addEventListener('keydown', onKeydown);
+    span.addEventListener('blur', onBlur);
+    span.addEventListener('keydown', onKeydown);
   }
 
   /**
@@ -385,18 +456,23 @@ class PreviewEditorL3 extends StateLitElement {
   /**
    * Applies the text edit to the source .ts file.
    *
-   * Three cases, detected from the DOM at the time of the edit:
+   * Resolução da origem:
+   *  - Se i18nKey está presente (data-i18n-key) → findTextOriginByKey:
+   *    resolução determinística, sem ambiguidade entre chaves com o mesmo valor.
+   *  - Caso contrário → findTextOriginByOccurrence (heurística de ocorrência).
    *
-   * 1. Text inside a slot tag written by the page:
-   *      <my-wc><Label display:none>${this.msg.email}</Label></my-wc>
-   *    → occurrenceIndex recalculated using the hidden slot node
-   *
-   * 2. Text directly in the page DOM (normal case)
-   *    → occurrenceIndex used as-is
-   *
-   * 3. Attribute on a wc written by the page (future, not yet handled here)
+   * Em ambos os casos, se a origem for 'dynamic' no arquivo da página, tenta-se
+   * o arquivo shared antes de marcar como não editável.
    */
-  private async applyTextEditToSource(oldText: string, newText: string, el: HTMLElement, occurrenceIndex: number = 0, editTarget?: HTMLElement) {
+  private async applyTextEditToSource(
+    oldText: string,
+    newText: string,
+    el: HTMLElement,
+    occurrenceIndex: number = 0,
+    editTarget?: HTMLElement,
+    restoredNode?: Text,
+    i18nKey: string | null = null,
+  ) {
     const pageComponent = this.findPageComponent();
     if (!pageComponent) return;
 
@@ -406,9 +482,14 @@ class PreviewEditorL3 extends StateLitElement {
     const source = tsModel.model.getValue();
     const lang = getState('preview.language') || 'en';
 
-    console.log('[TextEdit] applyTextEditToSource', { oldText, newText, lang, occurrenceIndex });
+    console.log('[TextEdit] applyTextEditToSource', { oldText, newText, lang, occurrenceIndex, i18nKey });
 
-    let origin = findTextOriginByOccurrence(oldText, source, occurrenceIndex, lang);
+    const resolve = (src: string): TextOrigin =>
+      i18nKey
+        ? findTextOriginByKey(i18nKey, src, lang)
+        : findTextOriginByOccurrence(oldText, src, occurrenceIndex, lang);
+
+    let origin = resolve(source);
     let activeModel = tsModel;
     let activeSource = source;
 
@@ -416,7 +497,7 @@ class PreviewEditorL3 extends StateLitElement {
       const sharedModel = await this.getSharedTsModel();
       if (sharedModel) {
         const sharedSource = sharedModel.model.getValue();
-        const sharedOrigin = findTextOriginByOccurrence(oldText, sharedSource, occurrenceIndex, lang);
+        const sharedOrigin = resolve(sharedSource);
         if (sharedOrigin.type !== 'dynamic') {
           origin = sharedOrigin;
           activeModel = sharedModel;
@@ -432,8 +513,8 @@ class PreviewEditorL3 extends StateLitElement {
     } : origin);
 
     if (origin.type === 'dynamic') {
+      if (restoredNode) restoredNode.textContent = oldText;
       if (editTarget) {
-        editTarget.textContent = oldText;
         editTarget.classList.add('l3-edit-error');
         setTimeout(() => editTarget.classList.remove('l3-edit-error'), 650);
       }
@@ -502,35 +583,38 @@ class PreviewEditorL3 extends StateLitElement {
     if (!pageEl) return 0;
 
     const normalizedText = text.trim();
-    let occurrenceCount = 0;
 
-    const walker = document.createTreeWalker(pageEl, NodeFilter.SHOW_ALL, null);
-
-    let node: Node | null = walker.firstChild();
+    // 1. Coleta, em document order, TODOS os text nodes que casam com o valor.
+    const matches: { node: Text; litBound: boolean }[] = [];
+    const walker = document.createTreeWalker(pageEl, NodeFilter.SHOW_TEXT, null);
+    let node: Node | null = walker.nextNode();
     while (node) {
-      if (node.nodeType === Node.TEXT_NODE && (node.textContent || '').trim()) {
-        const prev = node.previousSibling;
-        const isLitBinding = prev
-          && prev.nodeType === Node.COMMENT_NODE
-          && (prev as Comment).data.startsWith('?lit$');
-
-        if (isLitBinding) {
-          const nodeText = (node.textContent || '').trim();
-          if (nodeText === normalizedText) {
-            if (node === targetTextNode) return occurrenceCount;
-            occurrenceCount++;
-          }
-        }
+      if ((node.textContent || '').trim() === normalizedText) {
+        matches.push({ node: node as Text, litBound: this.isLitBoundTextNode(node as Text) });
       }
       node = walker.nextNode();
     }
 
-    // Fallback: targetTextNode was not found via Lit markers (e.g. it lives
-    // inside a wc's rendered DOM without a direct ?lit$ predecessor).
-    // Re-walk counting ALL text nodes with matching content — the
-    // applyTextEditToSource will resolve the correct source occurrence via
-    // findSlotTextNodeForRendered anyway, so index 0 is safe here.
-    return 0;
+    // 2. Se existe pelo menos um nó vinculado pelo Lit, restringe o universo aos
+    //    vinculados — assim texto estático/incidental (não bindado) não infla o
+    //    índice. O alvo entra SEMPRE por identidade, mesmo que o marcador dele
+    //    não tenha sido detectado (era o ponto que quebrava antes: o retorno por
+    //    identidade ficava gateado pelo check de ?lit$).
+    const anyBound = matches.some(m => m.litBound);
+    const universe = anyBound
+      ? matches.filter(m => m.litBound || m.node === targetTextNode)
+      : matches;
+
+    // 3. Índice do alvo por identidade.
+    const idx = universe.findIndex(m => m.node === targetTextNode);
+    return idx >= 0 ? idx : 0;
+  }
+
+  private isLitBoundTextNode(node: Text): boolean {
+    const prev = node.previousSibling;
+    return !!prev
+      && prev.nodeType === Node.COMMENT_NODE
+      && (prev as Comment).data.startsWith('?lit$');
   }
 
   private findPageComponent(): string | null {

@@ -60,12 +60,13 @@ The file must follow this structure (in order):
 
 ### 1. MLS file header
 \`\`\`
-/// <mls fileReference="_{projectId}_/l2/{moduleName}/web/shared/{pageName}.ts" enhancement="_blank" />
+/// <mls fileReference="_{projectId}_/l2/{moduleName}/web/shared/{pageName}.ts" enhancement="_102027_/l2/enhancementLit.ts" />
 \`\`\`
 
 ### 2. Imports
 \`\`\`typescript
 import { CollabLitElement } from '/_102029_/l2/collabLitElement.js';
+import { property } from 'lit/decorators.js';
 import type { AuraNormalizedError } from '/_102029_/l2/contracts/bootstrap.js';
 import type { BffClientOptions } from '/_102029_/l2/bffClient.js';
 import { execBff } from '/_102029_/l2/bffClient.js';
@@ -74,6 +75,7 @@ import {
   consumeExpectedNavigationLoad,
   runBlockingUiAction,
 } from '/_102029_/l2/interactionRuntime.js';
+import { subscribe, unsubscribe, getState, setState, initState } from '/_102029_/l2/collabState.js';
 import type { {ModuleName}EntityA, {ModuleName}EntityB } from '/_{projectId}_/l2/{moduleName}/web/contracts/{pageName}.js';
 \`\`\`
 - Import only entity interfaces that are actually referenced in the class body
@@ -104,20 +106,24 @@ Required i18n keys (add more as needed by the page content):
 - One success label per write routine (e.g. \`savedSuccessfully\`, \`confirmedSuccessfully\`)
 - Labels for form fields visible in the page (infer from entity fields)
 - \`reload\`, \`save\`, \`saving\`, \`confirm\`, \`confirming\` as applicable
+- Never types "const message_pt = { *** } as const"
 
 ### 4. Base class
 \`\`\`typescript
 export class {ModuleName}{PageName}Base extends CollabLitElement {
-  static properties = {
-    // one entry per reactive state field
-    someList: { state: true },
-    someObject: { state: true },
-    status: { state: true },
-  };
 
-  declare someList: SomeEntity[];
-  declare someObject: SomeEntity | undefined;
-  declare status: string;
+  private readonly _stateKeys = [
+    'db.entity.field',          // one entry per observed stateKey (see collabState section)
+    'ui.pageName.actionName',
+    // ...
+  ] as const;
+
+  property() someList: SomeEntity[];
+  property() someObject: SomeEntity | undefined;
+  property() status: string;
+  // reactive properties for actionStates (type: 'idle'|'loading'|'success'|'error')
+  // reactive properties for tempStates
+  // reactive properties for shape-'fields' individual fields
 
   protected msg: MessageType = messages['en'];
 
@@ -136,6 +142,29 @@ export class {ModuleName}{PageName}Base extends CollabLitElement {
 
     const lang: string = this.getMessageKey(messages);
     this.msg = messages[lang] || messages['en'];
+
+    // initState for tempStates with initialValue
+    // initState('ui.{pageName}.someKey', defaultValue);
+
+    // subscribe to all observed state keys
+    subscribe(this._stateKeys as unknown as string[], this);
+
+    // read current values from global state
+    (this._stateKeys as unknown as string[]).forEach(key => {
+      const v = getState(key);
+      if (v !== undefined) this.handleIcaStateChange(key, v);
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    unsubscribe(this._stateKeys as unknown as string[], this);
+  }
+
+  handleIcaStateChange(key: string, value: any): void {
+    switch (key) {
+      // one case per stateKey in _stateKeys
+    }
   }
 
   // ── load methods (one per read routine) ──
@@ -143,6 +172,10 @@ export class {ModuleName}{PageName}Base extends CollabLitElement {
   // ── form submit handlers (one per write routine that originates from a form) ──
 }
 \`\`\`
+
+Note: 
+1- Always implement loadInitialData.
+2- Always verify that all necessary fields and states are correlated and free of programming errors.
 
 ---
 
@@ -178,6 +211,104 @@ For each entry in \`definition.pages[0].actionStates[]\` whose suffix is NOT \`i
 - After a successful write, re-run the relevant load method to refresh state
 
 For each action method, also generate a \`handle{Suffix}Submit(event: SubmitEvent)\` or \`handle{Suffix}Click()\` helper that calls \`runBlockingUiAction\`.
+
+---
+
+## How to integrate collabState (state observation)
+
+The shared class MUST subscribe to the global state on connect and unsubscribe on disconnect.
+It MUST implement \`handleIcaStateChange\` to react when external code changes any observed key.
+It MUST publish state via \`setState\` after loading from BFF or after mutations.
+
+### Collect all state keys to observe
+
+Gather every \`stateKey\` from the definition in this order:
+
+1. **dataShape — shape 'fields'**: all \`organism.dataShape.entityFields[].stateKey\` (e.g. \`db.veiculo.placa\`)
+2. **dataShape — shape 'object' or 'collection'**: \`organism.dataShape.stateKey\` (e.g. \`config.locadora.statusVeiculoOptions\`, strip trailing \`[]\`)
+3. **tempStates** (both organism-level and page-level): all \`tempStates[].stateKey\`
+4. **actionStates**: all \`actionStates[].stateKey\`
+
+Collect them all into a single \`private readonly _stateKeys\` tuple constant inside the class.
+
+### Mapping stateKey → local property name
+
+- Last segment of the stateKey (split by \`.\`, strip \`[]\`) is the base name.
+- If two keys share the same last segment, use the last **two** segments joined in camelCase (e.g. \`form.errors\` → \`formErrors\`).
+- Use this same rule that was already applied when declaring the reactive properties.
+
+### connectedCallback — subscribe and read initial state
+
+After the existing super call and pendingLoad logic, add:
+
+\`\`\`typescript
+// initState for tempStates that have initialValue
+initState('ui.{pageName}.someKey', defaultValue);
+
+// subscribe to all state keys (use '*' prefix for exclusive subscription)
+subscribe(this._stateKeys, this);
+
+// read current values from global state
+this._stateKeys.forEach(key => {
+  const v = getState(key);
+  if (v !== undefined) this.handleIcaStateChange(key, v);
+});
+\`\`\`
+
+Rules:
+- Only call \`initState\` for keys that have an \`initialValue\` in their tempState definition — parse the JSON initialValue as the default.
+- Use \`'*' + stateKey\` (exclusive) when subscribing if you want to ensure only one active subscription exists. Prefer exclusive subscriptions for action state keys.
+- Read initial values AFTER subscribing, so any setState triggered during init is properly handled.
+
+### disconnectedCallback
+
+\`\`\`typescript
+disconnectedCallback() {
+  super.disconnectedCallback();
+  unsubscribe(this._stateKeys, this);
+}
+\`\`\`
+
+### handleIcaStateChange
+
+\`\`\`typescript
+handleIcaStateChange(key: string, value: any): void {
+  switch (key) {
+    case 'db.veiculo.placa': this.placa = value ?? ''; break;
+    case 'db.veiculo.modelo': this.modelo = value ?? ''; break;
+    case 'config.locadora.statusVeiculoOptions': this.statusVeiculoOptions = value ?? []; break;
+    case 'ui.veiculosCadastro.saveVeiculo': this.saveVeiculoState = value ?? 'idle'; break;
+    case 'ui.veiculosCadastro.form.errors': this.formErrors = value ?? {}; break;
+    // ... one case per observed stateKey
+  }
+}
+\`\`\`
+
+Rules:
+- Cover EVERY key in \`_stateKeys\`.
+- Use a sensible empty/default value (empty string, \`[]\`, \`{}\`, \`undefined\`, \`'idle'\`) as fallback when value is null/undefined.
+- Do NOT call \`setState\` inside \`handleIcaStateChange\` — this method only syncs external → local.
+
+### setState calls after load/action methods
+
+After every successful BFF call (or mock branch) that produces data:
+
+- **shape 'object' or 'collection'**: call \`setState(organism.dataShape.stateKey, loadedData)\` immediately after setting the local property.
+- **shape 'fields'**: nothing extra needed in load — fields are written individually by the UI.
+- **actionStates**: set the action state key around the async operation:
+  \`\`\`typescript
+  setState('ui.{pageName}.{actionName}', 'loading');
+  try {
+    // ... BFF call
+    setState('ui.{pageName}.{actionName}', 'success');
+  } catch (e) {
+    setState('ui.{pageName}.{actionName}', 'error');
+    throw e;
+  }
+  \`\`\`
+- **tempStates mutations**: whenever the shared class updates a tempState property locally (e.g. formErrors), also call \`setState(stateKey, value)\`.
+
+---
 
 ### CRITICAL: runBlockingUiAction signature
 

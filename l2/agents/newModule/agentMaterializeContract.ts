@@ -72,7 +72,6 @@ async function beforePromptStep(
   const moduleName = context.task?.iaCompressed?.longMemory['moduleName'] as string;
   const device = context.task?.iaCompressed?.longMemory['device'] as string || 'web';
   const prompt = await getSkill(info, moduleName, device);
-  console.info(prompt);
   
   const continueParallel: mls.msg.AgentIntentPromptReady = {
     type: "prompt_ready",
@@ -124,16 +123,60 @@ async function afterPromptStep(
 
 }
 
+async function updateRouterFile(
+  orch: ReturnType<typeof getMaterializeOrchestrator>,
+  outputPath: string,
+  routers: { router: string; funcName: string }[]
+): Promise<void> {
+  if (!routers || routers.length === 0) return;
+
+  const routerRef = outputPath.replace(/\/[^/]+\.ts$/, '/router.ts');
+
+  const sfInfo = mls.stor.convertFileReferenceToFile(routerRef);
+  if (!sfInfo) return;
+  const key = mls.stor.getKeyToFile(sfInfo);
+  const sf = (mls.stor.files as any)[key];
+  if (!sf) return;
+
+  let content = await sf.getContent() as string;
+
+  const importPath = '/' + outputPath.replace('.ts', '.js');
+  const escapedPath = importPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const funcNames = routers.map((r: { router: string; funcName: string }) => `  ${r.funcName}`).join(',\n');
+  const newImportBlock = `import {\n${funcNames}\n} from '${importPath}';`;
+  const importRegex = new RegExp(`import \\{[^}]*\\} from '${escapedPath}';`);
+
+  if (importRegex.test(content)) {
+    content = content.replace(importRegex, newImportBlock);
+  } else {
+    content = content.replace(/^export function /m, newImportBlock + '\n\nexport function ');
+  }
+
+  for (const r of routers) {
+    const escapedRouter = r.router.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const routeEntry = `    ['${r.router}', ${r.funcName}],`;
+    const existingEntryRegex = new RegExp(`    \\['${escapedRouter}',.*?\\],`);
+    if (existingEntryRegex.test(content)) {
+      content = content.replace(existingEntryRegex, routeEntry);
+    } else {
+      content = content.replace(/(\s+\]\);)/, `\n${routeEntry}$1`);
+    }
+  }
+
+  await orch.createStorFile(routerRef, content);
+}
+
 async function processOutput(context: mls.msg.ExecutionContext, output: any, agent: IAgentMeta, parentStep: mls.msg.AIAgentStep): Promise<mls.msg.AgentIntent[]> {
 
   const onlyThisStep = (context.task?.iaCompressed?.longMemory['onlyStep'] as string || 'false') === 'true';
 
-  const outputPath = output.outputPath.startsWith('/') ? output.outputPath.slice(1) : output.outputPath; 
-  const interfaceOutputPath = output.interfaceOutputPath.startsWith('/') ? output.interfaceOutputPath.slice(1) : output.interfaceOutputPath; 
+  const outputPath = output.outputPath.startsWith('/') ? output.outputPath.slice(1) : output.outputPath;
+  const interfaceOutputPath = output.interfaceOutputPath.startsWith('/') ? output.interfaceOutputPath.slice(1) : output.interfaceOutputPath;
 
   const orch = getMaterializeOrchestrator(output.path);
   await orch.createStorFile(outputPath, parseAISource(output.srcFile));
   await orch.createStorFile(interfaceOutputPath, parseAISource(output.interfaceFile));
+  await updateRouterFile(orch, outputPath, output.routers || []);
 
   const stepOri = context.task ? (findPreviousAgentStep(context.task, parentStep.stepId))?.stepId : parentStep.stepId;
 
@@ -234,6 +277,7 @@ export type Output =
       interfaceOutputPath: string; // same value by "User info"
       srcFile: string;
       interfaceFile: string;
+      routers: { router: string; funcName: string }[]; // one entry per BffHandler constant in srcFile
     }
   }
 

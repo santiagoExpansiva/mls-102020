@@ -3,7 +3,7 @@
 // ============================================================
 // TYPES
 // ============================================================
- 
+
 export interface ImportEntry {
   /** 'import type' or 'import' */
   kind: 'type' | 'value';
@@ -12,18 +12,18 @@ export interface ImportEntry {
   /** caminho do módulo */
   from: string;
 }
- 
+
 export interface RouteEntry {
   /** chave do Map: 'pizzaria.getCustomer' */
   key: string;
   /** nome do handler: 'customerEditorGetCustomerHandler' */
   handler: string;
 }
- 
+
 // ============================================================
 // PARSE
 // ============================================================
- 
+
 export function parseRouter(source: string): {
   mlsComment: string | null;
   imports: ImportEntry[];
@@ -31,24 +31,24 @@ export function parseRouter(source: string): {
 } {
   return {
     mlsComment: getMlsComment(source),
-    imports:    getImports(source),
-    routes:     getRoutes(source),
+    imports: getImports(source),
+    routes: getRoutes(source),
   };
 }
- 
+
 // ============================================================
 // MLS COMMENT
 // ============================================================
- 
+
 export function getMlsComment(source: string): string | null {
   const match = /^\/\/\/\s*<mls[^>]*\/>/m.exec(source);
   return match ? match[0] : null;
 }
- 
+
 // ============================================================
 // IMPORTS — leitura
 // ============================================================
- 
+
 /**
  * Retorna todos os import { ... } from '...'; do arquivo,
  * com seu intervalo [start, end] no source para que o replace
@@ -70,19 +70,19 @@ function getImportSpans(source: string): Array<ImportEntry & { start: number; en
   }
   return results;
 }
- 
+
 export function getImports(source: string): ImportEntry[] {
   return getImportSpans(source).map(({ start: _s, end: _e, ...entry }) => entry);
 }
- 
+
 export function hasImport(source: string, from: string): boolean {
   return getImports(source).some(i => i.from === from);
 }
- 
+
 // ============================================================
 // IMPORTS — escrita
 // ============================================================
- 
+
 /**
  * Adiciona um import.
  * - Se já existe um import do mesmo `from`, faz merge dos `names`.
@@ -91,7 +91,7 @@ export function hasImport(source: string, from: string): boolean {
 export function addImport(source: string, imp: ImportEntry): string {
   const spans = getImportSpans(source);
   const existing = spans.find(i => i.from === imp.from);
- 
+
   if (existing) {
     const newNames = imp.names.filter(n => !existing.names.includes(n));
     if (newNames.length === 0) return source;
@@ -99,12 +99,12 @@ export function addImport(source: string, imp: ImportEntry): string {
     // substitui o bloco original pelo novo, usando posição
     return source.slice(0, existing.start) + buildImportLine(merged) + source.slice(existing.end);
   }
- 
+
   const exportIdx = source.search(/^export\b/m);
   const insertAt = exportIdx === -1 ? source.length : exportIdx;
   return source.slice(0, insertAt) + buildImportLine(imp) + '\n' + source.slice(insertAt);
 }
- 
+
 /**
  * Remove o import inteiro cujo `from` bate com o argumento.
  */
@@ -117,7 +117,7 @@ export function removeImport(source: string, from: string): string {
   if (source[end] === '\n') end++;
   return source.slice(0, target.start) + source.slice(end);
 }
- 
+
 /**
  * Remove um nome específico de um import.
  * Se for o único nome, remove o import inteiro.
@@ -126,22 +126,22 @@ export function removeImportName(source: string, from: string, name: string): st
   const spans = getImportSpans(source);
   const target = spans.find(i => i.from === from);
   if (!target || !target.names.includes(name)) return source;
- 
+
   const remaining = target.names.filter(n => n !== name);
   if (remaining.length === 0) return removeImport(source, from);
- 
+
   const updated: ImportEntry = { ...target, names: remaining };
   return source.slice(0, target.start) + buildImportLine(updated) + source.slice(target.end);
 }
- 
+
 // ============================================================
 // ROUTES — leitura
 // ============================================================
- 
+
 function getRouteSpans(source: string): Array<RouteEntry & { start: number; end: number }> {
   const mapBody = extractMapBodySpan(source);
   if (!mapBody) throw new Error('Could not find Map constructor in source.');
- 
+
   const re = /\[\s*['"]([^'"]+)['"]\s*,\s*([A-Za-z_$][\w$]*)\s*\]/g;
   const results: Array<RouteEntry & { start: number; end: number }> = [];
   let m: RegExpExecArray | null;
@@ -155,19 +155,19 @@ function getRouteSpans(source: string): Array<RouteEntry & { start: number; end:
   }
   return results;
 }
- 
+
 export function getRoutes(source: string): RouteEntry[] {
   return getRouteSpans(source).map(({ start: _s, end: _e, ...r }) => r);
 }
- 
+
 export function hasRoute(source: string, key: string): boolean {
   return getRoutes(source).some(r => r.key === key);
 }
- 
+
 // ============================================================
 // ROUTES — escrita
 // ============================================================
- 
+
 /**
  * Adiciona uma rota ao Map, depois da última entrada existente.
  * Suporta Map vazio: new Map([]) ou new Map<...>([]).
@@ -184,28 +184,28 @@ export function addRoute(
     if (throwIfExists) throw new Error(`Route "${key}" already exists.`);
     return source;
   }
- 
+
   const mapBody = extractMapBodySpan(source);
   if (!mapBody) throw new Error('Could not find Map constructor in source.');
- 
+
   const spans = getRouteSpans(source);
   const newEntry = `['${key}', ${handler}]`;
- 
+
   if (spans.length === 0) {
     // Map vazio — substitui [] por [\n    entry,\n  ]
     const replacement = `[\n    ${newEntry},\n  ]`;
     return source.slice(0, mapBody.start) + replacement + source.slice(mapBody.end);
   }
- 
+
   const last = spans[spans.length - 1];
   let insertAt = last.end;
   const hasTrailingComma = source[insertAt] === ',';
   if (hasTrailingComma) insertAt++;
- 
+
   const prefix = hasTrailingComma ? '' : ',';
   return source.slice(0, insertAt) + `${prefix}\n    ${newEntry},` + source.slice(insertAt);
 }
- 
+
 /**
  * Remove uma rota do Map pela chave.
  */
@@ -213,14 +213,14 @@ export function removeRoute(source: string, key: string): string {
   const spans = getRouteSpans(source);
   const target = spans.find(r => r.key === key);
   if (!target) throw new Error(`Route "${key}" not found.`);
- 
+
   const all = spans;
   const idx = all.indexOf(target);
   const isLast = idx === all.length - 1;
- 
+
   let start = target.start;
   let end = target.end;
- 
+
   if (isLast && idx > 0) {
     // remove também a vírgula ANTES dessa rota (que ficaria pendurada)
     let prev = start - 1;
@@ -233,10 +233,10 @@ export function removeRoute(source: string, key: string): string {
     if (source[end] === ',') end++;
     if (source[end] === '\n') end++;
   }
- 
+
   return source.slice(0, start) + source.slice(end);
 }
- 
+
 /**
  * Troca o handler de uma rota existente (substituição por posição).
  */
@@ -244,7 +244,7 @@ export function updateRoute(source: string, key: string, newHandler: string): st
   const spans = getRouteSpans(source);
   const target = spans.find(r => r.key === key);
   if (!target) throw new Error(`Route "${key}" not found.`);
- 
+
   // reconstrói apenas a entrada do Map
   const original = source.slice(target.start, target.end);
   const updated = original.replace(
@@ -253,11 +253,11 @@ export function updateRoute(source: string, key: string, newHandler: string): st
   );
   return source.slice(0, target.start) + updated + source.slice(target.end);
 }
- 
+
 // ============================================================
 // INTERNAL — helpers
 // ============================================================
- 
+
 function buildImportLine(imp: ImportEntry): string {
   const keyword = imp.kind === 'type' ? 'import type' : 'import';
   const inline = `${keyword} { ${imp.names.join(', ')} } from '${imp.from}';`;
@@ -265,9 +265,9 @@ function buildImportLine(imp: ImportEntry): string {
   const names = imp.names.map(n => `  ${n},`).join('\n');
   return `${keyword} {\n${names}\n} from '${imp.from}';`;
 }
- 
+
 interface Span { content: string; start: number; end: number }
- 
+
 function extractMapBodySpan(source: string): Span | null {
   const match = /new\s+Map(?:<[^>]*>)?\s*\(\s*\[/.exec(source);
   if (!match) return null;
@@ -275,7 +275,7 @@ function extractMapBodySpan(source: string): Span | null {
   const content = balancedSlice(source, start, '[', ']');
   return { content, start, end: start + content.length };
 }
- 
+
 function balancedSlice(source: string, start: number, open: string, close: string): string {
   let depth = 0;
   let inStr = false;
@@ -288,7 +288,7 @@ function balancedSlice(source: string, start: number, open: string, close: strin
       continue;
     }
     if (ch === '"' || ch === "'") { inStr = true; strCh = ch; continue; }
-    if (ch === open)  depth++;
+    if (ch === open) depth++;
     if (ch === close) { if (--depth === 0) return source.slice(start, i + 1); }
   }
   throw new Error('Unbalanced block.');
@@ -300,43 +300,47 @@ function balancedSlice(source: string, start: number, open: string, close: strin
 
 type RouteHandlerPair = [routeKey: string, handlerName: string];
 
-function routeToHandlerName(routeKey: string, pageName:string): string {
-    const parts = routeKey.split('.');
-    // first part stays camelCase (pageName), each subsequent part gets first letter uppercased
-    return pageName + parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('') + 'Handler';
+function routeToHandlerName(routeKey: string, pageName: string): string {
+  const parts = routeKey.replace(pageName, '').split('.');
+  // first part stays camelCase (pageName), each subsequent part gets first letter uppercased
+  return pageName + parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('') + 'Handler';
 }
 
-export function extractRouteHandlers(definition: { pages: any[] }, moduleName:string): RouteHandlerPair[] {
-    const page = definition.pages[0];
-    const pageName: string = page.pageName;
-    const seen = new Set<string>();
-    const result: RouteHandlerPair[] = [];
+export function extractRouteHandlers(definition: { pages: any[] }, moduleName: string): RouteHandlerPair[] {
+  const page = definition.pages[0];
+  const pageName: string = page.pageName;
+  const seen = new Set<string>();
+  const result: RouteHandlerPair[] = [];
 
-    const add = (routeKey: string) => {
-        if (seen.has(routeKey)) return;
-        seen.add(routeKey);
-        result.push([routeKey, routeToHandlerName(routeKey, pageName)]);
+  const add = (routeKey: string) => {
+    if (seen.has(routeKey)) return;
+    seen.add(routeKey);
+    result.push([routeKey, routeToHandlerName(routeKey, pageName)]);
+  }
+
+  // 1. Read routines — from dataShape.sourceRoutine across all organisms
+  for (const section of (page.sections ?? []) as any[]) {
+    for (const organism of (section.organisms ?? []) as any[]) {
+      const routine: string | undefined = organism.dataShape?.sourceRoutine;
+      if (routine && routine.startsWith(moduleName)) add(routine);
+      /*const emits: any[] = organism.emits || [];
+      emits.forEach((emit) => {
+        if (emit && emit.event.startsWith(moduleName)) add(emit.event);
+      });*/
     }
+  }
 
-    // 1. Read routines — from dataShape.sourceRoutine across all organisms
-    for (const section of (page.sections ?? []) as any[]) {
-        for (const organism of (section.organisms ?? []) as any[]) {
-            const routine: string | undefined = organism.dataShape?.sourceRoutine;
-            if (routine && routine.startsWith(moduleName)) add(routine);
-        }
-    }
+  /*// 2. Write/action routines — from actionStates, skip UI-only state values
+  const skipSuffixes = new Set(['idle', 'loading', 'success', 'error']);
+  for (const actionState of (page.actionStates ?? []) as any[]) {
+    const stateKey: string = actionState.stateKey ?? '';
+    const parts = stateKey.split('.');
+    const suffix = parts[parts.length - 1] ?? '';
+    if (!suffix || skipSuffixes.has(suffix)) continue;
+    add(`${moduleName}.${pageName}.${suffix}`);
+  }*/
 
-    /*// 2. Write/action routines — from actionStates, skip UI-only state values
-    const skipSuffixes = new Set(['idle', 'loading', 'success', 'error']);
-    for (const actionState of (page.actionStates ?? []) as any[]) {
-        const stateKey: string = actionState.stateKey ?? '';
-        const parts = stateKey.split('.');
-        const suffix = parts[parts.length - 1] ?? '';
-        if (!suffix || skipSuffixes.has(suffix)) continue;
-        add(`${pageName}.${suffix}`);
-    }*/
-
-    return result;
+  return result;
 }
 
 // ============================================================

@@ -1,0 +1,871 @@
+<plugin-agent-playground-100554  style="display:none"> <promptcustom type="memory" group="A"> ## Experience Model
+```json
+{
+  "screens": [
+    {
+      "screenId": "home", 
+      "actor": "customer",
+      "screenType": "page",
+      "isEntryPoint": true,
+      "purpose": "Página inicial do pet shop com apresentação da marca, produtos em destaque e acesso rápido às principais seções",
+      "supportsCapabilities": [
+        "cap_catalog_browse",
+        "cap_store_information",
+        "cap_blog",
+        "cap_view_promotions"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_no_service_booking",
+        "rule_no_adoption",
+        "rule_essential_features",
+        "rule_design_clean_modern_responsive",
+        "rule_branding_colors"
+      ]
+    },
+    {
+      "screenId": "catalog-categories",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Listagem de todas as categorias de produtos disponíveis para navegação",
+      "supportsCapabilities": [
+        "cap_catalog_browse"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_design_clean_modern_responsive"
+      ]
+    },
+    {
+      "screenId": "catalog-products",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Listagem de produtos de uma categoria específica com filtros avançados (animal, marca, idade, necessidade especial)",
+      "supportsCapabilities": [
+        "cap_catalog_browse"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_design_clean_modern_responsive"
+      ]
+    },
+    {
+      "screenId": "product-detail",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Exibição detalhada de um produto específico com imagens, descrição, status de disponibilidade e opção de consulta via WhatsApp",
+      "supportsCapabilities": [
+        "cap_catalog_browse",
+        "cap_whatsapp_consultation"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_brazil_target",
+        "rule_design_clean_modern_responsive"
+      ]
+    },
+    {
+      "screenId": "promotions",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Seção dedicada a produtos em destaque e promoções",
+      "supportsCapabilities": [
+        "cap_view_promotions"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_design_clean_modern_responsive"
+      ]
+    },
+    {
+      "screenId": "about-store",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Informações institucionais sobre o pet shop, história e valores",
+      "supportsCapabilities": [
+        "cap_store_information"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_brazil_target",
+        "rule_tone_friendly_informative"
+      ]
+    },
+    {
+      "screenId": "store-location",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Endereço completo, horário de funcionamento, mapa e canais de contato da unidade",
+      "supportsCapabilities": [
+        "cap_store_information"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_brazil_target",
+        "rule_essential_features",
+        "rule_design_clean_modern_responsive"
+      ]
+    },
+    {
+      "screenId": "contact",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Formulário de contato para envio de mensagens ao pet shop",
+      "supportsCapabilities": [
+        "cap_contact"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_essential_features",
+        "rule_design_clean_modern_responsive",
+        "rule_tone_friendly_informative"
+      ]
+    },
+    {
+      "screenId": "contact-confirmation",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Confirmação de envio da mensagem de contato com informações sobre próximos passos",
+      "supportsCapabilities": [
+        "cap_contact"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_tone_friendly_informative"
+      ]
+    },
+    {
+      "screenId": "blog-list",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Listagem de posts do blog com dicas e notícias sobre pets",
+      "supportsCapabilities": [
+        "cap_blog"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_tone_friendly_informative",
+        "rule_design_clean_modern_responsive"
+      ]
+    },
+    {
+      "screenId": "blog-post",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Exibição de um post individual do blog com conteúdo completo",
+      "supportsCapabilities": [
+        "cap_blog"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_tone_friendly_informative",
+        "rule_design_clean_modern_responsive"
+      ]
+    },
+    {
+      "screenId": "content-page",
+      "actor": "customer",
+      "screenType": "page",
+      "purpose": "Página de conteúdo genérica para políticas, termos ou páginas institucionais adicionais",
+      "supportsCapabilities": [
+        "cap_store_information"
+      ],
+      "rulesApplied": [
+        "rule_lang_ptbr_only",
+        "rule_tone_friendly_informative"
+      ]
+    },
+    {
+      "screenId": "staff-login",
+      "actor": "staff",
+      "screenType": "login",
+      "isEntryPoint": true,
+      "purpose": "Autenticação de membros da equipe para acesso à área administrativa",
+      "supportsCapabilities": [
+        "cap_manage_content",
+        "cap_template_configuration"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only"
+      ]
+    },
+    {
+      "screenId": "staff-dashboard",
+      "actor": "staff",
+      "screenType": "dashboard",
+      "isEntryPoint": true,
+      "purpose": "Painel principal da equipe com acesso rápido às funções de gestão de conteúdo e catálogo",
+      "supportsCapabilities": [
+        "cap_manage_content",
+        "cap_template_configuration"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only",
+        "rule_template_matrix_replicable"
+      ]
+    },
+    {
+      "screenId": "staff-products-list",
+      "actor": "staff",
+      "screenType": "page",
+      "purpose": "Listagem e busca de produtos para gerenciamento",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only"
+      ]
+    },
+    {
+      "screenId": "staff-product-editor",
+      "actor": "staff",
+      "screenType": "editor",
+      "purpose": "Criação e edição de produtos com todos os atributos, filtros, status e destaque",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only"
+      ]
+    },
+    {
+      "screenId": "staff-categories-list",
+      "actor": "staff",
+      "screenType": "page",
+      "purpose": "Listagem e gerenciamento de categorias de produtos",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only"
+      ]
+    },
+    {
+      "screenId": "staff-category-editor",
+      "actor": "staff",
+      "screenType": "editor",
+      "purpose": "Criação e edição de categorias com hierarquia",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only"
+      ]
+    },
+    {
+      "screenId": "staff-filter-options",
+      "actor": "staff",
+      "screenType": "settings",
+      "purpose": "Gerenciamento dos valores disponíveis para filtros de produto (marcas, necessidades especiais, etc.)",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only"
+      ]
+    },
+    {
+      "screenId": "staff-pages-list",
+      "actor": "staff",
+      "screenType": "page",
+      "purpose": "Listagem de páginas de conteúdo para gerenciamento",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only"
+      ]
+    },
+    {
+      "screenId": "staff-page-editor",
+      "actor": "staff",
+      "screenType": "editor",
+      "purpose": "Criação e edição de páginas de conteúdo institucional",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only",
+        "rule_tone_friendly_informative"
+      ]
+    },
+    {
+      "screenId": "staff-blog-list",
+      "actor": "staff",
+      "screenType": "page",
+      "purpose": "Listagem de posts do blog para gerenciamento",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only"
+      ]
+    },
+    {
+      "screenId": "staff-blog-editor",
+      "actor": "staff",
+      "screenType": "editor",
+      "purpose": "Criação e edição de posts do blog",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only",
+        "rule_tone_friendly_informative"
+      ]
+    },
+    {
+      "screenId": "staff-store-info",
+      "actor": "staff",
+      "screenType": "settings",
+      "purpose": "Configuração de dados da unidade: endereço, horários de funcionamento e contatos",
+      "supportsCapabilities": [
+        "cap_manage_content",
+        "cap_template_configuration"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only",
+        "rule_brazil_target",
+        "rule_template_matrix_replicable"
+      ]
+    },
+    {
+      "screenId": "staff-branding",
+      "actor": "staff",
+      "screenType": "settings",
+      "purpose": "Configuração de identidade visual: logo e paleta de cores (verde/azul com detalhes em amarelo)",
+      "supportsCapabilities": [
+        "cap_template_configuration"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only",
+        "rule_branding_colors",
+        "rule_template_matrix_replicable"
+      ]
+    },
+    {
+      "screenId": "staff-unit-data",
+      "actor": "staff",
+      "screenType": "settings",
+      "purpose": "Configuração específica de dados da unidade para replicação do modelo em outras franquias",
+      "supportsCapabilities": [
+        "cap_template_configuration"
+      ],
+      "rulesApplied": [
+        "rule_roles_customer_staff",
+        "rule_lang_ptbr_only",
+        "rule_brazil_target",
+        "rule_template_matrix_replicable"
+      ]
+    }
+  ],
+  "journeys": [
+    {
+      "journeyId": "customer-discover-products",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_catalog_browse",
+        "cap_view_promotions"
+      ],
+      "steps": [
+        {
+          "screenId": "home"
+        },
+        {
+          "screenId": "catalog-categories"
+        },
+        {
+          "screenId": "catalog-products",
+          "params": [
+            "catId"
+          ]
+        },
+        {
+          "screenId": "product-detail",
+          "params": [
+            "productId"
+          ]
+        }
+      ]
+    },
+    {
+      "journeyId": "customer-direct-product-access",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_catalog_browse"
+      ],
+      "steps": [
+        {
+          "screenId": "home"
+        },
+        {
+          "screenId": "product-detail",
+          "params": [
+            "productId"
+          ]
+        }
+      ]
+    },
+    {
+      "journeyId": "customer-consult-product",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_catalog_browse",
+        "cap_whatsapp_consultation"
+      ],
+      "steps": [
+        {
+          "screenId": "home"
+        },
+        {
+          "screenId": "catalog-products",
+          "params": [
+            "catId"
+          ]
+        },
+        {
+          "screenId": "product-detail",
+          "params": [
+            "productId"
+          ]
+        }
+      ]
+    },
+    {
+      "journeyId": "customer-explore-promotions",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_view_promotions",
+        "cap_catalog_browse"
+      ],
+      "steps": [
+        {
+          "screenId": "home"
+        },
+        {
+          "screenId": "promotions"
+        },
+        {
+          "screenId": "product-detail",
+          "params": [
+            "productId"
+          ]
+        }
+      ]
+    },
+    {
+      "journeyId": "customer-visit-store",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_store_information"
+      ],
+      "steps": [
+        {
+          "screenId": "home"
+        },
+        {
+          "screenId": "about-store"
+        },
+        {
+          "screenId": "store-location"
+        }
+      ]
+    },
+    {
+      "journeyId": "customer-contact-store",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_contact",
+        "cap_store_information"
+      ],
+      "steps": [
+        {
+          "screenId": "home"
+        },
+        {
+          "screenId": "store-location"
+        },
+        {
+          "screenId": "contact"
+        },
+        {
+          "screenId": "contact-confirmation"
+        }
+      ]
+    },
+    {
+      "journeyId": "customer-direct-contact",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_contact"
+      ],
+      "steps": [
+        {
+          "screenId": "contact"
+        },
+        {
+          "screenId": "contact-confirmation"
+        }
+      ]
+    },
+    {
+      "journeyId": "customer-read-blog",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_blog"
+      ],
+      "steps": [
+        {
+          "screenId": "home"
+        },
+        {
+          "screenId": "blog-list"
+        },
+        {
+          "screenId": "blog-post",
+          "params": [
+            "slug"
+          ]
+        }
+      ]
+    },
+    {
+      "journeyId": "customer-read-content-page",
+      "actor": "customer",
+      "supportsCapabilities": [
+        "cap_store_information"
+      ],
+      "steps": [
+        {
+          "screenId": "home"
+        },
+        {
+          "screenId": "content-page",
+          "params": [
+            "slug"
+          ]
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-manage-catalog",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-login"
+        },
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-products-list"
+        },
+        {
+          "screenId": "staff-product-editor",
+          "params": [
+            "productId?"
+          ]
+        },
+        {
+          "screenId": "staff-products-list"
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-manage-categories",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-login"
+        },
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-categories-list"
+        },
+        {
+          "screenId": "staff-category-editor",
+          "params": [
+            "categoryId?"
+          ]
+        },
+        {
+          "screenId": "staff-categories-list"
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-manage-filter-options",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-login"
+        },
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-filter-options"
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-manage-content-pages",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-login"
+        },
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-pages-list"
+        },
+        {
+          "screenId": "staff-page-editor",
+          "params": [
+            "pageId?"
+          ]
+        },
+        {
+          "screenId": "staff-pages-list"
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-manage-blog",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-login"
+        },
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-blog-list"
+        },
+        {
+          "screenId": "staff-blog-editor",
+          "params": [
+            "postId?"
+          ]
+        },
+        {
+          "screenId": "staff-blog-list"
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-update-store-info",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_manage_content",
+        "cap_template_configuration"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-login"
+        },
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-store-info"
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-configure-branding",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_template_configuration"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-login"
+        },
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-branding"
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-configure-new-unit",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_template_configuration"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-login"
+        },
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-unit-data"
+        },
+        {
+          "screenId": "staff-store-info"
+        },
+        {
+          "screenId": "staff-branding"
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-quick-product-edit",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-product-editor",
+          "params": [
+            "productId"
+          ]
+        }
+      ]
+    },
+    {
+      "journeyId": "staff-quick-blog-edit",
+      "actor": "staff",
+      "supportsCapabilities": [
+        "cap_manage_content"
+      ],
+      "steps": [
+        {
+          "screenId": "staff-dashboard"
+        },
+        {
+          "screenId": "staff-blog-editor",
+          "params": [
+            "postId"
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+
+## Capabilities Summary
+```json
+{
+  "capabilitiesSummary": [
+    {
+      "capabilityId": "cap_catalog_browse",
+      "description": "Permite navegação pública no catálogo, incluindo listagem por categoria, filtros, visualização de detalhes do produto e seções de destaque ou promoção.",
+      "isOptional": false,
+      "impliesUI": [
+        "category navigation",
+        "product list",
+        "filters panel",
+        "product detail view",
+        "featured/promotions sections",
+        "availability and contact actions"
+      ]
+    },
+    {
+      "capabilityId": "cap_store_information",
+      "description": "Permite visualizar informações institucionais da loja, como endereço, horários e canais de contato.",
+      "isOptional": false,
+      "impliesUI": [
+        "store information page or section",
+        "contact summary",
+        "business hours display"
+      ]
+    },
+    {
+      "capabilityId": "cap_contact",
+      "description": "Permite que usuários enviem mensagens ao pet shop e recebam confirmação.",
+      "isOptional": false,
+      "impliesUI": [
+        "contact form",
+        "contact confirmation state"
+      ]
+    },
+    {
+      "capabilityId": "cap_blog",
+      "description": "Permite listar e visualizar conteúdos informativos em formato de blog.",
+      "isOptional": true,
+      "impliesUI": [
+        "blog list",
+        "blog post view"
+      ]
+    },
+    {
+      "capabilityId": "cap_manage_content",
+      "description": "Permite que usuários administrativos gerenciem produtos, categorias, páginas, blog e informações da loja.",
+      "isOptional": false,
+      "impliesUI": [
+        "admin dashboard",
+        "product management screens",
+        "category management screens",
+        "content editing screens",
+        "store information editing screens"
+      ]
+    },
+    {
+      "capabilityId": "cap_template_configuration",
+      "description": "Permite configurar branding e dados estruturais reutilizáveis do site.",
+      "isOptional": false,
+      "impliesUI": [
+        "branding configuration screen",
+        "store/unit configuration screen"
+      ]
+    },
+    {
+      "capabilityId": "cap_advanced_catalog_features",
+      "description": "Permite recursos avançados no catálogo, como filtros detalhados, destaques e promoções.",
+      "isOptional": true,
+      "impliesUI": [
+        "advanced filters",
+        "availability indicators",
+        "promotions sections",
+        "featured products sections",
+        "whatsapp consultation actions"
+      ]
+    }
+  ]
+}
+``` </promptcustom> </plugin-agent-playground-100554>

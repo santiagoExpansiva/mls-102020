@@ -8,7 +8,7 @@ export class PluginCollabCoreIndex extends PluginBaseIndex {
         return [
             {
                 category: 'Services',
-                scope: ['l2ServicesRight', 'l3ServicesRight'],
+                scope: ['l2ServicesRight', 'l3ServicesRight', 'l4ServicesRight'],
                 priority: 1,
                 auth: ['*'],
                 widget: '_102020_servicePreview'
@@ -20,10 +20,28 @@ export class PluginCollabCoreIndex extends PluginBaseIndex {
                 auth: ['*'],
                 widget: '_102020_serviceGenome'
             },
+            {
+                category: 'Services',
+                scope: ['l6ServicesLeft'],
+                priority: 1,
+                auth: ['*'],
+                widget: '_102020_serviceExploreProjects'
+            },
+            {
+                category: 'Services',
+                scope: ['l5ServicesLeft'],
+                priority: 1,
+                auth: ['*'],
+                widget: '_102020_serviceProject'
+            },
+            {
+                category: 'Services',
+                scope: ['l4ServicesLeft'],
+                priority: 1,
+                auth: ['*'],
+                widget: '_102020_servicePage'
+            }
         ];
-
-
-
     }
 
 

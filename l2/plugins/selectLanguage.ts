@@ -6,11 +6,12 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { StateLitElement } from '/_102027_/l2/stateLitElement.js';
 import { getConfigProject, updateConfigProject } from '/_102027_/l2/libProjectConfig.js';
 import { languages as allLanguages, ICollabLanguage } from '/_102027_/l2/collabLanguages.js';
-import { executeBeforePrompt, loadAgent } from '/_102027_/l2/aiAgentOrchestration.js';
+import { executeBeforePromptStream, loadAgent } from '/_102027_/l2/aiAgentOrchestration.js';
 import { createThread, getUserId } from '/_102025_/l2/collabMessagesHelper.js';
 import { getThreadByName } from '/_102025_/l2/collabMessagesIndexedDB.js';
 import { getTemporaryContext } from '/_102027_/l2/aiAgentHelper.js';
 import { getAuraState, setAuraState, saveAuraProject } from '/_102020_/l2/auraState.js';
+import { openElementInServiceDetails } from '/_102027_/l2/libCommom.js';
 import { ITask, setTask, getTask, getTasksByScope, hasRunning, clearScope, subscribeTaskManager } from '/_102020_/l2/taskManager.js';
 import '/_102020_/l2/plugins/navHeader.js';
 
@@ -106,6 +107,7 @@ export class PluginSelectLanguage extends StateLitElement {
 
     private _unsubTasks: (() => void) | undefined;
     private threadCache = new Map<string, Promise<any>>();
+    private _taskInfoByKey = new Map<string, { taskId: string; task?: mls.msg.TaskData; message?: mls.msg.Message }>();
 
     connectedCallback() {
         super.connectedCallback();
@@ -209,7 +211,11 @@ export class PluginSelectLanguage extends StateLitElement {
         }
     }
 
-    private async executeAgent(agentName: string, prompt: string) {
+    private async executeAgent(
+        agentName: string,
+        prompt: string,
+        onTaskCreated?: (data: { taskId: string; task?: mls.msg.TaskData; message?: mls.msg.Message }) => void
+    ): Promise<{ taskId: string; task?: mls.msg.TaskData; message?: mls.msg.Message }> {
         const fullName = '_102020_/l2/serviceExploreProjects';
 
         let threadPromise = this.threadCache.get(fullName);
@@ -224,20 +230,30 @@ export class PluginSelectLanguage extends StateLitElement {
 
         const thread = await threadPromise;
         const userId = getUserId();
-        if (!userId) return;
+        if (!userId) return { taskId: '' };
 
         const threadId = thread?.threadId;
-        if (!threadId) return;
+        if (!threadId) return { taskId: '' };
 
         const moduleAgent = await loadAgent(agentName);
         if (!moduleAgent) throw new Error('Invalid agent');
         const context = getTemporaryContext(threadId, userId, prompt);
-        await executeBeforePrompt(moduleAgent, context);
+        let taskId = '';
+        let task: mls.msg.TaskData | undefined;
+        let message: mls.msg.Message | undefined;
+        for await (const event of executeBeforePromptStream(moduleAgent, context)) {
+            if (event.type === 'task-created') {
+                taskId = event.taskId; task = event.task; message = event.message;
+                onTaskCreated?.({ taskId, task, message });
+            }
+        }
+        return { taskId, task, message };
     }
 
     private async _executeAddLanguage() {
         if (this._addSelected.length === 0) return;
-        if (hasRunning('language:add')) return;
+        const runningAddTasks = getTasksByScope('language:add');
+        if ([...runningAddTasks.values()].some(t => t.status === 'running')) return;
 
         clearScope('language:add');
         const langs = [...this._addSelected];
@@ -253,7 +269,9 @@ export class PluginSelectLanguage extends StateLitElement {
         this._addSearch = '';
 
         try {
-            await this.executeAgent('agentAddLanguage', prompt);
+            await this.executeAgent('agentAddLanguage', prompt, (data) => {
+                this._taskInfoByKey.set(taskKey, data);
+            });
             if (this.config && this.selectedProject) {
                 const existing: any[] = (this.config as any).languages ?? [];
                 const newEntries = langs
@@ -415,8 +433,8 @@ export class PluginSelectLanguage extends StateLitElement {
     }
 
     private _renderCustom() {
-        const isRunning = hasRunning('language:add');
         const addTasks = getTasksByScope('language:add');
+        const isRunning = [...addTasks.values()].some(t => t.status === 'running');
         const q = this._addSearch.toLowerCase();
         const alreadyAdded = new Set(this._languages);
         const selectedSet = new Set(this._addSelected);
@@ -550,8 +568,17 @@ export class PluginSelectLanguage extends StateLitElement {
                                     ${task.message ? html`<span class="text-sm text-red-400 dark:text-red-500 truncate">${task.message}</span>` : ''}
                                     <button
                                         class="ml-auto text-sm text-indigo-500 dark:text-indigo-400 hover:underline cursor-pointer whitespace-nowrap"
-                                        @click=${() => {
-                                            // TODO: acompanhar task
+                                        @click=${async () => {
+                                            const info = this._taskInfoByKey.get(taskKey);
+                                            if (!info?.task) return;
+                                            await import('/_102025_/l2/collabMessagesTaskInfo.js');
+                                            const el = document.createElement('collab-messages-task-info-102025');
+                                            const messageId = info.message?.createAt ?? '';
+                                            el.setAttribute('messageId', messageId);
+                                            if (info.task.PK) el.setAttribute('taskId', info.task.PK);
+                                            (el as any)['task'] = info.task;
+                                            (el as any)['message'] = info.message;
+                                            openElementInServiceDetails(el);
                                         }}
                                     >${this.msg.followTask}</button>
                                 </div>
