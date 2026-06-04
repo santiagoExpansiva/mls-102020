@@ -142,7 +142,7 @@ async function beforeClarificationStep(
     await appendLongTermMemory(context, { defsFileReference: json.fileReference });
     const intentsToClarification: mls.msg.AgentIntent[] = processOutput(agent, context, parentStep, step, hookSequential, json);
     await import('/_102020_/l2/agents/molecules/agentNewMoleculePlannerClarification.js');
-    const clariEl = document.createElement('agents--molecules--new-molecule-planner-clarification-102020');
+    const clariEl = document.createElement('agents--molecules--agent-new-molecule-planner-clarification-102020');
     (clariEl as any).data = json;
 
     clariEl.addEventListener('clarification-finish', (e: Event) => {

@@ -61,7 +61,7 @@ export interface ClarificationData {
     visualRequirements: string[];
 }
 
-@customElement('agents--molecules--new-molecule-planner-clarification-102020')
+@customElement('agents--molecules--agent-new-molecule-planner-clarification-102020')
 export class AgentNewMoleculePlannerClarification102020 extends StateLitElement {
 
     private msg: MessageType = messages['en'];
