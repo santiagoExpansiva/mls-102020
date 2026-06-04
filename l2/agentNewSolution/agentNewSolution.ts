@@ -142,10 +142,7 @@ async function afterPromptStep(
     step: plannedStep,
   }));
 
-  const updateStatus = createUpdateStatusIntent(context, parentStep, step, hookSequential, 'completed');
-  console.log(`[${agent.agentName}](afterPromptStep) created ${addStepIntents.length} planned steps for planId=${(plannedSteps[0].planning as StepPlanning).planId}`, addStepIntents);  
-  // return [...addStepIntents, updateStatus];
-  return [ updateStatus]; // test
+  return addStepIntents;
 }
 
 function createUpdateStatusIntent(
@@ -171,9 +168,9 @@ function buildPlannedTree(initialPlan: InitialNewSolutionPlan): PlannedAgentStep
   const title = (planId: NewSolutionPlanId) => getLocalizedTitle(initialPlan, planId);
 
   const requirementsChildren: PlannedAIPayload[] = [
-    plannedAgent('req-discover-scope', 'agentDiscoverSolutionScope', title('req-discover-scope'), ['org-requirements'], 'sequential'),
-    plannedClarification('req-clarification-answer', title('req-clarification-answer'), ['req-discover-scope']),
-    plannedAgent('req-recommend-implementations', 'agentRecommendImplementations', title('req-recommend-implementations'), ['req-clarification-answer'], 'sequential'),
+    plannedClarification('req-clarification-answer', title('req-clarification-answer'), ['org-requirements']),
+    plannedAgent('req-discover-scope', 'agentDiscoverSolutionScope', title('req-discover-scope'), ['req-clarification-answer'], 'sequential'),
+    plannedAgent('req-recommend-implementations', 'agentRecommendImplementations', title('req-recommend-implementations'), ['req-discover-scope'], 'sequential'),
     plannedClarification('req-implementation-decisions', title('req-implementation-decisions'), ['req-recommend-implementations']),
   ];
 
@@ -214,7 +211,7 @@ function buildPlannedTree(initialPlan: InitialNewSolutionPlan): PlannedAgentStep
   ];
 
   return [
-    plannedAgent('org-requirements', 'agentNewSolutionRequirements', title('org-requirements'), [], 'sequential', undefined, requirementsChildren),
+    plannedAgent('org-requirements', 'agentNewSolutionRequirements', title('org-requirements'), [], 'sequential', undefined, requirementsChildren, 'pending'),
     plannedAgent('org-planner', 'agentNewSolutionPlanner', title('org-planner'), ['org-requirements'], 'sequential', undefined, plannerChildren),
     plannedAgent('org-materialization', 'agentNewSolutionMaterialization', title('org-materialization'), ['plan-validate-solution-coverage'], 'manual_later'),
   ];
@@ -228,13 +225,14 @@ function plannedAgent(
   executionMode: PlannedExecutionMode,
   dynamicSource?: StepPlanning['dynamicSource'],
   nextSteps: PlannedAIPayload[] = [],
+  status: mls.msg.AIStepStatus = 'waiting_dependency',
 ): PlannedAgentStep {
   return {
     type: 'agent',
     stepId: 0,
     interaction: null,
     stepTitle,
-    status: 'waiting_dependency',
+    status,
     nextSteps,
     agentName,
     prompt: JSON.stringify({ planId }),
