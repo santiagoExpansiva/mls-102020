@@ -211,7 +211,7 @@ function buildPlannedTree(initialPlan: InitialNewSolutionPlan): PlannedAgentStep
   ];
 
   return [
-    plannedAgent('org-requirements', 'agentNewSolutionRequirements', title('org-requirements'), [], 'sequential', undefined, requirementsChildren, 'pending'),
+    plannedAgent('org-requirements', 'agentNewSolutionRequirements', title('org-requirements'), [], 'sequential', undefined, requirementsChildren, 'waiting_human_input'),
     plannedAgent('org-planner', 'agentNewSolutionPlanner', title('org-planner'), ['org-requirements'], 'sequential', undefined, plannerChildren),
     plannedAgent('org-materialization', 'agentNewSolutionMaterialization', title('org-materialization'), ['plan-validate-solution-coverage'], 'manual_later'),
   ];

@@ -230,6 +230,11 @@ async function beforePromptStep(
     parentStepId: parentStep.stepId,
     systemPrompt: buildSystemPrompt(),
     humanPrompt: buildHumanPrompt(args, initialPlan, clarificationAnswer),
+    tools: [discoverSolutionScopeToolSchema as unknown as mls.msg.LLMTool],
+    toolChoice: {
+      type: 'function',
+      function: { name: DISCOVER_SOLUTION_SCOPE_TOOL_NAME },
+    },
   };
 
   return [continueIntent];
@@ -275,8 +280,7 @@ async function afterPromptStep(
 
 function buildSystemPrompt(): string {
   return systemPrompt
-    .split('{{toolName}}').join(DISCOVER_SOLUTION_SCOPE_TOOL_NAME)
-    .replace('{{toolSchema}}', JSON.stringify(discoverSolutionScopeToolSchema, null, 2));
+    .split('{{toolName}}').join(DISCOVER_SOLUTION_SCOPE_TOOL_NAME);
 }
 
 function buildHumanPrompt(
@@ -616,52 +620,12 @@ Use English camelCase identifiers for domain, actorId, capabilityId, and artifac
 
 ## Tool mode
 
-Behave as if you are calling the tool "{{toolName}}".
-The current message interface still expects a JSON payload, so encode the tool call in this exact shape:
-
-{
-  "type": "flexible",
-  "result": {
-    "toolName": "{{toolName}}",
-    "arguments": {
-      "type": "flexible",
-      "result": {
-        "runId": "run01",
-        "stepId": "03-discover-scope",
-        "schemaVersion": "2026-06-02",
-        "status": "ok",
-        "result": {
-          "domain": "",
-          "summary": "",
-          "actors": [],
-          "capabilities": [],
-          "artifactSignals": {
-            "pages": [],
-            "workflows": [],
-            "plugins": [],
-            "agents": [],
-            "horizontalModules": [],
-            "mdm": [],
-            "metrics": [],
-            "usecases": []
-          },
-          "businessRisks": [],
-          "missingContext": []
-        },
-        "questions": [],
-        "trace": []
-      }
-    }
-  }
-}
-
-## Tool schema
-
-{{toolSchema}}
+Call the "{{toolName}}" tool with the complete structured result.
+Do not return prose.
 
 ## Rules
 
-- Return only valid JSON. Do not use markdown fences.
+- The tool arguments must satisfy the provided schema.
 - MDM is mandatory. Always include at least one MDM signal and explain why it is needed.
 - If the clarification answer requests initial metrics/dashboard, include metrics and admin dashboard signals.
 - Identify backend use case needs when the solution has writes, lifecycle transitions, BFF commands, metric updates, or aggregate maintenance.
