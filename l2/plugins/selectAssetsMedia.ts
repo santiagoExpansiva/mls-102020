@@ -337,12 +337,12 @@ export class PluginSelectAssetsMedia extends StateLitElement {
     private _renderCategoryTabs() {
         const counts = this._counts;
         const cats: Array<{ key: MediaCategory | 'all'; label: string }> = [
-            { key: 'all',   label: this.msg.catAll   },
-            { key: 'image', label: this.msg.catImage },
-            { key: 'icon',  label: this.msg.catIcon  },
-            { key: 'video', label: this.msg.catVideo },
-            { key: 'audio', label: this.msg.catAudio },
-            { key: 'other', label: this.msg.catOther },
+            { key: 'all' as const,   label: this.msg.catAll   },
+            { key: 'image' as const, label: this.msg.catImage },
+            { key: 'icon' as const,  label: this.msg.catIcon  },
+            { key: 'video' as const, label: this.msg.catVideo },
+            { key: 'audio' as const, label: this.msg.catAudio },
+            { key: 'other' as const, label: this.msg.catOther },
         ].filter(c => c.key === 'all' || counts[c.key as MediaCategory] > 0);
 
         return html`
