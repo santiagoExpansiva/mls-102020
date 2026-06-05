@@ -396,8 +396,9 @@ function tryNormalizePlannerOutput<T>(value: unknown, config: PlannerExtractConf
   const output = parseMaybeJson(value);
   if (!isRecord(output)) return null;
   if (output.schemaVersion !== undefined && !isKnownSchemaVersion(output.schemaVersion, config)) return null;
-  if (output.stepId !== undefined && !isKnownStepId(output.stepId, config) && output.result === undefined) return null;
+  if (output.stepId !== undefined && !isKnownStepId(output.stepId, config)) return null;
   if (output.result === undefined) return null;
+  if (isToolWrapper(output.result, config.toolName)) return null;
 
   return {
     runId: optionalString(output.runId, 'runId') || 'provider-tool-call',
@@ -408,6 +409,11 @@ function tryNormalizePlannerOutput<T>(value: unknown, config: PlannerExtractConf
     questions: normalizeStringList(output.questions, 'questions'),
     trace: normalizeStringList(output.trace, 'trace'),
   };
+}
+
+function isToolWrapper(value: unknown, toolName: string): boolean {
+  const record = parseMaybeJson(value);
+  return isRecord(record) && record.toolName === toolName && record.arguments !== undefined;
 }
 
 function isKnownStepId<T>(value: unknown, config: PlannerExtractConfig<T>): boolean {
