@@ -399,6 +399,7 @@ function tryNormalizePlannerOutput<T>(value: unknown, config: PlannerExtractConf
   if (output.stepId !== undefined && !isKnownStepId(output.stepId, config)) return null;
   if (output.result === undefined) return null;
   if (isToolWrapper(output.result, config.toolName)) return null;
+  if (isNestedPlannerOutput(output.result, config)) return null;
 
   return {
     runId: optionalString(output.runId, 'runId') || 'provider-tool-call',
@@ -414,6 +415,14 @@ function tryNormalizePlannerOutput<T>(value: unknown, config: PlannerExtractConf
 function isToolWrapper(value: unknown, toolName: string): boolean {
   const record = parseMaybeJson(value);
   return isRecord(record) && record.toolName === toolName && record.arguments !== undefined;
+}
+
+function isNestedPlannerOutput<T>(value: unknown, config: PlannerExtractConfig<T>): boolean {
+  const record = parseMaybeJson(value);
+  if (!isRecord(record)) return false;
+  if (record.result === undefined) return false;
+  if (record.stepId !== undefined) return isKnownStepId(record.stepId, config);
+  return record.runId !== undefined || record.schemaVersion !== undefined || isPlannerStatus(record.status);
 }
 
 function isKnownStepId<T>(value: unknown, config: PlannerExtractConfig<T>): boolean {
