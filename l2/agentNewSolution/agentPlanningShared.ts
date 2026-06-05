@@ -339,29 +339,71 @@ function tryExtractToolArguments<T>(value: unknown, config: PlannerExtractConfig
   return normalizeToolArguments(record.arguments, config);
 }
 
-function normalizeToolArguments<T>(value: unknown, config: PlannerExtractConfig<T>): PlannerOutput<T> {
+function normalizeToolArguments<T>(value: unknown, config: PlannerExtractConfig<T>, depth: number = 0): PlannerOutput<T> {
   const args = parseMaybeJson(value);
   if (!isRecord(args)) throw new Error('tool arguments must be an object');
 
   const directOutput = tryNormalizePlannerOutput(args, config);
   if (directOutput) return directOutput;
 
-  const output = tryNormalizePlannerOutput(parseMaybeJson(args.result), config);
+  const resultValue = parseMaybeJson(args.result);
+  const output = tryNormalizePlannerOutput(resultValue, config);
   if (output) return output;
 
+  const outputFromNestedResultTool = tryExtractToolArguments(resultValue, config);
+  if (outputFromNestedResultTool) return outputFromNestedResultTool;
+
+  if (args.arguments !== undefined && depth < 3) {
+    const outputFromNestedArguments = tryNormalizeNestedToolArguments(args.arguments, config, depth + 1);
+    if (outputFromNestedArguments) return outputFromNestedArguments;
+  }
+
+  const bareResultOutput = tryNormalizeBareResult(args, config);
+  if (bareResultOutput) return bareResultOutput;
+
   throw new Error(`tool arguments do not contain ${config.stepId} output`);
+}
+
+function tryNormalizeNestedToolArguments<T>(value: unknown, config: PlannerExtractConfig<T>, depth: number): PlannerOutput<T> | null {
+  try {
+    return normalizeToolArguments(value, config, depth);
+  } catch {
+    return null;
+  }
+}
+
+function tryNormalizeBareResult<T>(value: Record<string, unknown>, config: PlannerExtractConfig<T>): PlannerOutput<T> | null {
+  try {
+    return {
+      runId: optionalString(value.runId, 'runId') || 'provider-tool-call',
+      stepId: config.stepId,
+      schemaVersion: PLANNER_SCHEMA_VERSION,
+      status: isPlannerStatus(value.status) ? value.status : 'ok',
+      result: config.normalizeResult(value),
+      questions: normalizeStringList(value.questions, 'questions'),
+      trace: normalizeStringList(value.trace, 'trace'),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isPlannerStatus(value: unknown): value is PlannerStatus {
+  return value === 'ok' || value === 'needs_input' || value === 'failed';
 }
 
 function tryNormalizePlannerOutput<T>(value: unknown, config: PlannerExtractConfig<T>): PlannerOutput<T> | null {
   const output = parseMaybeJson(value);
   if (!isRecord(output)) return null;
-  if (!isKnownStepId(output.stepId, config) || !isKnownSchemaVersion(output.schemaVersion, config)) return null;
+  if (output.schemaVersion !== undefined && !isKnownSchemaVersion(output.schemaVersion, config)) return null;
+  if (output.stepId !== undefined && !isKnownStepId(output.stepId, config) && output.result === undefined) return null;
+  if (output.result === undefined) return null;
 
   return {
-    runId: assertString(output.runId, 'runId'),
+    runId: optionalString(output.runId, 'runId') || 'provider-tool-call',
     stepId: config.stepId,
     schemaVersion: PLANNER_SCHEMA_VERSION,
-    status: assertPlannerStatus(output.status, 'status'),
+    status: output.status === undefined ? 'ok' : assertPlannerStatus(output.status, 'status'),
     result: config.normalizeResult(output.result),
     questions: normalizeStringList(output.questions, 'questions'),
     trace: normalizeStringList(output.trace, 'trace'),
