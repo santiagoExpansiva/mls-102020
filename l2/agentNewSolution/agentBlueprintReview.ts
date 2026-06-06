@@ -7,8 +7,8 @@ import {
   assertRecord,
   assertString,
   createPlannerPromptReadyIntent,
-  createPlannerToolSchema,
   createPlannerUpdateStatusIntent,
+  createPlannerVariableToolSchema,
   extractPlannerOutput,
   getPlannerOutput,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
@@ -46,33 +46,34 @@ export interface BlueprintReviewResult {
 
 export type BlueprintReviewOutput = PlannerOutput<BlueprintReviewResult>;
 
-const blueprintReviewToolSchema = createPlannerToolSchema(
-  BLUEPRINT_REVIEW_TOOL_NAME,
-  'Submit a structural review of the newSolution blueprint.',
-  BLUEPRINT_REVIEW_STEP_ID,
-  {
-    type: 'object',
-    additionalProperties: false,
-    required: ['issues', 'recommendedFixes'],
-    properties: {
-      issues: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['severity', 'code', 'message', 'path', 'evidence'],
-          properties: {
-            severity: { enum: ['error', 'warning', 'info'] },
-            code: { type: 'string' },
-            message: { type: 'string' },
-            path: { type: 'string' },
-            evidence: { type: 'array', items: { type: 'string' } },
-          },
+const blueprintReviewResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['issues', 'recommendedFixes'],
+  properties: {
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['severity', 'code', 'message', 'path', 'evidence'],
+        properties: {
+          severity: { enum: ['error', 'warning', 'info'] },
+          code: { type: 'string' },
+          message: { type: 'string' },
+          path: { type: 'string' },
+          evidence: { type: 'array', items: { type: 'string' } },
         },
       },
-      recommendedFixes: { type: 'array', items: { type: 'string' } },
     },
-  }
+    recommendedFixes: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+const blueprintReviewToolSchema = createPlannerVariableToolSchema(
+  BLUEPRINT_REVIEW_TOOL_NAME,
+  'Submit a structural review of the newSolution blueprint.',
+  blueprintReviewResultSchema
 );
 
 async function beforePromptStep(
@@ -192,8 +193,20 @@ Review the blueprint for gaps before specialized planners run.
 Use the same language as the user for messages, recommended fixes, questions, and trace.
 
 ## Tool mode
-Call the "{{toolName}}" tool with the complete structured result.
+Call the "{{toolName}}" tool with the review payload.
 Do not return prose.
+
+## Output contract
+The tool arguments must contain only:
+- status: "ok", "needs_input", or "failed".
+- result.issues: array.
+- result.recommendedFixes: array of strings.
+- questions: array of strings.
+- trace: array of strings.
+
+Do not include type, runId, stepId, schemaVersion, toolName, or arguments. The harness fills those fields.
+Use status "ok" when the review report was generated, even when issues were found.
+Use status "needs_input" only when the review itself cannot be completed without another answer.
 
 ## Rules
 - Detect missing selection or confirmation of the domain's core subject, resource, service, product, or person when a commitment depends on it.

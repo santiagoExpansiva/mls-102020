@@ -162,6 +162,39 @@ export function createPlannerToolSchema(
   } as unknown as mls.msg.LLMTool;
 }
 
+export function createPlannerVariableToolSchema(
+  toolName: string,
+  description: string,
+  resultSchema: Record<string, unknown>,
+): mls.msg.LLMTool {
+  plannerResultSchemasByToolName[toolName] = resultSchema;
+
+  return {
+    type: 'function',
+    function: {
+      name: toolName,
+      description,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['status', 'result', 'questions', 'trace'],
+        properties: {
+          status: { enum: ['ok', 'needs_input', 'failed'] },
+          result: resultSchema,
+          questions: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          trace: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+      },
+    },
+  } as unknown as mls.msg.LLMTool;
+}
+
 export function extractPlannerOutput<T>(payload: unknown, config: PlannerExtractConfig<T>): PlannerOutput<T> {
   const value = parseMaybeJson(payload);
   if (!isRecord(value)) throw new Error('tool payload must be an object');
