@@ -114,6 +114,7 @@ const planWorkflowDefinitionToolSchema = createPlannerVariableToolSchema(
           purpose: { type: 'string' },
           executionMode: { enum: ['documentationOnly', 'uiState', 'entityLifecycle', 'taskWorkflow', 'automation'] },
           createsTask: { type: 'boolean' },
+          createsTaskReason: { type: ['string', 'null'] },
           taskConfig: {
             type: 'object',
             additionalProperties: false,
@@ -272,10 +273,11 @@ function normalizePlanWorkflowDefinitionResult(value: unknown): PlanWorkflowDefi
   const result = assertRecord(value, 'result');
   const workflowDefinition = assertRecord(result.workflowDefinition, 'result.workflowDefinition');
   const defsPlan = assertRecord(result.defsPlan, 'result.defsPlan');
+  const { createsTaskReason: _createsTaskReason, ...normalizedWorkflowDefinition } = workflowDefinition;
 
   return {
     workflowDefinition: {
-      ...workflowDefinition,
+      ...normalizedWorkflowDefinition,
       workflowId: assertString(workflowDefinition.workflowId, 'result.workflowDefinition.workflowId'),
       title: assertString(workflowDefinition.title, 'result.workflowDefinition.title'),
       purpose: assertString(workflowDefinition.purpose, 'result.workflowDefinition.purpose'),
@@ -399,6 +401,7 @@ Do not return prose.
 - Keep executionMode and createsTask identical to the index unless the index is internally inconsistent; if corrected, explain it in trace.
 - If createsTask is true, taskConfig must be filled.
 - If createsTask is false, explain task-related choices in implementationSuggestions.
+- Do not return createsTaskReason; explain task reasoning in implementationSuggestions or trace.
 - Transitions must have from, to, trigger, and actor.
 - Transition actions must only write entity fields and enum values declared in the final solution plan.
 - Include persistenceRefs with module-owned table ids when transitions read or write local persisted state.
