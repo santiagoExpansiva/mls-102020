@@ -235,7 +235,7 @@ export function createParallelDynamicAgentStepIntent(
       interaction: {
         input: [{
           type: 'system',
-          content: `<!-- modelType: codeinstruct -->\nParallel dynamic controller for ${agentName}. Child prompts are prepared by beforePromptStep with one selector arg per slot.`,
+          content: '<!-- modelType: codeinstruct -->',
         }],
         cost: 0,
         trace: [`queued ${args.length} parallel dynamic args for ${agentName}`],
