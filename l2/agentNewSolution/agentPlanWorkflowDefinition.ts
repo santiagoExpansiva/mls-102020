@@ -223,7 +223,7 @@ async function afterPromptStep(
   let status: mls.msg.AIStepStatus = 'completed';
   let traceMsg: string | undefined;
   let output: PlanWorkflowDefinitionOutput | undefined;
-  const workflowSelector = step.prompt || '';
+  const workflowSelector = getWorkflowSelector(step);
 
   try {
     const payload = step.interaction?.payload?.[0];
@@ -299,6 +299,7 @@ function validatePlanWorkflowDefinitionOutput(output: PlanWorkflowDefinitionOutp
   const defsPlan = output.result.defsPlan;
   const validModes = new Set(['documentationOnly', 'uiState', 'entityLifecycle', 'taskWorkflow', 'automation']);
   if (!validModes.has(workflow.executionMode)) throw new Error(`invalid workflow executionMode: ${workflow.executionMode}`);
+  if (!workflowSelector) throw new Error('workflow selector not found in step prompt or prepared input');
   if (workflow.workflowId !== workflowSelector) {
     throw new Error(`workflowDefinition.workflowId must match selector ${workflowSelector}`);
   }
@@ -314,6 +315,31 @@ function validatePlanWorkflowDefinitionOutput(output: PlanWorkflowDefinitionOutp
     if (states.length === 0) throw new Error(`workflow ${workflow.workflowId} must include states`);
     if (transitions.length === 0) throw new Error(`workflow ${workflow.workflowId} must include transitions`);
   }
+}
+
+function getWorkflowSelector(step: mls.msg.AIAgentStep): string {
+  return normalizeSelector(step.prompt)
+    || extractSelectorFromPreparedInput(step, 'Current workflow selector')
+    || '';
+}
+
+function extractSelectorFromPreparedInput(step: mls.msg.AIAgentStep, title: string): string {
+  const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`## ${escapedTitle}\\s*\\n([^\\n]+)`);
+  for (const input of step.interaction?.input || []) {
+    if (input.type !== 'human') continue;
+    const match = pattern.exec(input.content);
+    const selector = normalizeSelector(match?.[1]);
+    if (selector) return selector;
+  }
+  return '';
+}
+
+function normalizeSelector(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const selector = value.trim();
+  if (!selector || selector.startsWith('{') || selector.startsWith('[')) return '';
+  return selector;
 }
 
 function buildHumanPrompt(

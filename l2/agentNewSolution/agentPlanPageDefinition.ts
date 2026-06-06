@@ -333,7 +333,7 @@ async function afterPromptStep(
   let status: mls.msg.AIStepStatus = 'completed';
   let traceMsg: string | undefined;
   let output: PlanPageDefinitionOutput | undefined;
-  const pageSelector = step.prompt || '';
+  const pageSelector = getPageSelector(step);
 
   try {
     const payload = step.interaction?.payload?.[0];
@@ -490,6 +490,7 @@ function optionalStringValue(value: unknown): string | undefined {
 
 function validatePlanPageDefinitionOutput(output: PlanPageDefinitionOutput, pageSelector: string, workflowIndex: PlanWorkflowIndexOutput): void {
   const page = output.result.pageDefinition;
+  if (!pageSelector) throw new Error('page selector not found in step prompt or prepared input');
   if (!page.pageId || page.pageId !== pageSelector) {
     throw new Error(`pageDefinition.pageId must match selector ${pageSelector}`);
   }
@@ -504,6 +505,31 @@ function validatePlanPageDefinitionOutput(output: PlanPageDefinitionOutput, page
     if (!Array.isArray(page.sections)) throw new Error('pageDefinition.sections must be present');
     validateSpecificActionRequiredInputs(page, output.result.bffCommands);
   }
+}
+
+function getPageSelector(step: mls.msg.AIAgentStep): string {
+  return normalizeSelector(step.prompt)
+    || extractSelectorFromPreparedInput(step, 'Current page selector')
+    || '';
+}
+
+function extractSelectorFromPreparedInput(step: mls.msg.AIAgentStep, title: string): string {
+  const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`## ${escapedTitle}\\s*\\n([^\\n]+)`);
+  for (const input of step.interaction?.input || []) {
+    if (input.type !== 'human') continue;
+    const match = pattern.exec(input.content);
+    const selector = normalizeSelector(match?.[1]);
+    if (selector) return selector;
+  }
+  return '';
+}
+
+function normalizeSelector(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const selector = value.trim();
+  if (!selector || selector.startsWith('{') || selector.startsWith('[')) return '';
+  return selector;
 }
 
 function validateSpecificActionRequiredInputs(page: PageDefinitionSpec, commands: BffCommandSpec[]): void {
