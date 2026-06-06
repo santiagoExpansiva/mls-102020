@@ -249,7 +249,7 @@ async function afterPromptStep(
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),
   ];
 
-  if (status === 'completed' && output) intents.push(...createNextWorkflowDefinitionIntent(context, output));
+  if (status === 'completed' && output) intents.push(...createNextWorkflowDefinitionIntent(context, step, output));
   return intents;
 }
 
@@ -319,7 +319,11 @@ function validatePlanWorkflowDefinitionOutput(output: PlanWorkflowDefinitionOutp
   }
 }
 
-function createNextWorkflowDefinitionIntent(context: mls.msg.ExecutionContext, currentOutput: PlanWorkflowDefinitionOutput): mls.msg.AgentIntent[] {
+function createNextWorkflowDefinitionIntent(
+  context: mls.msg.ExecutionContext,
+  currentStep: mls.msg.AIAgentStep,
+  currentOutput: PlanWorkflowDefinitionOutput,
+): mls.msg.AgentIntent[] {
   const workflowIndex = getPlanWorkflowIndexOutput(context);
   const covered = new Set(getPlanWorkflowDefinitionOutputs(context).map(output => output.result.workflowDefinition.workflowId));
   covered.add(currentOutput.result.workflowDefinition.workflowId);
@@ -329,6 +333,7 @@ function createNextWorkflowDefinitionIntent(context: mls.msg.ExecutionContext, c
   if (!placeholder || placeholder.type !== 'agent') return [];
 
   if (nextWorkflow) {
+    const insertParent = placeholder.status === 'completed' ? currentStep : placeholder;
     return [
       createDynamicAgentStepIntent(
         context,
@@ -336,11 +341,13 @@ function createNextWorkflowDefinitionIntent(context: mls.msg.ExecutionContext, c
         'agentPlanWorkflowDefinition',
         `plan-workflow-definition:${nextWorkflow.workflowId}`,
         `Plan workflow ${nextWorkflow.workflowId}`,
-        nextWorkflow.workflowId
+        nextWorkflow.workflowId,
+        insertParent
       ),
     ];
   }
 
+  if (placeholder.status === 'completed') return [];
   return [createPlannerUpdateStatusIntent(context, placeholder, placeholder, 0, 'completed', 'All dynamic workflow definitions completed.')];
 }
 

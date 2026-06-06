@@ -234,7 +234,7 @@ async function afterPromptStep(
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),
   ];
 
-  if (status === 'completed' && output) intents.push(...createNextTableDefinitionIntent(context, output));
+  if (status === 'completed' && output) intents.push(...createNextTableDefinitionIntent(context, step, output));
   return intents;
 }
 
@@ -297,7 +297,11 @@ function validatePlanTableDefinitionOutput(output: PlanTableDefinitionOutput): v
   if (output.status === 'needs_input' && output.questions.length === 0) throw new Error('needs_input table definition must include questions');
 }
 
-function createNextTableDefinitionIntent(context: mls.msg.ExecutionContext, currentOutput: PlanTableDefinitionOutput): mls.msg.AgentIntent[] {
+function createNextTableDefinitionIntent(
+  context: mls.msg.ExecutionContext,
+  currentStep: mls.msg.AIAgentStep,
+  currentOutput: PlanTableDefinitionOutput,
+): mls.msg.AgentIntent[] {
   const persistenceIndex = getPlanPersistenceIndexOutput(context);
   const covered = new Set(getPlanTableDefinitionOutputs(context).map(output => output.result.tableDefinition.tableId));
   covered.add(currentOutput.result.tableDefinition.tableId);
@@ -307,6 +311,7 @@ function createNextTableDefinitionIntent(context: mls.msg.ExecutionContext, curr
   if (!placeholder || placeholder.type !== 'agent') return [];
 
   if (nextTable) {
+    const insertParent = placeholder.status === 'completed' ? currentStep : placeholder;
     return [
       createDynamicAgentStepIntent(
         context,
@@ -314,11 +319,13 @@ function createNextTableDefinitionIntent(context: mls.msg.ExecutionContext, curr
         'agentPlanTableDefinition',
         `plan-table-definition:${nextTable.tableId}`,
         `Plan table ${nextTable.tableId}`,
-        nextTable.tableId
+        nextTable.tableId,
+        insertParent
       ),
     ];
   }
 
+  if (placeholder.status === 'completed') return [];
   return [createPlannerUpdateStatusIntent(context, placeholder, placeholder, 0, 'completed', 'All dynamic table definitions completed.')];
 }
 

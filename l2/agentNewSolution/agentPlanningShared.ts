@@ -176,16 +176,18 @@ export function createDynamicAgentStepIntent(
   planId: string,
   stepTitle: string,
   args: string,
+  parentInsertStep?: mls.msg.AIAgentStep,
 ): mls.msg.AgentIntentAddStep {
   const parentPlanning = (parentStep as any).planning;
   const dependencyPlanId = parentPlanning?.dynamicSource?.sourcePlanId || parentPlanning?.planId || '';
+  const insertParent = parentInsertStep || parentStep;
 
   return {
     type: 'add-step',
     messageId: context.message.orderAt,
     threadId: context.message.threadId,
     taskId: context.task?.PK || '',
-    parentStepId: parentStep.stepId,
+    parentStepId: insertParent.stepId,
     step: {
       type: 'agent',
       stepId: 0,

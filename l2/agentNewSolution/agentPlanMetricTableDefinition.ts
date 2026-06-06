@@ -230,7 +230,7 @@ async function afterPromptStep(
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),
   ];
 
-  if (status === 'completed' && output) intents.push(...createNextMetricTableDefinitionIntent(context, output));
+  if (status === 'completed' && output) intents.push(...createNextMetricTableDefinitionIntent(context, step, output));
   return intents;
 }
 
@@ -288,7 +288,11 @@ function validatePlanMetricTableDefinitionOutput(output: PlanMetricTableDefiniti
   if (output.status === 'needs_input' && output.questions.length === 0) throw new Error('needs_input metric table definition must include questions');
 }
 
-function createNextMetricTableDefinitionIntent(context: mls.msg.ExecutionContext, currentOutput: PlanMetricTableDefinitionOutput): mls.msg.AgentIntent[] {
+function createNextMetricTableDefinitionIntent(
+  context: mls.msg.ExecutionContext,
+  currentStep: mls.msg.AIAgentStep,
+  currentOutput: PlanMetricTableDefinitionOutput,
+): mls.msg.AgentIntent[] {
   const metricsIndex = getPlanMetricsIndexOutput(context);
   const covered = new Set(getPlanMetricTableDefinitionOutputs(context).map(output => output.result.metricTableDefinition.metricTableId));
   covered.add(currentOutput.result.metricTableDefinition.metricTableId);
@@ -298,6 +302,7 @@ function createNextMetricTableDefinitionIntent(context: mls.msg.ExecutionContext
   if (!placeholder || placeholder.type !== 'agent') return [];
 
   if (nextTable) {
+    const insertParent = placeholder.status === 'completed' ? currentStep : placeholder;
     return [
       createDynamicAgentStepIntent(
         context,
@@ -305,11 +310,13 @@ function createNextMetricTableDefinitionIntent(context: mls.msg.ExecutionContext
         'agentPlanMetricTableDefinition',
         `plan-metric-table-definition:${nextTable.metricTableId}`,
         `Plan metric table ${nextTable.metricTableId}`,
-        nextTable.metricTableId
+        nextTable.metricTableId,
+        insertParent
       ),
     ];
   }
 
+  if (placeholder.status === 'completed') return [];
   return [createPlannerUpdateStatusIntent(context, placeholder, placeholder, 0, 'completed', 'All dynamic metric table definitions completed.')];
 }
 
