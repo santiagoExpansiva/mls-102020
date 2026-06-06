@@ -228,6 +228,7 @@ function validatePlanPluginsOutput(output: PlanPluginsOutput, context: mls.msg.E
   const moduleName = getFinalPlanModuleName(finalPlan);
   const inventory = buildPluginInventorySync(moduleName, catalog);
   const inventoryById = new Map(inventory.plugins.map(item => [item.pluginId, item]));
+  const acceptedPluginDecisions = getAcceptedPluginDecisions(snapshot);
 
   for (const plugin of output.result.plugins) {
     const catalogItem = allowedById.get(plugin.pluginId);
@@ -248,6 +249,11 @@ function validatePlanPluginsOutput(output: PlanPluginsOutput, context: mls.msg.E
     if (expected.resolution === 'existing' && plugin.sourceProject !== expected.sourceProject) {
       throw new Error(`invalid sourceProject for existing plugin ${plugin.pluginId}: ${plugin.sourceProject}`);
     }
+  }
+  if (output.status === 'ok' && acceptedPluginDecisions.length > 0 && output.result.plugins.length === 0 && output.questions.length > 0) {
+    const normalizedTrace = 'Status normalized to needs_input because accepted plugins were blocked and top-level questions were returned.';
+    output.status = 'needs_input';
+    if (!output.trace.includes(normalizedTrace)) output.trace.push(normalizedTrace);
   }
   if (output.status === 'ok' && hasAcceptedArtifact(snapshot.implementationDecisions, 'plugin') && output.result.plugins.length === 0) {
     throw new Error('plugin was accepted, but plugins output is empty');
@@ -352,9 +358,7 @@ function discoverApprovedPluginCatalogItems(
 ): PluginCatalogItem[] {
   const candidates = [
     ...finalPlan.result.approvedArtifacts.plugins,
-    ...snapshot.implementationDecisions.decisions.filter(decision =>
-      decision.artifactType === 'plugin' && decision.accepted && decision.decidedPriority !== 'never'
-    ),
+    ...getAcceptedPluginDecisions(snapshot),
   ];
 
   const byId = new Map<string, PluginCatalogItem>();
@@ -465,6 +469,7 @@ function buildPluginPromptContext(
     args,
     module: finalPlan.result.module,
     approvedPluginArtifacts: summarizeObjects(finalPlan.result.approvedArtifacts.plugins),
+    acceptedPluginDecisions: summarizeObjects(getAcceptedPluginDecisions(snapshot)),
     approvedWorkflowArtifacts: summarizeObjects(finalPlan.result.approvedArtifacts.workflows),
     approvedAgentArtifacts: summarizeObjects(finalPlan.result.approvedArtifacts.agents),
     approvedHorizontalModules: summarizeObjects(finalPlan.result.approvedArtifacts.horizontalModules),
@@ -473,6 +478,12 @@ function buildPluginPromptContext(
     pluginCatalog: catalog,
     pluginInventory: inventory,
   };
+}
+
+function getAcceptedPluginDecisions(snapshot: ReturnType<typeof getPlanningContextSnapshot>) {
+  return snapshot.implementationDecisions.decisions.filter(decision =>
+    decision.artifactType === 'plugin' && decision.accepted && decision.decidedPriority !== 'never'
+  );
 }
 
 function summarizeObjects(items: unknown[]): unknown[] {
@@ -590,6 +601,10 @@ Do not return prose.
 - Use pluginInventory as the source of truth for resolution, pluginDefsFileRef, moduleConnectionDefsFileRef, and sourceProject.
 - When pluginInventory marks a plugin as existing, return resolution "existing" and preserve sourceProject.
 - When pluginInventory marks a plugin as create_draft, return resolution "create_draft"; the later defs save step will create l2/plugins/{pluginId}/plugin.defs.ts with draft status.
+- Every acceptedPluginDecisions item with decidedPriority other than "never" must be planned when it has a matching pluginCatalog/pluginInventory item.
+- Missing l2/plugins/{pluginId}/plugin.defs.ts is not a blocker; use the pluginInventory create_draft resolution instead of asking whether the catalog can be updated.
+- Never return status "ok" with an empty plugins array when acceptedPluginDecisions is not empty.
+- If pluginCatalog/pluginInventory is inconsistent and an accepted plugin cannot be planned, return status "needs_input", plugins: [], and a top-level question with the concrete missing pluginId/provider.
 - moduleConnectionDefsFileRef must point to l2/{moduleName}/plugins/{pluginId}.defs.ts.
 - Put plugin-specific questions in plugins[].questions. Use top-level questions only for general blockers.
 - Do not hard-code plugin providers or priorities from a sample domain.
