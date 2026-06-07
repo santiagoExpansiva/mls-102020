@@ -15,7 +15,7 @@ import {
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
-import { saveNewSolutionAgentTracePayload } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { saveNewSolutionAgentTracePayload, saveNewSolutionPlanHealthReport } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import { getPlanAgentsOutput } from '/_102020_/l2/agentNewSolution/agentPlanAgents.js';
 import type { PlanAgentsOutput } from '/_102020_/l2/agentNewSolution/agentPlanAgents.js';
 import { getPlanHorizontalsOutput } from '/_102020_/l2/agentNewSolution/agentPlanHorizontals.js';
@@ -210,11 +210,12 @@ async function afterPromptStep(
 ): Promise<mls.msg.AgentIntent[]> {
   let status: mls.msg.AIStepStatus = 'completed';
   let traceMsg: string | undefined;
+  let output: ValidateSolutionCoverageOutput | undefined;
 
   try {
     const payload = step.interaction?.payload?.[0];
     if (!payload) throw new Error('missing payload');
-    const output = extractValidateSolutionCoverageOutput(payload);
+    output = extractValidateSolutionCoverageOutput(payload);
     validateValidateSolutionCoverageOutput(output);
     if (output.status === 'failed') {
       status = 'failed';
@@ -222,10 +223,12 @@ async function afterPromptStep(
     } else if (output.status === 'needs_input') {
       traceMsg = 'agentValidateSolutionCoverage returned status needs_input; keeping validation draft.';
     } else {
+      // TODO-FINAL-023/024: coverage is no longer a late blocking gate for the end user.
+      // Errors are caught early by per-index checkpoints and critic/repair; here the result
+      // becomes a non-blocking technical report (planHealthReport) in trace/manifest.
       const readinessError = getCoverageReadinessError(output);
       if (readinessError) {
-        status = 'failed';
-        traceMsg = readinessError;
+        traceMsg = `coverage not ready (non-blocking, recorded in planHealthReport): ${readinessError}`;
       }
     }
   } catch (error) {
@@ -235,6 +238,14 @@ async function afterPromptStep(
   }
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
+  if (status === 'completed' && output && output.status === 'ok') {
+    await saveNewSolutionPlanHealthReport(context, agent.agentName, step, {
+      summary: output.result.summary,
+      issues: output.result.issues,
+      checklistResults: output.result.checklistResults || null,
+      readyToSaveDefs: output.result.readyToSaveDefs,
+    });
+  }
 
   const updateIntents: mls.msg.AgentIntent[] = [
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),

@@ -8,11 +8,12 @@ import {
   assertPriority,
   assertRecord,
   assertString,
+  createHoldIndexForReviewIntents,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
-  getPlannerOutput,
+  getPlannerOutputWithRepair,
   getPlanningContextSnapshot,
   hasAcceptedArtifact,
   normalizeStringList,
@@ -65,10 +66,7 @@ export interface PlanPluginsResult {
 
 export type PlanPluginsOutput = PlannerOutput<PlanPluginsResult>;
 
-const planPluginsToolSchema = createPlannerVariableToolSchema(
-  PLAN_PLUGINS_TOOL_NAME,
-  'Submit external plugin planning for the newSolution final plan.',
-  {
+export const PLAN_PLUGINS_RESULT_SCHEMA: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
     required: ['plugins'],
@@ -114,7 +112,12 @@ const planPluginsToolSchema = createPlannerVariableToolSchema(
         },
       },
     },
-  }
+};
+
+const planPluginsToolSchema = createPlannerVariableToolSchema(
+  PLAN_PLUGINS_TOOL_NAME,
+  'Submit external plugin planning for the newSolution final plan.',
+  PLAN_PLUGINS_RESULT_SCHEMA
 );
 
 async function beforePromptStep(
@@ -177,27 +180,35 @@ async function afterPromptStep(
   }
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
+
+  // TODO-FINAL-023/024: hold the step open and run critic/repair before approving the plugin plan.
+  // The incremental artifact save moves to the critic approval path (possibly with a repaired plan).
+  if (status === 'completed' && output && output.status === 'ok') {
+    return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'pluginPlan');
+  }
+
   if (status === 'completed' && output) await saveNewSolutionPlanArtifacts(context, agent.agentName, step, output);
 
   return [createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined)];
 }
 
 export function getPlanPluginsOutput(context: mls.msg.ExecutionContext): PlanPluginsOutput {
-  return getPlannerOutput(context, 'agentPlanPlugins', planPluginsConfig, output => validatePlanPluginsOutput(output, context));
+  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  return getPlannerOutputWithRepair(context, 'agentPlanPlugins', 'pluginPlan', planPluginsConfig, output => validatePlanPluginsOutput(output, context));
 }
 
 function extractPlanPluginsOutput(payload: unknown): PlanPluginsOutput {
   return extractPlannerOutput(payload, planPluginsConfig);
 }
 
-const planPluginsConfig = {
+export const planPluginsConfig = {
   toolName: PLAN_PLUGINS_TOOL_NAME,
   stepId: PLAN_PLUGINS_STEP_ID,
   stepIdAliases: PLAN_PLUGINS_ALIASES,
   normalizeResult: normalizePlanPluginsResult,
 };
 
-function normalizePlanPluginsResult(value: unknown): PlanPluginsResult {
+export function normalizePlanPluginsResult(value: unknown): PlanPluginsResult {
   const result = assertRecord(value, 'result');
   return {
     plugins: assertArray(result.plugins, 'result.plugins').map((item, index) => normalizePlugin(item, `result.plugins[${index}]`)),
@@ -225,7 +236,7 @@ function normalizePlugin(value: unknown, path: string): PluginPlan {
   };
 }
 
-function validatePlanPluginsOutput(output: PlanPluginsOutput, context: mls.msg.ExecutionContext): void {
+export function validatePlanPluginsOutput(output: PlanPluginsOutput, context: mls.msg.ExecutionContext): void {
   const finalPlan = getFinalizeSolutionPlanOutput(context);
   const snapshot = getPlanningContextSnapshot(context);
   const catalog = buildRuntimePluginCatalogSync(finalPlan, snapshot);

@@ -10,12 +10,13 @@ import {
   assertString,
   optionalString,
   createDynamicAgentStepIntent,
+  createHoldIndexForReviewIntents,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
   findStepByPlanId,
-  getPlannerOutput,
+  getPlannerOutputWithRepair,
   getPlanningContextSnapshot,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
@@ -75,10 +76,7 @@ export interface PlanPersistenceIndexResult {
 
 export type PlanPersistenceIndexOutput = PlannerOutput<PlanPersistenceIndexResult>;
 
-const planPersistenceIndexToolSchema = createPlannerVariableToolSchema(
-  PLAN_PERSISTENCE_INDEX_TOOL_NAME,
-  'Submit the module-owned persistence table index.',
-  {
+export const PLAN_PERSISTENCE_INDEX_RESULT_SCHEMA: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
     required: ['persistenceScope', 'tables'],
@@ -150,7 +148,12 @@ const planPersistenceIndexToolSchema = createPlannerVariableToolSchema(
         },
       },
     },
-  }
+};
+
+const planPersistenceIndexToolSchema = createPlannerVariableToolSchema(
+  PLAN_PERSISTENCE_INDEX_TOOL_NAME,
+  'Submit the module-owned persistence table index.',
+  PLAN_PERSISTENCE_INDEX_RESULT_SCHEMA
 );
 
 async function beforePromptStep(
@@ -215,6 +218,12 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
+  // TODO-FINAL-023/024: when the index is valid, hold this step open and run the
+  // critic/repair checkpoint before releasing table definitions and downstream steps.
+  if (status === 'completed' && output && output.status === 'ok') {
+    return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'persistenceIndex');
+  }
+
   const intents: mls.msg.AgentIntent[] = [
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),
   ];
@@ -224,21 +233,22 @@ async function afterPromptStep(
 }
 
 export function getPlanPersistenceIndexOutput(context: mls.msg.ExecutionContext): PlanPersistenceIndexOutput {
-  return getPlannerOutput(context, 'agentPlanPersistenceIndex', planPersistenceIndexConfig, output => validatePlanPersistenceIndexOutput(output, getPlanningContextSnapshot(context).initialMetricsRequested));
+  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  return getPlannerOutputWithRepair(context, 'agentPlanPersistenceIndex', 'persistenceIndex', planPersistenceIndexConfig, output => validatePlanPersistenceIndexOutput(output, getPlanningContextSnapshot(context).initialMetricsRequested));
 }
 
 function extractPlanPersistenceIndexOutput(payload: unknown): PlanPersistenceIndexOutput {
   return extractPlannerOutput(payload, planPersistenceIndexConfig);
 }
 
-const planPersistenceIndexConfig = {
+export const planPersistenceIndexConfig = {
   toolName: PLAN_PERSISTENCE_INDEX_TOOL_NAME,
   stepId: PLAN_PERSISTENCE_INDEX_STEP_ID,
   stepIdAliases: PLAN_PERSISTENCE_INDEX_ALIASES,
   normalizeResult: normalizePlanPersistenceIndexResult,
 };
 
-function normalizePlanPersistenceIndexResult(value: unknown): PlanPersistenceIndexResult {
+export function normalizePlanPersistenceIndexResult(value: unknown): PlanPersistenceIndexResult {
   const result = assertRecord(value, 'result');
   const scope = assertRecord(result.persistenceScope, 'result.persistenceScope');
   return {
@@ -300,7 +310,7 @@ function assertBoolean(value: unknown, path: string): boolean {
   return value;
 }
 
-function validatePlanPersistenceIndexOutput(output: PlanPersistenceIndexOutput, initialMetricsRequested: boolean): void {
+export function validatePlanPersistenceIndexOutput(output: PlanPersistenceIndexOutput, initialMetricsRequested: boolean): void {
   const ids = new Set<string>();
   for (const table of output.result.tables) {
     if (ids.has(table.tableId)) throw new Error(`duplicate tableId: ${table.tableId}`);
@@ -317,7 +327,7 @@ function validatePlanPersistenceIndexOutput(output: PlanPersistenceIndexOutput, 
   if (output.status === 'needs_input' && output.questions.length === 0) throw new Error('needs_input persistence index must include questions');
 }
 
-function createFirstTableDefinitionIntent(context: mls.msg.ExecutionContext, output: PlanPersistenceIndexOutput): mls.msg.AgentIntent[] {
+export function createFirstTableDefinitionIntent(context: mls.msg.ExecutionContext, output: PlanPersistenceIndexOutput): mls.msg.AgentIntent[] {
   const placeholder = findStepByPlanId(context, 'plan-table-definition') as mls.msg.AIAgentStep | null;
   if (!placeholder || placeholder.type !== 'agent' || placeholder.status === 'completed') return [];
 

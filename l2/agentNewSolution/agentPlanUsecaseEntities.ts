@@ -6,11 +6,12 @@ import {
   assertArray,
   assertRecord,
   assertString,
+  createHoldIndexForReviewIntents,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
-  getPlannerOutput,
+  getPlannerOutputWithRepair,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
@@ -52,10 +53,7 @@ export interface PlanUsecaseEntitiesResult {
 
 export type PlanUsecaseEntitiesOutput = PlannerOutput<PlanUsecaseEntitiesResult>;
 
-const planUsecaseEntitiesToolSchema = createPlannerVariableToolSchema(
-  PLAN_USECASE_ENTITIES_TOOL_NAME,
-  'Submit layer_3 usecase entities and usecases planning.',
-  {
+export const PLAN_USECASE_ENTITIES_RESULT_SCHEMA: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
     required: ['backendArchitecture', 'usecaseEntities', 'usecases', 'controllerRules'],
@@ -119,7 +117,12 @@ const planUsecaseEntitiesToolSchema = createPlannerVariableToolSchema(
         },
       },
     },
-  }
+};
+
+const planUsecaseEntitiesToolSchema = createPlannerVariableToolSchema(
+  PLAN_USECASE_ENTITIES_TOOL_NAME,
+  'Submit layer_3 usecase entities and usecases planning.',
+  PLAN_USECASE_ENTITIES_RESULT_SCHEMA
 );
 
 async function beforePromptStep(
@@ -183,26 +186,34 @@ async function afterPromptStep(
   }
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
+
+  // TODO-FINAL-023/024: hold the step open and run critic/repair before approving the usecase plan.
+  // The incremental artifact save moves to the critic approval path (possibly with a repaired plan).
+  if (status === 'completed' && output && output.status === 'ok') {
+    return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'usecasePlan');
+  }
+
   if (status === 'completed' && output) await saveNewSolutionPlanArtifacts(context, agent.agentName, step, output);
   return [createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined)];
 }
 
 export function getPlanUsecaseEntitiesOutput(context: mls.msg.ExecutionContext): PlanUsecaseEntitiesOutput {
-  return getPlannerOutput(context, 'agentPlanUsecaseEntities', planUsecaseEntitiesConfig, output => validatePlanUsecaseEntitiesOutput(output, getPlanPersistenceIndexOutput(context).result.tables.length > 0));
+  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  return getPlannerOutputWithRepair(context, 'agentPlanUsecaseEntities', 'usecasePlan', planUsecaseEntitiesConfig, output => validatePlanUsecaseEntitiesOutput(output, getPlanPersistenceIndexOutput(context).result.tables.length > 0));
 }
 
 function extractPlanUsecaseEntitiesOutput(payload: unknown): PlanUsecaseEntitiesOutput {
   return extractPlannerOutput(payload, planUsecaseEntitiesConfig);
 }
 
-const planUsecaseEntitiesConfig = {
+export const planUsecaseEntitiesConfig = {
   toolName: PLAN_USECASE_ENTITIES_TOOL_NAME,
   stepId: PLAN_USECASE_ENTITIES_STEP_ID,
   stepIdAliases: PLAN_USECASE_ENTITIES_ALIASES,
   normalizeResult: normalizePlanUsecaseEntitiesResult,
 };
 
-function normalizePlanUsecaseEntitiesResult(value: unknown): PlanUsecaseEntitiesResult {
+export function normalizePlanUsecaseEntitiesResult(value: unknown): PlanUsecaseEntitiesResult {
   const result = assertRecord(value, 'result');
   const controllerRules = assertRecord(result.controllerRules, 'result.controllerRules');
   return {
@@ -262,7 +273,7 @@ function normalizeStringArray(value: unknown, path: string): string[] {
   return assertArray(value, path).map((item, index) => assertString(item, `${path}[${index}]`));
 }
 
-function validatePlanUsecaseEntitiesOutput(output: PlanUsecaseEntitiesOutput, hasModuleTables: boolean): void {
+export function validatePlanUsecaseEntitiesOutput(output: PlanUsecaseEntitiesOutput, hasModuleTables: boolean): void {
   if (!output.result.controllerRules.bffMustCallUsecases) throw new Error('bffMustCallUsecases must be true');
   if (!output.result.controllerRules.bffDirectTableAccessForbidden) throw new Error('bffDirectTableAccessForbidden must be true');
   if (output.status === 'ok' && hasModuleTables && output.result.usecaseEntities.length === 0) {

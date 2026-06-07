@@ -30,7 +30,7 @@ export interface PlanArtifactReference {
   extension: string;
   checksum: string;
   schemaVersion: string;
-  status: 'draft' | 'not-ready';
+  status: 'draft' | 'not-ready' | 'frozen' | 'report';
   agentName: string;
   stepId: number;
   planId: string;
@@ -163,6 +163,165 @@ export async function saveNewSolutionPlanArtifacts(
   } catch (error) {
     console.warn(`[saveNewSolutionPlanArtifacts] failed for ${agentName}`, error);
     return [];
+  }
+}
+
+export interface PlanIndexHealthFinding {
+  severity: 'error' | 'warning';
+  code: string;
+  message: string;
+  path?: string;
+}
+
+export interface PlanIndexHealthReport {
+  localErrors: PlanIndexHealthFinding[];
+  localWarnings: PlanIndexHealthFinding[];
+  criticErrors: PlanIndexHealthFinding[];
+  criticWarnings: PlanIndexHealthFinding[];
+  attempts: number;
+  notes: string[];
+}
+
+/**
+ * TODO-FINAL-023: freeze an approved plan index as a checkpoint file plus manifest entry.
+ * The frozen file is the persisted source for getters that no longer want to rely on
+ * the task payload (file-based fallback for future payload cleanup).
+ */
+export async function saveNewSolutionIndexCheckpoint(
+  context: mls.msg.ExecutionContext,
+  indexName: string,
+  sourceAgentName: string,
+  indexStep: mls.msg.AIAgentStep,
+  output: unknown,
+  healthReport: PlanIndexHealthReport,
+): Promise<void> {
+  try {
+    const moduleName = normalizeModuleFolderName(getInitialModuleName(context), 'module');
+    const planId = readString((indexStep as any).planning?.planId) || '';
+    const checkpoint = {
+      schemaVersion: PLAN_ARTIFACT_SCHEMA_VERSION,
+      artifactType: 'indexCheckpoint',
+      indexName,
+      moduleName,
+      status: 'frozen',
+      approvedAt: new Date().toISOString(),
+      source: {
+        agentName: sourceAgentName,
+        stepId: indexStep.stepId,
+        planId,
+      },
+      healthReport,
+      index: output,
+    };
+
+    const fileInfo = {
+      project: mls.actualProject || 0,
+      level: 2,
+      folder: `${moduleName}/trace`,
+      shortName: `checkpoint-${toSafeShortName(indexName)}`,
+      extension: '.json',
+    };
+    const source = `${JSON.stringify(checkpoint, null, 2)}\n`;
+    await saveStorContent(fileInfo, source, false);
+
+    await updatePlanArtifactsManifest(moduleName, [{
+      artifactType: 'indexCheckpoint',
+      artifactId: indexName,
+      moduleName,
+      filePath: toPlanArtifactPath(fileInfo),
+      project: fileInfo.project,
+      level: fileInfo.level,
+      folder: fileInfo.folder,
+      shortName: fileInfo.shortName,
+      extension: fileInfo.extension,
+      checksum: checksumString(stableStringify(checkpoint)),
+      schemaVersion: PLAN_ARTIFACT_SCHEMA_VERSION,
+      status: 'frozen',
+      agentName: sourceAgentName,
+      stepId: indexStep.stepId,
+      planId,
+      savedAt: new Date().toISOString(),
+    }]);
+  } catch (error) {
+    console.warn(`[saveNewSolutionIndexCheckpoint] failed for ${indexName}`, error);
+  }
+}
+
+/**
+ * TODO-FINAL-023: file-based reader for a frozen index checkpoint.
+ * Allows getters/consumers to read approved indices from disk instead of task payloads
+ * once the payload cleanup is enabled.
+ */
+export async function readNewSolutionIndexCheckpoint(moduleName: string, indexName: string): Promise<Record<string, unknown> | null> {
+  try {
+    const fileInfo = {
+      project: mls.actualProject || 0,
+      level: 2,
+      folder: `${normalizeModuleFolderName(moduleName, 'module')}/trace`,
+      shortName: `checkpoint-${toSafeShortName(indexName)}`,
+      extension: '.json',
+    };
+    const key = mls.stor.getKeyToFile(fileInfo);
+    const file = mls.stor.files[key];
+    if (!file) return null;
+    const content = parseMaybeJson(await file.getContent());
+    return isRecord(content) ? content : null;
+  } catch (error) {
+    console.warn(`[readNewSolutionIndexCheckpoint] failed for ${indexName}`, error);
+    return null;
+  }
+}
+
+/**
+ * TODO-FINAL-023/024: persist the final coverage validation as a non-blocking technical report.
+ * The report lives in trace plus manifest; it must not block the end user at the end of the flow.
+ */
+export async function saveNewSolutionPlanHealthReport(
+  context: mls.msg.ExecutionContext,
+  agentName: string,
+  step: mls.msg.AIAgentStep,
+  report: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const moduleName = normalizeModuleFolderName(getInitialModuleName(context), 'module');
+    const planId = readString((step as any).planning?.planId) || '';
+    const document = {
+      schemaVersion: PLAN_ARTIFACT_SCHEMA_VERSION,
+      artifactType: 'planHealthReport',
+      moduleName,
+      savedAt: new Date().toISOString(),
+      source: { agentName, stepId: step.stepId, planId },
+      report,
+    };
+    const fileInfo = {
+      project: mls.actualProject || 0,
+      level: 2,
+      folder: `${moduleName}/trace`,
+      shortName: 'plan-health-report',
+      extension: '.json',
+    };
+    await saveStorContent(fileInfo, `${JSON.stringify(document, null, 2)}\n`, false);
+
+    await updatePlanArtifactsManifest(moduleName, [{
+      artifactType: 'planHealthReport',
+      artifactId: 'plan-health-report',
+      moduleName,
+      filePath: toPlanArtifactPath(fileInfo),
+      project: fileInfo.project,
+      level: fileInfo.level,
+      folder: fileInfo.folder,
+      shortName: fileInfo.shortName,
+      extension: fileInfo.extension,
+      checksum: checksumString(stableStringify(document)),
+      schemaVersion: PLAN_ARTIFACT_SCHEMA_VERSION,
+      status: 'report',
+      agentName,
+      stepId: step.stepId,
+      planId,
+      savedAt: new Date().toISOString(),
+    }]);
+  } catch (error) {
+    console.warn(`[saveNewSolutionPlanHealthReport] failed`, error);
   }
 }
 

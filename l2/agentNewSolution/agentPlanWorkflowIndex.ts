@@ -8,13 +8,14 @@ import {
   assertPriority,
   assertRecord,
   assertString,
+  createHoldIndexForReviewIntents,
   createParallelDynamicAgentStepIntent,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
   findStepByPlanId,
-  getPlannerOutput,
+  getPlannerOutputWithRepair,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
@@ -69,10 +70,7 @@ export interface PlanWorkflowIndexResult {
 
 export type PlanWorkflowIndexOutput = PlannerOutput<PlanWorkflowIndexResult>;
 
-const planWorkflowIndexToolSchema = createPlannerVariableToolSchema(
-  PLAN_WORKFLOW_INDEX_TOOL_NAME,
-  'Submit the workflow index for the newSolution plan.',
-  {
+export const PLAN_WORKFLOW_INDEX_RESULT_SCHEMA: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
     required: ['workflows'],
@@ -130,7 +128,12 @@ const planWorkflowIndexToolSchema = createPlannerVariableToolSchema(
         },
       },
     },
-  }
+};
+
+const planWorkflowIndexToolSchema = createPlannerVariableToolSchema(
+  PLAN_WORKFLOW_INDEX_TOOL_NAME,
+  'Submit the workflow index for the newSolution plan.',
+  PLAN_WORKFLOW_INDEX_RESULT_SCHEMA
 );
 
 async function beforePromptStep(
@@ -196,6 +199,11 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
+  // TODO-FINAL-023/024: hold the step open and run critic/repair before workflow definitions.
+  if (status === 'completed' && output && output.status === 'ok') {
+    return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'workflowIndex');
+  }
+
   const intents: mls.msg.AgentIntent[] = [
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),
   ];
@@ -205,21 +213,22 @@ async function afterPromptStep(
 }
 
 export function getPlanWorkflowIndexOutput(context: mls.msg.ExecutionContext): PlanWorkflowIndexOutput {
-  return getPlannerOutput(context, 'agentPlanWorkflowIndex', planWorkflowIndexConfig, validatePlanWorkflowIndexOutput);
+  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  return getPlannerOutputWithRepair(context, 'agentPlanWorkflowIndex', 'workflowIndex', planWorkflowIndexConfig, validatePlanWorkflowIndexOutput);
 }
 
 function extractPlanWorkflowIndexOutput(payload: unknown): PlanWorkflowIndexOutput {
   return extractPlannerOutput(payload, planWorkflowIndexConfig);
 }
 
-const planWorkflowIndexConfig = {
+export const planWorkflowIndexConfig = {
   toolName: PLAN_WORKFLOW_INDEX_TOOL_NAME,
   stepId: PLAN_WORKFLOW_INDEX_STEP_ID,
   stepIdAliases: PLAN_WORKFLOW_INDEX_ALIASES,
   normalizeResult: normalizePlanWorkflowIndexResult,
 };
 
-function normalizePlanWorkflowIndexResult(value: unknown): PlanWorkflowIndexResult {
+export function normalizePlanWorkflowIndexResult(value: unknown): PlanWorkflowIndexResult {
   const result = assertRecord(value, 'result');
   return {
     workflows: assertArray(result.workflows, 'result.workflows').map((item, index) => normalizeWorkflowIndexItem(item, `result.workflows[${index}]`)),
@@ -261,7 +270,7 @@ function normalizeImplementationSuggestion(value: unknown, path: string): unknow
   return suggestion;
 }
 
-function validatePlanWorkflowIndexOutput(output: PlanWorkflowIndexOutput): void {
+export function validatePlanWorkflowIndexOutput(output: PlanWorkflowIndexOutput): void {
   const validModes = new Set(['documentationOnly', 'uiState', 'entityLifecycle', 'taskWorkflow', 'automation']);
   for (const workflow of output.result.workflows) {
     if (!validModes.has(workflow.executionMode)) throw new Error(`invalid workflow executionMode: ${workflow.executionMode}`);
@@ -269,7 +278,7 @@ function validatePlanWorkflowIndexOutput(output: PlanWorkflowIndexOutput): void 
   if (output.status === 'needs_input' && output.questions.length === 0) throw new Error('needs_input workflow index must include questions');
 }
 
-function createWorkflowDefinitionParallelIntent(context: mls.msg.ExecutionContext, output: PlanWorkflowIndexOutput): mls.msg.AgentIntent[] {
+export function createWorkflowDefinitionParallelIntent(context: mls.msg.ExecutionContext, output: PlanWorkflowIndexOutput): mls.msg.AgentIntent[] {
   const placeholder = findStepByPlanId(context, 'plan-workflow-definition') as mls.msg.AIAgentStep | null;
   if (!placeholder || placeholder.type !== 'agent' || placeholder.status === 'completed') return [];
 

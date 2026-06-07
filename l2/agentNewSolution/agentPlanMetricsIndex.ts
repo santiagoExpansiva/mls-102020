@@ -9,12 +9,13 @@ import {
   assertRecord,
   assertString,
   createDynamicAgentStepIntent,
+  createHoldIndexForReviewIntents,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
   findStepByPlanId,
-  getPlannerOutput,
+  getPlannerOutputWithRepair,
   getPlanningContextSnapshot,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
@@ -71,10 +72,7 @@ export interface PlanMetricsIndexResult {
 
 export type PlanMetricsIndexOutput = PlannerOutput<PlanMetricsIndexResult>;
 
-const planMetricsIndexToolSchema = createPlannerVariableToolSchema(
-  PLAN_METRICS_INDEX_TOOL_NAME,
-  'Submit the module operational metrics index.',
-  {
+export const PLAN_METRICS_INDEX_RESULT_SCHEMA: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
     required: ['metricsPlan', 'metricTables', 'dashboardPages'],
@@ -198,7 +196,12 @@ const planMetricsIndexToolSchema = createPlannerVariableToolSchema(
         },
       },
     },
-  }
+};
+
+const planMetricsIndexToolSchema = createPlannerVariableToolSchema(
+  PLAN_METRICS_INDEX_TOOL_NAME,
+  'Submit the module operational metrics index.',
+  PLAN_METRICS_INDEX_RESULT_SCHEMA
 );
 
 async function beforePromptStep(
@@ -262,6 +265,11 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
+  // TODO-FINAL-023/024: hold the step open and run critic/repair before metric table definitions.
+  if (status === 'completed' && output && output.status === 'ok') {
+    return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'metricsIndex');
+  }
+
   const intents: mls.msg.AgentIntent[] = [
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),
   ];
@@ -271,21 +279,22 @@ async function afterPromptStep(
 }
 
 export function getPlanMetricsIndexOutput(context: mls.msg.ExecutionContext): PlanMetricsIndexOutput {
-  return getPlannerOutput(context, 'agentPlanMetricsIndex', planMetricsIndexConfig, output => validatePlanMetricsIndexOutput(output, getPlanningContextSnapshot(context).initialMetricsRequested));
+  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  return getPlannerOutputWithRepair(context, 'agentPlanMetricsIndex', 'metricsIndex', planMetricsIndexConfig, output => validatePlanMetricsIndexOutput(output, getPlanningContextSnapshot(context).initialMetricsRequested));
 }
 
 function extractPlanMetricsIndexOutput(payload: unknown): PlanMetricsIndexOutput {
   return extractPlannerOutput(payload, planMetricsIndexConfig);
 }
 
-const planMetricsIndexConfig = {
+export const planMetricsIndexConfig = {
   toolName: PLAN_METRICS_INDEX_TOOL_NAME,
   stepId: PLAN_METRICS_INDEX_STEP_ID,
   stepIdAliases: PLAN_METRICS_INDEX_ALIASES,
   normalizeResult: normalizePlanMetricsIndexResult,
 };
 
-function normalizePlanMetricsIndexResult(value: unknown): PlanMetricsIndexResult {
+export function normalizePlanMetricsIndexResult(value: unknown): PlanMetricsIndexResult {
   const result = assertRecord(value, 'result');
   const metricsPlan = assertRecord(result.metricsPlan, 'result.metricsPlan');
   const metricTables = assertArray(result.metricTables, 'result.metricTables').map((item, index) => normalizeMetricTableIndexItem(item, `result.metricTables[${index}]`));
@@ -365,7 +374,7 @@ function normalizeDashboardWidget(value: unknown, path: string): unknown {
   return widget;
 }
 
-function validatePlanMetricsIndexOutput(output: PlanMetricsIndexOutput, initialMetricsRequested: boolean): void {
+export function validatePlanMetricsIndexOutput(output: PlanMetricsIndexOutput, initialMetricsRequested: boolean): void {
   if (output.status === 'ok' && initialMetricsRequested) {
     if (!output.result.metricsPlan.enabled) throw new Error('initial metrics requested, but metricsPlan.enabled is false');
     if (output.result.metricTables.length === 0) throw new Error('initial metrics requested, but metricTables is empty');
@@ -377,7 +386,7 @@ function validatePlanMetricsIndexOutput(output: PlanMetricsIndexOutput, initialM
   if (output.status === 'needs_input' && output.questions.length === 0) throw new Error('needs_input metrics index must include questions');
 }
 
-function createFirstMetricTableDefinitionIntent(context: mls.msg.ExecutionContext, output: PlanMetricsIndexOutput): mls.msg.AgentIntent[] {
+export function createFirstMetricTableDefinitionIntent(context: mls.msg.ExecutionContext, output: PlanMetricsIndexOutput): mls.msg.AgentIntent[] {
   const placeholder = findStepByPlanId(context, 'plan-metric-table-definition') as mls.msg.AIAgentStep | null;
   if (!placeholder || placeholder.type !== 'agent' || placeholder.status === 'completed') return [];
 

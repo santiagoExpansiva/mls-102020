@@ -118,6 +118,8 @@ Criterio de aceite:
 - O root `agentNewSolution` nao e fechado nesse caso, porque o fechamento plan-only ja depende de `status=completed`.
 - Isso bloqueia conclusao silenciosa e impede considerar o conjunto pronto para save/materializacao.
 
+**SUPERSEDED em parte por TODO-FINAL-023/024** (2026-06-07): com checkpoints e critica/reparo por indice pegando erros cedo, a coverage final voltou a completar o step mesmo com `readyToSaveDefs=false`; os erros agora sao gravados como relatorio tecnico nao-bloqueante (`planHealthReport`) no trace/manifesto. `status="failed"` da propria LLM e erros de extracao continuam falhando o step.
+
 ### TODO-FINAL-003 - Corrigir definicao de hypertable nas metric tables
 
 Problema:
@@ -531,7 +533,153 @@ Criterio de aceite:
 - Um `.defs.ts` validado pode ser gravado e usado por agentes seguintes sem esperar o fim do planejamento.
 - Payloads de page/workflow/table/metric/usecase podem ser limpos da task apos save e checkpoint, sem quebrar retry, coverage ou materializacao futura.
 - O paralelo dinamico pode voltar a usar slots reutilizaveis sem precisar preservar todos os filhos completos na task, quando os getters ja estiverem baseados em manifesto/defs.
-- `agentValidateSolutionCoverage` continua pegando erros cruzados, mas nao e mais o primeiro lugar onde problemas estruturais basicos aparecem.
+- `agentValidateSolutionCoverage` deixa de ser bloqueio tardio para usuario final; quando existir, vira relatorio tecnico de integracao/cobertura no trace/manifesto.
+
+**EXECUTED** (2026-06-07):
+- Checkpoints deterministicos por indice implementados em `agentPlanIndexReview.ts` (`runLocalCheckpoint` por indice):
+  - `persistenceIndex`: rootEntity vs ontologia, tabelas sem writer, tabelas sem rules (warnings).
+  - `metricsIndex`: widget -> metric table inexistente e dashboard actor fora de `actors[].actorId` (errors); sourceBaseTables desconhecidas e contagem abaixo do aprovado (warnings).
+  - `workflowIndex`: actor desconhecido e persistenceRefs para tabela inexistente (errors); usecaseRefs/metricRefs desconhecidos (warnings).
+  - `pageIndex`: navigationRefs para pagina inexistente (error); persistence/usecase/metric/plugin hints desconhecidos (warnings).
+  - `pluginPlan`: provider duplicado em mais de um plugin (warning, conecta com TODO-FINAL-025).
+  - `usecasePlan`: refs de tabela desconhecidas, actor desconhecido, metric tables sem usecase escritor (warnings).
+- O checkpoint roda no `beforePromptStep` do critic, antes de qualquer LLM: erro deterministico vai direto para reparo (critica sintetica), sem gastar chamada de critica.
+- Congelamento: indice aprovado e gravado em `l2/{moduleName}/trace/checkpoint-{indexName}.json` com checksum, source (agentName/stepId/planId), healthReport (erros/warnings locais + da critica) e status `frozen` no manifesto (`saveNewSolutionIndexCheckpoint`).
+- Leitor por arquivo criado (`readNewSolutionIndexCheckpoint`) como fallback para getters baseados em manifesto/defs (pre-requisito para limpar payloads).
+- `agentValidateSolutionCoverage` virou relatorio tecnico nao-bloqueante: com `status=ok` o step completa mesmo sem readiness e grava `plan-health-report.json` no trace + manifesto (`saveNewSolutionPlanHealthReport`).
+- NAO EXECUTADO (follow-up, igual ao safe-part do TODO-FINAL-010): a troca de payload por referencia (`cleaner="input_output"`) ainda nao foi ligada; os getters sincronos continuam lendo da task. O fallback por arquivo ja existe, falta migrar os consumidores.
+- Build: `tsc -p tsconfig.frontend.json` ok em mls-base (erros pre-existentes de mls-102030 no backend nao tem relacao).
+
+### TODO-FINAL-024 - Validar e reparar cada indice com LLM antes das definitions
+
+Problema:
+- Os indices ainda carregam decisoes sensiveis da LLM, especialmente quantidade de metricas, paginas, workflows, ownership de tabelas e plugin resolutions.
+- Quando um indice ruim passa adiante, os agentes filhos apenas detalham uma decisao ja instavel e o erro aparece tarde, muitas vezes so na coverage final.
+- Uma validacao final bloqueante e ruim para usuario leigo, porque chega depois de muitos steps e nao oferece um caminho claro de correcao.
+
+Decisao:
+- Fazer uma LLM critica por indice e uma LLM reparadora por indice, nao uma unica LLM para todos os indices.
+- Motivo: cada indice tem contrato, schema, riscos e vocabulario proprio; separar reduz contexto, melhora foco e evita que uma correcao de paginas altere metricas, plugins ou tabelas sem necessidade.
+
+Fluxo proposto por indice:
+1. Gerar o indice normal.
+2. Rodar validacao local basica de schema/ids/refs.
+3. Rodar `agentCritic<IndexName>` para criticar somente aquele indice.
+4. Se houver `errors` ou `warnings` relevantes, rodar `agentRepair<IndexName>` recebendo:
+   - indice atual
+   - relatorio da critica
+   - schema/contrato do indice
+   - final plan compacto e dependencias minimas daquele indice
+5. A reparadora retorna o indice completo corrigido, nao patches parciais.
+6. Rodar a critica novamente, com limite de tentativas para evitar loop.
+7. Congelar o indice no manifesto/checkpoint quando aprovado.
+8. Somente depois abrir os agentes filhos em paralelo para definitions individuais.
+
+Indices alvo:
+- `persistenceIndex`: ownership, tableKind, moduleOwned vs mdm/horizontal/plugin-owned, tables novas realmente necessarias.
+- `metricsIndex`: quantidade de metricas, pergunta de negocio, dashboard alvo, fonte de dados, prioridade e relacao com capabilities aprovadas.
+- `workflowIndex`: executionMode, createsTask, atores, refs para usecases/tabelas/metricas, ausencia de workflow desnecessario.
+- `pageIndex`: paginas necessarias, atores vindos do plano, metric dashboard quando solicitado, flowRefs coerentes, sem hard-code de idioma.
+- `pluginPlan`: plugin aceito, draft vs existing, resolution valida, ausencia de plugin inventado.
+- `usecasePlan`: cobertura das escritas, lifecycle transitions, BFF commands e atualizacoes de metricas.
+- `agentIndex`, quando existir: agentes propostos, triggers, usecaseRefs e relacao com workflows/paginas.
+
+Tratamento de warnings:
+- Warnings que representam escolha de modelagem aceitavel nao devem bloquear o usuario no fim.
+- Exemplo: page input pode ser um objeto que contem internamente o id; isso deve ser aceito quando o contrato do objeto estiver claro, em vez de exigir sempre `{entity}Id` separado.
+- Warnings tecnicos podem ir para trace/manifesto como `planHealthReport`, sem marcar a task como failed depois de tudo gerado.
+
+Criterio de aceite:
+- Cada indice passa por critica e reparo antes de liberar seus filhos.
+- A quantidade de metricas fica muito menos sensivel entre execucoes, porque o `metricsIndex` e criticado, reparado e congelado antes das metric table definitions.
+- Definitions individuais deixam de decidir escopo; elas apenas detalham o selector de um indice congelado.
+- A coverage final, se mantida, nao bloqueia usuario final; serve para rastreamento tecnico e melhoria posterior do fluxo.
+
+**EXECUTED** (2026-06-07):
+- Implementacao com 2 agentes genericos parametrizados por indice (decisao confirmada com o usuario): `agentCriticPlanIndex.ts` e `agentRepairPlanIndex.ts`. Cada indice continua tendo sua propria chamada LLM de critica e de reparo, com contrato, schema, prompt focus e contexto minimo proprios definidos em `agentPlanIndexReview.ts` (`contractFocus`, `resultSchema`, `buildReviewContext`, `runLocalCheckpoint`, `validateRepairedOutput`, `createChildrenIntents` por indice).
+- Indices cobertos: `persistenceIndex`, `metricsIndex`, `workflowIndex`, `pageIndex`, `pluginPlan`, `usecasePlan` (todos os 6). `agentIndex` fica para quando existir indice proprio.
+- Orquestracao (restricao descoberta no `collab-messages`: `setStepCompletedIfChildrenCompleted` auto-completa pai com filhos todos terminais):
+  - O agente de indice, quando `status=ok`, NAO completa o step; retorna `in_progress` + add-step do critic como filho do proprio step do indice (`createHoldIndexForReviewIntents`). Assim os steps downstream que dependem do planId do indice continuam travados ate aprovacao.
+  - Critic com erros: adiciona o repair como filho do indice ANTES de completar o proprio step (mantem sempre um filho nao-terminal sob o indice, evitando auto-complete prematuro).
+  - Repair valido: adiciona o proximo critic (attempt+1) antes de completar; repair invalido ou `needs_input`: falha repair + indice (payload preservado para debug).
+  - Aprovacao: congela checkpoint, completa critic + indice (cleaner input) e dispara o fan-out existente (chain de table/metric defs, paralelo de workflows/pages). Plugins e usecases salvam seus artefatos incrementais (TODO-FINAL-011) neste ponto, ja com o plano possivelmente reparado.
+  - Limite: `MAX_PLAN_INDEX_CRITIC_ATTEMPTS=3` (critica inicial + ate 2 rodadas de reparo); estourou, critic e indice falham com resumo dos erros.
+- A reparadora retorna o indice completo corrigido (tool `submitRepaired{IndexName}` registrado com o schema do indice original) e o resultado e validado com o mesmo normalize/validate do agente original.
+- Getters repair-aware: `getPlannerOutputWithRepair` em `agentPlanningShared.ts`; os 6 getters (`getPlanPersistenceIndexOutput`, etc.) preferem o ultimo repair completado, entao todos os consumidores downstream (definitions, coverage, prompts) usam automaticamente o indice corrigido.
+- Tratamento de warnings: nao bloqueiam; vao para o healthReport do checkpoint (`l2/{module}/trace/checkpoint-{indexName}.json`). O prompt do critic instrui explicitamente que escolha de modelagem aceitavel (ex.: page input como objeto contendo o id) e warning, nunca error.
+- Falha do proprio critic (payload invalido/status failed): fallback aprova com warning registrado no checkpoint, preservando o comportamento pre-critica em vez de criar um novo bloqueio.
+- Atalho sem LLM: indice vazio/desabilitado (`skipCriticWhen`) congela direto; erro deterministico local pula a LLM de critica e vai direto ao reparo com critica sintetica.
+- Riscos residuais (sem teste automatizado para o loop critic/repair):
+  - confianca no padrao ja usado em producao de `beforePromptStep` retornar update-status/add-step sem prompt_ready (mesmo padrao do `agentNewSolutionPlanner`);
+  - schema do tool de repair so e registrado quando `agentPlanIndexReview` e carregado; sem ele a extracao cai na validacao do normalize (mais permissiva), sem quebrar.
+- Build: `tsc -p tsconfig.frontend.json` ok em mls-base.
+
+### TODO-FINAL-025 - Reaproveitar plugins existentes e evitar drafts duplicados em `l2/plugins`
+
+Problema:
+- A pasta `l2/plugins` acumulou plugins duplicados para a mesma integracao, por exemplo `stripe` e `stripePayments`.
+- Isso indica que o fluxo de `pluginPlan` e/ou da tela de geracao nao esta reaproveitando corretamente plugins ja existentes antes de criar um novo draft.
+- Duplicar plugin global por variacao de nome piora manutencao, confunde o usuario e pode espalhar conexoes de modulos para implementacoes quase identicas.
+
+Acao:
+- Antes de decidir `resolution=create_draft`, o fluxo deve inspecionar `l2/plugins` existente no projeto atual.
+- Criar uma etapa de matching de reuso com pelo menos:
+  - `pluginId` normalizado
+  - nome/titulo normalizado
+  - descricao/resumo da integracao
+  - provider principal ou capability principal, quando existir
+- Se houver plugin existente com alta similaridade, preferir `resolution=existing` e referenciar o plugin encontrado, em vez de criar novo draft.
+- Se houver ambiguidade entre dois plugins parecidos, emitir warning tecnico ou pedir revisao interna antes de criar mais um draft duplicado.
+- Registrar no trace/manifesto por que o plugin foi reaproveitado ou por que um novo draft foi realmente necessario.
+- Incluir essa verificacao tanto no `pluginPlan` quanto na tela/etapa que materializa ou apresenta a lista de plugins para o usuario.
+
+Criterio de aceite:
+- Integracoes equivalentes, como `stripe` e `stripePayments`, nao geram dois plugins globais separados sem justificativa forte.
+- O plano de plugin tenta reaproveitar primeiro e so cria draft novo quando nao houver candidato suficientemente proximo.
+- O usuario ve menos plugins repetidos em `l2/plugins`, e os modulos passam a apontar para um plugin global coerente.
+
+### TODO-FINAL-026 - Adotar `<!-- x-tool-strict: true -->` nos agentes com schema compativel
+
+Problema:
+- Parte dos erros recorrentes de planejamento vem de payload tool-call que nao casa exatamente com o JSON schema esperado.
+- Foi implementado suporte ao modo string/strict da OpenAI via comentario no system prompt, por exemplo `<!-- x-tool-strict: true -->`.
+- Esse modo ajuda a reduzir drift de payload, mas nao pode ser ligado de forma cega: o agente precisa ter schema compativel.
+
+Restricao:
+- Para usar `x-tool-strict: true`, o schema do tool precisa ser revisado agente por agente.
+- Se o contrato do agente depender de estruturas abertas ou incompatibilidades do schema atual, esse agente nao deve entrar em strict ate o schema ser fechado o suficiente.
+- Se for necessario manter flexibilidade estrutural, o agente continua fora do strict e isso deve ficar documentado no proprio TODO/trace.
+
+Acao:
+- Fazer um inventario dos agentes de `agentNewSolution` e classificar cada um em:
+  - `strict-ready`
+  - `strict-ready-after-schema-fix`
+  - `not-strict-compatible-for-now`
+- Para os agentes `strict-ready`:
+  - adicionar `<!-- x-tool-strict: true -->` ao system prompt
+  - revisar o schema do tool para ficar totalmente fechado e deterministico
+  - remover brechas que geram mismatch frequente entre prompt, schema e validator
+- Para os agentes `strict-ready-after-schema-fix`:
+  - primeiro corrigir o schema
+  - depois ativar strict
+- Para os agentes que nao puderem usar strict agora:
+  - registrar o motivo tecnico
+  - manter validacao/normalizacao defensiva no afterPrompt
+
+Escopo prioritario:
+- Comecar pelos agentes com mais recorrencia de erro de payload/schema:
+  - `agentPlanPageDefinition`
+  - `agentPlanWorkflowDefinition`
+  - `agentPlanTableDefinition`
+  - `agentPlanMetricTableDefinition`
+  - `agentPlanPlugins`
+  - `agentFinalizeSolutionPlan`
+  - agentes de indice que forem migrados para critica/reparo por LLM
+
+Criterio de aceite:
+- Todo agente compativel com schema estrito usa `<!-- x-tool-strict: true -->`.
+- A taxa de erro de payload incompatível com schema cai de forma perceptivel nos traces.
+- Cada agente fora do strict fica explicitamente identificado com a justificativa tecnica para isso.
 
 ## Executed (one at a time, with evidence, no side effects)
 
@@ -593,11 +741,13 @@ Criterio de aceite:
 2. Corrigir gate de coverage: `TODO-FINAL-002` (feito).
 3. Resolver os 3 erros reais da coverage: `TODO-FINAL-003`, `TODO-FINAL-004`, `TODO-FINAL-005` (feito).
 4. Implementar gravacao incremental plan-only e limpeza por arquivo salvo: `TODO-FINAL-010` (safe-part), `TODO-FINAL-011`, `TODO-FINAL-012`, `TODO-FINAL-014`, `TODO-FINAL-022` (feito).
-5. Converter grupos independentes para paralelo controlado: `TODO-FINAL-021`.
-6. Criar checkpoints de validacao incremental antes de limpeza por referencia: `TODO-FINAL-023`.
-7. Reduzir tokens nos maiores consumidores: `TODO-FINAL-006`, `TODO-FINAL-007`, `TODO-FINAL-008`, `TODO-FINAL-009`.
-8. Completar mapeamento de artefatos plan: `TODO-FINAL-013`, `TODO-FINAL-015`, `TODO-FINAL-016`.
-9. Criar testes e politica de trace: `TODO-FINAL-017`, `TODO-FINAL-018`.
-10. Consolidar regras transversais: `TODO-FINAL-019`, `TODO-FINAL-020`.
+5. Converter grupos independentes para paralelo controlado: `TODO-FINAL-021` (feito).
+6. Criar checkpoints de validacao incremental e critica/reparo por indice antes das definitions: `TODO-FINAL-023`, `TODO-FINAL-024` (feito; falta follow-up de limpeza de payload por referencia).
+7. Corrigir reuso de plugin global antes de criar draft novo: `TODO-FINAL-025`.
+8. Adotar strict tool mode nos agentes compativeis: `TODO-FINAL-026`.
+9. Reduzir tokens nos maiores consumidores: `TODO-FINAL-006`, `TODO-FINAL-007`, `TODO-FINAL-008`, `TODO-FINAL-009`.
+10. Completar mapeamento de artefatos plan: `TODO-FINAL-013`, `TODO-FINAL-015`, `TODO-FINAL-016`.
+11. Criar testes e politica de trace: `TODO-FINAL-017`, `TODO-FINAL-018`.
+12. Consolidar regras transversais: `TODO-FINAL-019`, `TODO-FINAL-020`.
 
 Resposta: um exemplo de módule dentro do <module>/l2, pode ser achada em /Volumes/WagnerSSD1/collab/mls-base/mls-102020/l2/agents/newSolution/run30/module.ts

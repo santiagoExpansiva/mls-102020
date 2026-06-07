@@ -6,13 +6,14 @@ import {
   assertArray,
   assertRecord,
   assertString,
+  createHoldIndexForReviewIntents,
   createParallelDynamicAgentStepIntent,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
   findStepByPlanId,
-  getPlannerOutput,
+  getPlannerOutputWithRepair,
   getPlanningContextSnapshot,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
@@ -113,10 +114,7 @@ const bffCommandHintSchema = {
   },
 };
 
-const planPageIndexToolSchema = createPlannerVariableToolSchema(
-  PLAN_PAGE_INDEX_TOOL_NAME,
-  'Submit the page index for the newSolution plan.',
-  {
+export const PLAN_PAGE_INDEX_RESULT_SCHEMA: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
     required: ['pages'],
@@ -175,7 +173,12 @@ const planPageIndexToolSchema = createPlannerVariableToolSchema(
         },
       },
     },
-  }
+};
+
+const planPageIndexToolSchema = createPlannerVariableToolSchema(
+  PLAN_PAGE_INDEX_TOOL_NAME,
+  'Submit the page index for the newSolution plan.',
+  PLAN_PAGE_INDEX_RESULT_SCHEMA
 );
 
 async function beforePromptStep(
@@ -268,6 +271,11 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
+  // TODO-FINAL-023/024: hold the step open and run critic/repair before page definitions.
+  if (status === 'completed' && output && output.status === 'ok') {
+    return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'pageIndex');
+  }
+
   const intents: mls.msg.AgentIntent[] = [
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),
   ];
@@ -277,7 +285,8 @@ async function afterPromptStep(
 }
 
 export function getPlanPageIndexOutput(context: mls.msg.ExecutionContext): PlanPageIndexOutput {
-  return getPlannerOutput(context, 'agentPlanPageIndex', planPageIndexConfig, output =>
+  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  return getPlannerOutputWithRepair(context, 'agentPlanPageIndex', 'pageIndex', planPageIndexConfig, output =>
     validatePlanPageIndexOutput(
       output,
       getPlanningContextSnapshot(context).initialMetricsRequested,
@@ -291,14 +300,14 @@ function extractPlanPageIndexOutput(payload: unknown): PlanPageIndexOutput {
   return extractPlannerOutput(payload, planPageIndexConfig);
 }
 
-const planPageIndexConfig = {
+export const planPageIndexConfig = {
   toolName: PLAN_PAGE_INDEX_TOOL_NAME,
   stepId: PLAN_PAGE_INDEX_STEP_ID,
   stepIdAliases: PLAN_PAGE_INDEX_ALIASES,
   normalizeResult: normalizePlanPageIndexResult,
 };
 
-function normalizePlanPageIndexResult(value: unknown): PlanPageIndexResult {
+export function normalizePlanPageIndexResult(value: unknown): PlanPageIndexResult {
   const result = assertRecord(value, 'result');
   return {
     pages: assertArray(result.pages, 'result.pages').map((item, index) => normalizePageIndexItem(item, `result.pages[${index}]`)),
@@ -337,7 +346,7 @@ function normalizeStringArray(value: unknown, path: string): string[] {
   return assertArray(value, path).map((item, index) => assertString(item, `${path}[${index}]`));
 }
 
-function validatePlanPageIndexOutput(
+export function validatePlanPageIndexOutput(
   output: PlanPageIndexOutput,
   initialMetricsRequested: boolean,
   finalPlan: FinalSolutionPlanOutput,
@@ -427,7 +436,7 @@ function getMetricDashboardActorIds(finalPlan: FinalSolutionPlanOutput, finalPla
   return actorIds;
 }
 
-function createPageDefinitionParallelIntent(context: mls.msg.ExecutionContext, output: PlanPageIndexOutput): mls.msg.AgentIntent[] {
+export function createPageDefinitionParallelIntent(context: mls.msg.ExecutionContext, output: PlanPageIndexOutput): mls.msg.AgentIntent[] {
   const placeholder = findStepByPlanId(context, 'plan-page-definition') as mls.msg.AIAgentStep | null;
   if (!placeholder || placeholder.type !== 'agent' || placeholder.status === 'completed') return [];
 

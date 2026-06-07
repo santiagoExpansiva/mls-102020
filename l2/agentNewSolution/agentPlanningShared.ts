@@ -263,6 +263,149 @@ export function createParallelDynamicAgentStepIntent(
   };
 }
 
+// TODO-FINAL-023 / TODO-FINAL-024: critic/repair checkpoint support for plan indices.
+export const CRITIC_PLAN_INDEX_AGENT_NAME = 'agentCriticPlanIndex';
+export const REPAIR_PLAN_INDEX_AGENT_NAME = 'agentRepairPlanIndex';
+export const MAX_PLAN_INDEX_CRITIC_ATTEMPTS = 3; // initial critic + up to 2 repair/critic rounds
+
+export interface PlanIndexReviewArgs {
+  indexName: string;
+  attempt: number;
+}
+
+export function buildPlanIndexReviewArgs(indexName: string, attempt: number): string {
+  return JSON.stringify({ indexName, attempt });
+}
+
+export function parsePlanIndexReviewArgs(args: string | undefined): PlanIndexReviewArgs {
+  const parsed = parseMaybeJson(args || '');
+  if (!isRecordValue(parsed)) throw new Error(`[parsePlanIndexReviewArgs] invalid args: ${args}`);
+  const indexName = typeof parsed.indexName === 'string' ? parsed.indexName : '';
+  const attempt = typeof parsed.attempt === 'number' && parsed.attempt > 0 ? parsed.attempt : 1;
+  if (!indexName) throw new Error(`[parsePlanIndexReviewArgs] missing indexName in args: ${args}`);
+  return { indexName, attempt };
+}
+
+export function repairPlanIndexToolName(indexName: string): string {
+  const safe = indexName.replace(/[^a-zA-Z0-9]/g, '');
+  return `submitRepaired${safe.charAt(0).toUpperCase()}${safe.slice(1)}`;
+}
+
+/**
+ * Creates the critic step as a direct child of the index step.
+ * The index step must stay non-terminal (in_progress) while critic/repair children run,
+ * so downstream steps that depend on the index planId remain locked until approval.
+ */
+export function createPlanIndexReviewStepIntent(
+  context: mls.msg.ExecutionContext,
+  indexStep: mls.msg.AIAgentStep,
+  agentName: string,
+  indexName: string,
+  attempt: number,
+  stepTitle: string,
+): mls.msg.AgentIntentAddStep {
+  const kind = agentName === REPAIR_PLAN_INDEX_AGENT_NAME ? 'repair' : 'critic';
+  return createDynamicAgentStepIntent(
+    context,
+    indexStep,
+    agentName,
+    `plan-index-${kind}:${indexName}:${attempt}`,
+    stepTitle,
+    buildPlanIndexReviewArgs(indexName, attempt),
+  );
+}
+
+/** Intents returned by an index agent to hold the step open and start the critic checkpoint. */
+export function createHoldIndexForReviewIntents(
+  context: mls.msg.ExecutionContext,
+  parentStep: mls.msg.AIAgentStep,
+  indexStep: mls.msg.AIAgentStep,
+  hookSequential: number,
+  indexName: string,
+): mls.msg.AgentIntent[] {
+  return [
+    createPlannerUpdateStatusIntent(
+      context,
+      parentStep,
+      indexStep,
+      hookSequential,
+      'in_progress',
+      `index generated; waiting critic/repair checkpoint for ${indexName} (TODO-FINAL-023/024)`,
+    ),
+    createPlanIndexReviewStepIntent(context, indexStep, CRITIC_PLAN_INDEX_AGENT_NAME, indexName, 1, `Review ${indexName} (critic 1)`),
+  ];
+}
+
+export function findParentStepOfStep(context: mls.msg.ExecutionContext, stepId: number): mls.msg.AIPayload | null {
+  if (!context.task) throw new Error('[findParentStepOfStep] task invalid');
+  const allSteps = getAllSteps(context.task.iaCompressed?.nextSteps);
+  for (const step of allSteps) {
+    if (step.nextSteps?.some(child => child.stepId === stepId)) return step;
+    if (step.interaction?.payload?.some(child => child.stepId === stepId)) return step;
+  }
+  return null;
+}
+
+export function findLatestPlanIndexReviewStep(
+  context: mls.msg.ExecutionContext,
+  agentName: string,
+  indexName: string,
+  onlyCompleted: boolean = true,
+): mls.msg.AIAgentStep | null {
+  if (!context.task) throw new Error('[findLatestPlanIndexReviewStep] task invalid');
+  const allSteps = getAllSteps(context.task.iaCompressed?.nextSteps);
+  let latest: mls.msg.AIAgentStep | null = null;
+
+  for (const step of allSteps) {
+    if (step.type !== 'agent') continue;
+    const agentStep = step as mls.msg.AIAgentStep;
+    if (agentStep.agentName !== agentName) continue;
+    if (onlyCompleted && agentStep.status !== 'completed') continue;
+    try {
+      const args = parsePlanIndexReviewArgs(agentStep.prompt);
+      if (args.indexName !== indexName) continue;
+    } catch {
+      continue;
+    }
+    if (!latest || agentStep.stepId > latest.stepId) latest = agentStep;
+  }
+
+  return latest;
+}
+
+/**
+ * TODO-FINAL-024: read a plan index output preferring the latest completed repaired version.
+ * Falls back to the original index agent payload when no repair step exists.
+ */
+export function getPlannerOutputWithRepair<T>(
+  context: mls.msg.ExecutionContext,
+  sourceAgentName: string,
+  indexName: string,
+  config: PlannerExtractConfig<T>,
+  validate?: (output: PlannerOutput<T>) => void,
+): PlannerOutput<T> {
+  const repairStep = findLatestPlanIndexReviewStep(context, REPAIR_PLAN_INDEX_AGENT_NAME, indexName, true);
+  const repairPayload = repairStep?.interaction?.payload?.[0];
+
+  if (repairPayload) {
+    const repairConfig: PlannerExtractConfig<T> = {
+      ...config,
+      toolName: repairPlanIndexToolName(indexName),
+      stepId: `repair:${indexName}`,
+      stepIdAliases: [config.stepId, ...(config.stepIdAliases || []), `repair:${indexName}`],
+    };
+    const output = extractPlannerOutput(repairPayload, repairConfig);
+    validate?.(output);
+    return output;
+  }
+
+  return getPlannerOutput(context, sourceAgentName, config, validate);
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function getPlanningContextSnapshot(context: mls.msg.ExecutionContext): PlanningContextSnapshot {
   const clarificationAnswer = getRequirementsClarificationAnswer(context);
   return {
