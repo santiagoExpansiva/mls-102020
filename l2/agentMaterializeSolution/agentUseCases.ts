@@ -25,7 +25,6 @@ export function createAgent(): IAgentAsync {
     };
 }
 
-
 async function beforePromptImplicit(
     agent: IAgentMeta,
     context: mls.msg.ExecutionContext,
@@ -383,12 +382,19 @@ throw new AppError('CONFLICT', 'Business rule violated', 409, { reason });
 
 ## File generation rules:
 1. First line must be: \`/// <mls fileReference="<outputFileReference>" enhancement="_blank" />\`
-2. Derive TypeScript record types from the table column definitions provided
+2. Derive TypeScript types and interfaces from the table column definitions — ALL must be exported:
+   \`\`\`typescript
+   export type CartStatus = 'ativo' | 'convertido' | 'abandonado' | 'expirado';
+   export interface CartRecord { cart_id: string; status: CartStatus; ... }
+   export interface AddToCartInput { cartId: string; productId: string; ... }
+   export interface CartAggregate { ... }
+   \`\`\`
 3. Export one async function per command listed in the usecase defs
 4. Each function signature: (ctx: RequestContext, input: SpecificInputType) => Promise<SpecificOutputType>
 5. Apply rules from rulesApplied as explicit guard conditions with descriptive AppError messages
 6. Use runInTransaction when the usecase writes to multiple tables
 7. Use ctx.clock.nowIso() for timestamps, ctx.idGenerator.newId() for new IDs
+8. Never use unexported types — every \`interface\`, \`type\`, and \`enum\` declared in the file must have \`export\`
 
 ## Output format:
 Return the complete TypeScript file content, the exact fileReference string, and the implementation contract with:

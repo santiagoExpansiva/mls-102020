@@ -24,6 +24,7 @@ export function createAgent(): IAgentAsync {
     };
 }
 
+
 async function beforePromptImplicit(
     agent: IAgentMeta,
     context: mls.msg.ExecutionContext,
@@ -219,7 +220,7 @@ async function updatePersistenceFile(
 
     if (context.isTest) return;
 
-    const persistenceRef = `_${project}_/l${level}/${moduleName}/persistence.ts`;
+    const persistenceRef = `_${project}_/l${level}/${moduleName}/layer_1_external/persistence.ts`;
     const existingContent = await readTsFileContent(persistenceRef);
 
     const importLine = `import { ${exportName} } from '/${tableFileReference.replace(/\.ts$/, '.js')}';`;
@@ -261,7 +262,7 @@ function buildPersistenceTemplate(
     importLine: string,
     exportName: string
 ): string {
-    return `/// <mls fileReference="_${project}_/l${level}/${moduleName}/persistence.ts" enhancement="_blank" />
+    return `/// <mls fileReference="_${project}_/l${level}/${moduleName}/layer_1_external/persistence.ts" enhancement="_blank" />
 import type { TableDefinition } from '/_102034_/l1/server/layer_1_external/persistence/contracts.js';
 ${importLine}
 export const tableDefinitions: TableDefinition[] = [${exportName}];
