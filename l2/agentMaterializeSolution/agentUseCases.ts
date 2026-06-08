@@ -352,23 +352,43 @@ import { AppError, type RequestContext } from '/_102034_/l1/server/layer_2_contr
 \`\`\`
 
 ## Table Access Pattern:
+getTable is ASYNC — always use await:
 \`\`\`typescript
 async function getCartRepository(ctx: RequestContext) {
-    return ctx.data.moduleData.getTable<CartRecord>('cart');
+    return await ctx.data.moduleData.getTable<CartRecord>('cart');
 }
 \`\`\`
 
-## ITableRuntime operations:
-- findOne({ where: Partial<T> }): Promise<T | null>
-- findMany(input?: { where?, orderBy?, limit? }): Promise<T[]>
-- insert({ record: T }): Promise<void>
-- update({ where: Partial<T>, patch: Partial<T> }): Promise<void>
-- delete({ where: Partial<T> }): Promise<void>
+## ITableRepository<TRecord> operations:
+\`\`\`typescript
+findOne(input: { where: Partial<TRecord> }): Promise<TRecord | null>
+findMany(input?: IFindManyInput<TRecord>): Promise<TRecord[]>
+findManyByValues<TKey extends keyof TRecord>(input: { field: TKey; values: Array<NonNullable<TRecord[TKey]>>; limit?: number }): Promise<TRecord[]>
+insert(input: { record: TRecord }): Promise<void>
+upsert(input: { record: TRecord }): Promise<void>
+update(input: { where: Partial<TRecord>; patch: Partial<TRecord> }): Promise<void>
+delete(input: { where: Partial<TRecord> }): Promise<void>
+\`\`\`
+
+## IFindManyInput — orderBy format:
+\`\`\`typescript
+// CORRECT:
+const rows = await repo.findMany({
+    where: { customerId: input.customerId },
+    orderBy: { field: 'createdAt', direction: 'desc' },
+    limit: 50,
+});
+
+// WRONG — never use this format:
+// orderBy: { createdAt: 'desc' }       ← incorrect
+// orderBy: { field: 'createdAt: desc' } ← incorrect
+\`\`\`
 
 ## Transactions (required when writing multiple tables):
 \`\`\`typescript
-await ctx.data.runInTransaction(async (txRuntime) => {
-    const cartRepo = txRuntime.moduleData.getTable<CartRecord>('cart');
+await ctx.data.moduleData.runInTransaction(async (txRuntime) => {
+    const cartRepo = await txRuntime.getTable<CartRecord>('cart');
+    const orderRepo = await txRuntime.getTable<OrderRecord>('order');
     // ... operations
 });
 \`\`\`
