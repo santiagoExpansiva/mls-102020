@@ -381,30 +381,35 @@ export function validatePlanPageIndexOutput(
   }
 }
 
+// The bucket of a flowRef is fully determined by the workflow's executionMode, so a wrong
+// bucket is a deterministic, mechanically-fixable error — NOT something to bounce to the LLM
+// (the repair LLM often fails to fix it, killing the whole index/task). This function now
+// AUTO-CORRECTS: it re-buckets every referenced workflow id by its executionMode and dedupes,
+// mutating `flowRefs` in place. It only throws on a truly unknown workflow id.
 export function validatePageFlowRefsAgainstWorkflowIndex(pageId: string, flowRefs: PageFlowRefs, workflowIndex: PlanWorkflowIndexOutput): void {
   const workflowsById = new Map(workflowIndex.result.workflows.map(workflow => [workflow.workflowId, workflow]));
-  const seen = new Map<string, PageFlowRefBucket>();
-  const buckets: Array<{ bucket: PageFlowRefBucket; refs: string[] }> = [
-    { bucket: 'experienceFlows', refs: flowRefs.experienceFlows },
-    { bucket: 'entityLifecycles', refs: flowRefs.entityLifecycles },
-    { bucket: 'taskWorkflows', refs: flowRefs.taskWorkflows },
-    { bucket: 'automations', refs: flowRefs.automations },
-  ];
+  const buckets: PageFlowRefBucket[] = ['experienceFlows', 'entityLifecycles', 'taskWorkflows', 'automations'];
 
-  for (const { bucket, refs } of buckets) {
-    for (const workflowId of refs) {
-      const previousBucket = seen.get(workflowId);
-      if (previousBucket) throw new Error(`page ${pageId} flowRefs.${bucket} duplicates workflow ${workflowId} already in ${previousBucket}`);
-      seen.set(workflowId, bucket);
-
+  const correctBucketById = new Map<string, PageFlowRefBucket>();
+  const order: string[] = [];
+  for (const bucket of buckets) {
+    for (const workflowId of flowRefs[bucket]) {
       const workflow = workflowsById.get(workflowId);
       if (!workflow) throw new Error(`page ${pageId} flowRefs.${bucket} references unknown workflow ${workflowId}`);
-
-      const expectedBucket = getFlowRefBucketForExecutionMode(workflow.executionMode);
-      if (bucket !== expectedBucket) {
-        throw new Error(`page ${pageId} flowRefs.${bucket} references workflow ${workflowId} with executionMode=${workflow.executionMode}; expected ${expectedBucket}`);
+      if (!correctBucketById.has(workflowId)) {
+        correctBucketById.set(workflowId, getFlowRefBucketForExecutionMode(workflow.executionMode));
+        order.push(workflowId);
       }
     }
+  }
+
+  // Rebuild the four buckets deterministically (dedup + correct placement by executionMode).
+  flowRefs.experienceFlows = [];
+  flowRefs.entityLifecycles = [];
+  flowRefs.taskWorkflows = [];
+  flowRefs.automations = [];
+  for (const workflowId of order) {
+    flowRefs[correctBucketById.get(workflowId)!].push(workflowId);
   }
 }
 
