@@ -98,7 +98,7 @@ async function afterPromptStep(
     taskId: context.task?.PK || '',
     parentStepId: parentStep.stepId,
     stepId: step.stepId,
-    cleaner: 'input_output',
+    //cleaner: 'input_output',
     status: 'completed'
   };
 
@@ -133,7 +133,7 @@ async function processOutput(
     }
   };
 
-  return [newStep];
+  return [];
 }
 
 async function buildPrompt(path: string): Promise<string> {
@@ -239,11 +239,11 @@ export type Output = {
     path: string;
     map: Array<{
       elementDescription: string;
-      group: string;
+      group: string; // use CamelCase
       variant: string;
       reason: string;
     }>;
-    usedGroups: string[];
+    usedGroups: string[];// use CamelCase
   }
 }
 //#endregion

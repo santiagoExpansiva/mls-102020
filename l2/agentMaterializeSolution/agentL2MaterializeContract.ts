@@ -172,7 +172,7 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
 }
 
 
-async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number, [k: string]: unknown }, moduleName: string, device: string): Promise<string> {
+async function getSkill(info: { path: string, item: any, project?: number, [k: string]: unknown }, moduleName: string, device: string): Promise<string> {
 
   const project = info.project || 0;
   const fileName = info.item.outputPath.split('/').pop() || '';

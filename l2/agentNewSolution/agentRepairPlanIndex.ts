@@ -183,7 +183,7 @@ ${JSON.stringify(config.buildReviewContext(context), null, 2)}
 }
 
 const systemPrompt = `
-<!-- modelType: codestrict -->
+<!-- modelType: codeinstruct -->
 <!-- x-tool-strict: true -->
 
 You are agentRepairPlanIndex for the collab.codes "newSolution" flow.
