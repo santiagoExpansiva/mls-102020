@@ -1,4 +1,4 @@
-/// <mls fileReference="_102020_/l2/agentMaterializeSolution/agentMaterialize.ts" enhancement="_102027_/l2/enhancementAgent.ts"/>
+/// <mls fileReference="_102020_/l2/agentMaterializeSolution/agentL2Materialize.ts" enhancement="_102027_/l2/enhancementAgent.ts"/>
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { getMaterializeOrchestrator } from '/_102020_/l2/agentMaterializeSolution/materializeOrchestrator.js';
@@ -6,7 +6,7 @@ import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
 
 export function createAgent(): IAgentAsync {
   return {
-    agentName: "agentMaterialize",
+    agentName: "agentL2Materialize",
     agentProject: 102020,
     agentFolder: "agentMaterializeSolution",
     agentDescription: "new agent",

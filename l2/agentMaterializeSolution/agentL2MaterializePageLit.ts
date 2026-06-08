@@ -1,4 +1,4 @@
-/// <mls fileReference="_102020_/l2/agentMaterializeSolution/agentMaterializePageLit.ts" enhancement="_102027_/l2/enhancementAgent.ts"/>
+/// <mls fileReference="_102020_/l2/agentMaterializeSolution/agentL2MaterializePageLit.ts" enhancement="_102027_/l2/enhancementAgent.ts"/>
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
@@ -10,7 +10,7 @@ import { addNav, addPage } from '/_102020_/l2/newModule/astIndex.js';
 
 export function createAgent(): IAgentAsync {
   return {
-    agentName: "agentMaterializePageLit",
+    agentName: "agentL2MaterializePageLit",
     agentProject: 102020,
     agentFolder: "agentMaterializeSolution",
     agentDescription: "new agent",
@@ -69,7 +69,7 @@ async function beforePromptStep(
 
   if (!args) throw new Error(`(${agent.agentName})[beforePromptStep] args invalid`);
 
-  console.info('--------agentMaterializePageLit--------')
+  console.info('--------agentL2MaterializePageLit--------')
   const info = JSON.parse(args) as { path: string, item: mls.defs.MaterializeEntry, project?: number };
 
   info.project = mls.actualProject || 0;
@@ -187,12 +187,12 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
 async function addModuleRoutes(context: mls.msg.ExecutionContext, shortName: string, tag: string) {
 
   let moduleName = context.task?.iaCompressed?.longMemory['moduleName'];
-  if (!moduleName) throw new Error('Not found moduleName 2: agentMaterializePageLit');
+  if (!moduleName) throw new Error('Not found moduleName 2: agentL2MaterializePageLit');
 
   const key = mls.stor.getKeyToFile({ project: mls.actualProject || 0, level: 2, folder: `${moduleName}`, shortName: "module", extension: ".ts" });
   if (!mls.stor.files[key]) {
     await generateInfoModule(moduleName);
-    if (!mls.stor.files[key]) throw new Error('[agentMaterializePageLit]Not found module file');
+    if (!mls.stor.files[key]) throw new Error('[agentL2MaterializePageLit]Not found module file');
   }
 
   const info = convertTagToFileName(tag) as any;
@@ -222,12 +222,12 @@ async function addModuleRoutes(context: mls.msg.ExecutionContext, shortName: str
 async function addIndexPage(context: mls.msg.ExecutionContext, shortName: string, tag: string) {
 
   let moduleName = context.task?.iaCompressed?.longMemory['moduleName'];
-  if (!moduleName) throw new Error('Not found moduleName 3: agentMaterializePageLit');
+  if (!moduleName) throw new Error('Not found moduleName 3: agentL2MaterializePageLit');
 
   const key = mls.stor.getKeyToFile({ project: mls.actualProject || 0, level: 2, folder: `${moduleName}`, shortName: "index", extension: ".ts" });
   if (!mls.stor.files[key]) {
     await generateHtml(moduleName);
-    if (!mls.stor.files[key]) throw new Error('[agentMaterializePageLit] Not found index file after generate');
+    if (!mls.stor.files[key]) throw new Error('[agentL2MaterializePageLit] Not found index file after generate');
   };
 
   const info = convertTagToFileName(tag) as any;
@@ -282,24 +282,24 @@ async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, p
   const project = info.project || 0;
 
   const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;
-  if (!mod || !mod.moduleGenome) throw new Error('[agentMaterializePageLit] Not found moduleGenome');
+  if (!mod || !mod.moduleGenome) throw new Error('[agentL2MaterializePageLit] Not found moduleGenome');
 
   const genomeKey = Object.keys(mod.moduleGenome as Record<string, unknown>).find(k => k.startsWith(`${device}/`) && k.endsWith(`/${type}`));
-  if (!genomeKey) throw new Error(`[agentMaterializePageLit] no genome key found for device "${device}" and type "${type}"`);
+  if (!genomeKey) throw new Error(`[agentL2MaterializePageLit] no genome key found for device "${device}" and type "${type}"`);
 
   const genome = mod.moduleGenome[genomeKey];
-  if (!genome) throw new Error(`[agentMaterializePageLit] no genome config for key "${genomeKey}"`);
+  if (!genome) throw new Error(`[agentL2MaterializePageLit] no genome config for key "${genomeKey}"`);
 
   const prj = await import(`/_${project}_/l2/project.js`) as any;
-  if (!prj || !prj.projectConfig) throw new Error('[agentMaterializePageLit] Not found projectConfig');
+  if (!prj || !prj.projectConfig) throw new Error('[agentL2MaterializePageLit] Not found projectConfig');
 
-  if (!prj.projectConfig.layouts) throw new Error('[agentMaterializePageLit] Not found projectConfig layout dont config');
+  if (!prj.projectConfig.layouts) throw new Error('[agentL2MaterializePageLit] Not found projectConfig layout dont config');
 
   const layout = Object.values(prj.projectConfig.layouts).find((v: any) => v.name === genome.layout) as any;
-  if (!layout) throw new Error('[agentMaterializePageLit] Not found projectConfig layout dont config to:' + genome.layout);
+  if (!layout) throw new Error('[agentL2MaterializePageLit] Not found projectConfig layout dont config to:' + genome.layout);
 
   const designSystem = Object.values(prj.projectConfig.designSystems).find((ds: any) => ds.name === genome.designSystem) as any;
-  if (!designSystem) throw new Error('[agentMaterializePageLit] Not found projectConfig designSystem dont config to:' + genome.designSystem);
+  if (!designSystem) throw new Error('[agentL2MaterializePageLit] Not found projectConfig designSystem dont config to:' + genome.designSystem);
 
   const fileName = info.item.outputPath.startsWith('/') ? info.item.outputPath.slice(1) : info.item.outputPath;
   const genomeKeyNorm = genomeKey.endsWith('/') ? genomeKey.slice(0, -1) : genomeKey;

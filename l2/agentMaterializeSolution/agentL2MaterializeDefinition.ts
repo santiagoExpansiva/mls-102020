@@ -1,12 +1,13 @@
-/// <mls fileReference="_102020_/l2/agentMaterializeSolution/agentMaterializeDefinition.ts" enhancement="_102027_/l2/enhancementAgent.ts"/>
+/// <mls fileReference="_102020_/l2/agentMaterializeSolution/agentL2MaterializeDefinition.ts" enhancement="_102027_/l2/enhancementAgent.ts"/>
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { createStorFile, IReqCreateStorFile } from '/_102027_/l2/libStor.js';
 import { updateVariableJson } from '/_102027_/l2/defsAST.js';
+import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
 
 export function createAgent(): IAgentAsync {
   return {
-    agentName: 'agentMaterializeDefinition',
+    agentName: 'agentL2MaterializeDefinition',
     agentProject: 102020,
     agentFolder: 'agentMaterializeSolution',
     agentDescription: 'Expand a page plan .defs.ts into three mat1 specs: shared BFF skill, desktop page spec, and controller contract',
@@ -236,7 +237,31 @@ async function afterPromptStep(
     status,
   };
 
-  return [updateStatus];
+  if (status === 'failed') return [updateStatus];
+
+  const payload = step.interaction?.payload?.[0];
+  const path = (payload?.type === 'flexible' && payload.result?.path) ? payload.result.path as string : '';
+  const stepOri = context.task ? (findPreviousAgentStep(context.task, parentStep.stepId))?.stepId : parentStep.stepId;
+
+  const newStep = {
+    type: 'add-step',
+    messageId: context.message.orderAt,
+    threadId: context.message.threadId,
+    taskId: context.task?.PK || '',
+    parentStepId: stepOri || parentStep.stepId,
+    step: {
+      type: 'agent',
+      stepId: 0,
+      interaction: null,
+      status: 'waiting_human_input',
+      nextSteps: [],
+      agentName: 'agentL2Materialize',
+      prompt: path,
+      rags: [],
+    },
+  };
+
+  return [newStep, updateStatus];
 }
 
 // ─── pipeline ────────────────────────────────────────────────────────────────
@@ -250,7 +275,7 @@ function buildPipeline(project: number, moduleName: string, pageId: string): obj
   return [
     {
       id: 'contracts',
-      agent: 'agentMaterializeContracts',
+      agent: 'agentL2MaterializeContracts',
       defsPath: controllerDefsRef,
       moduleName,
       outputPath: `_${project}_/l2/${moduleName}/web/contracts/${pageId}.ts`,
@@ -259,7 +284,7 @@ function buildPipeline(project: number, moduleName: string, pageId: string): obj
     },
     {
       id: 'shared',
-      agent: 'agentMaterializePageShared',
+      agent: 'agentL2MaterializePageShared',
       defsPath: sharedDefsRef,
       moduleName,
       outputPath: `_${project}_/l2/${moduleName}/web/shared/${pageId}.ts`,
@@ -268,7 +293,7 @@ function buildPipeline(project: number, moduleName: string, pageId: string): obj
     },
     {
       id: 'page',
-      agent: 'agentMaterializePage',
+      agent: 'agentL2MaterializePage',
       defsPath: desktopDefsRef,
       moduleName,
       outputPath: `_${project}_/l2/${moduleName}/web/desktop/page11/${pageId}.ts`,
@@ -299,7 +324,7 @@ export type AgentOutput = {
 const systemPrompt = `
 <!-- modelType: codereasoning -->
 
-You are agentMaterializeDefinition.
+You are agentL2MaterializeDefinition.
 You receive a page plan (.defs.ts) and must produce three mat1 specification files.
 
 ## Output — return ONLY valid JSON, no markdown fences, no prose outside the JSON
