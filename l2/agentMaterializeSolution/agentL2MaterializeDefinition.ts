@@ -102,8 +102,8 @@ async function buildHumanPrompt(path: string, moduleName: string): Promise<strin
   if (!planSrc) throw new Error(`[agentMaterializeDefinition] plan file not found: ${path}`);
 
   const moduleDefs = await readStorFile(`mls-${project}/l5/${moduleName}/module.defs.ts`);
-  const rulesDefs  = await readStorFile(`mls-${project}/l5/${moduleName}/rules.defs.ts`);
-  const designSys  = await readStorFile(`mls-${project}/l2/designSystem.ts`);
+  const rulesDefs = await readStorFile(`mls-${project}/l5/${moduleName}/rules.defs.ts`);
+  const designSys = await readStorFile(`mls-${project}/l2/designSystem.ts`);
 
   return [
     `## path\n${path}`,
@@ -213,6 +213,11 @@ async function afterPromptStep(
       result.controllerFile,
     );
 
+    const key = mls.stor.getKeyToFile({ project: mls.actualProject || 0, level: 2, folder: `${moduleName}`, shortName: "module", extension: ".ts" });
+    if (!mls.stor.files[key]) {
+      await generateInfoModule(moduleName);
+    }
+
     // Inject pipeline into the original plan defs
     const planSrc = await readStorFile(path);
     if (planSrc) {
@@ -264,12 +269,83 @@ async function afterPromptStep(
   return [newStep, updateStatus];
 }
 
+async function generateInfoModule(moduleName: string) {
+
+
+  const src = `/// <mls fileReference="_${mls.actualProject}_/l2/${moduleName}/module.ts" enhancement="_blank" />
+import type { AuraModuleFrontendDefinition, IPaths, IGenomeConfig } from '/_102029_/l2/contracts/bootstrap.js';
+
+export const moduleGenome: Record<string, IGenomeConfig> = {
+  'web/desktop/page11': {
+    designSystem: 'default',
+    device: 'desktop',
+    layout: 'standard',
+  }
+} as const;
+  
+export const skills: IPaths = {
+  web: {
+    sharedPath: '/_${mls.actualProject}_/l2/${moduleName}/web/shared',
+    sharedSkill: '/_102020_/l2/agents/newModule/skills/genPageShared.ts'
+  }
+}
+
+export const moduleStates = {
+} as const;
+
+export const moduleShellPreferences = {
+  layout: {
+    asideMode: {
+      desktop: 'inline',
+      mobile: 'fullscreen',
+    },
+  },
+} as const;
+
+export const moduleFrontendDefinition: AuraModuleFrontendDefinition = {
+  pageTitle: '${moduleName}',
+  device: 'desktop',
+  navigation: [
+  ],
+  routes: [
+  ],
+};
+`
+
+  await saveFile(`_${mls.actualProject}_/l2/${moduleName}/module.ts`, src);
+
+}
+
+async function saveFile(ref: string, src: string) {
+
+  const info = mls.stor.convertFileReferenceToFile(ref);
+  const k = mls.stor.getKeyToFile(info);
+  let sf = mls.stor.files[k];
+
+  if (!sf) {
+    const param: IReqCreateStorFile = {
+      ...info,
+      source: src
+    }
+
+    sf = await createStorFile(param, true, true, true);
+
+  } else {
+
+    const m = await sf.getOrCreateModel();
+    if (m && m.model) m.model.setValue(src);
+
+  }
+
+  await mls.stor.localStor.setContent(sf, { contentType: 'string', content: src });
+}
+
 // ─── pipeline ────────────────────────────────────────────────────────────────
 
 function buildPipeline(project: number, moduleName: string, pageId: string): object[] {
   const dt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   const controllerDefsRef = `_${project}_/l1/${moduleName}/layer_2_controllers/${pageId}.defs.ts`;
-  const sharedDefsRef  = `_${project}_/l2/${moduleName}/web/shared/${pageId}.defs.ts`;
+  const sharedDefsRef = `_${project}_/l2/${moduleName}/web/shared/${pageId}.defs.ts`;
   const desktopDefsRef = `_${project}_/l2/${moduleName}/web/desktop/page11/${pageId}.defs.ts`;
 
   return [
