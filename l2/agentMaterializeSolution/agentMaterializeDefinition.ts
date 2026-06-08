@@ -306,6 +306,9 @@ folder: web/shared/
 
 ## Important Data
 <key fields from BFF output that drive the UI>
+
+## Origins
+<paste here the bffCommands array exactly as it appears in the source plan — no changes>
 \`;
 
 ---
@@ -348,6 +351,9 @@ device: desktop | layout: page11 | folder: web/desktop/page11/
 
 ## Navigation
 <outbound links from navigationRefs: target pageId and trigger label>
+
+## Origins
+<paste here the pageDefinition object exactly as it appears in the source plan — no changes>
 \`;
 
 ---
