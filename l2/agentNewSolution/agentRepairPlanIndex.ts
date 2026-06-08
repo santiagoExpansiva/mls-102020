@@ -101,18 +101,17 @@ async function afterPromptStep(
     // Invalid repaired index: keep the payload for debug and fail early with a clear reason.
     const traceMsg = `repair of ${reviewArgs.indexName} produced an invalid index: ${error instanceof Error ? error.message : String(error)}`;
     console.error(`[${agent.agentName}](afterPromptStep) ${traceMsg}`);
-    const indexParent = findParentStepOfStep(context, indexStep.stepId);
-    return [
+    const intents: mls.msg.AgentIntent[] = [
       createPlannerUpdateStatusIntent(context, indexStep, step, hookSequential, 'failed', traceMsg),
-      createPlannerUpdateStatusIntent(
-        context,
-        (indexParent && indexParent.type === 'agent' ? indexParent : indexStep) as mls.msg.AIAgentStep,
-        indexStep,
-        hookSequential,
-        'failed',
-        traceMsg,
-      ),
     ];
+    // Only fail the index step when its parent resolves as an agent step; reaching up to a
+    // grandparent id that no longer resolves (e.g. after a manual restart) makes the backend
+    // throw "Parent step not found" and breaks restart.
+    const indexParent = findParentStepOfStep(context, indexStep.stepId);
+    if (indexParent && indexParent.type === 'agent') {
+      intents.push(createPlannerUpdateStatusIntent(context, indexParent as mls.msg.AIAgentStep, indexStep, hookSequential, 'failed', traceMsg));
+    }
+    return intents;
   }
 
   // Valid repaired index: run the critic again (next attempt) before releasing children.
@@ -184,7 +183,7 @@ ${JSON.stringify(config.buildReviewContext(context), null, 2)}
 }
 
 const systemPrompt = `
-<!-- modelType: codepro -->
+<!-- modelType: codestrict -->
 <!-- x-tool-strict: true -->
 
 You are agentRepairPlanIndex for the collab.codes "newSolution" flow.

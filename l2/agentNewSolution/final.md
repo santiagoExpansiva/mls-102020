@@ -705,6 +705,27 @@ Criterio de aceite:
   - schema do tool de repair so e registrado quando `agentPlanIndexReview` e carregado; sem ele a extracao cai na validacao do normalize (mais permissiva), sem quebrar.
 - Build: `tsc -p tsconfig.frontend.json` ok em mls-base.
 
+**FIX (run 2026-06-08) - flowRefs bucket determinismo + falha de repair**:
+- Sintoma: `agentRepairPlanIndex` falhava repetidamente o `pageIndex` com "page X flowRefs.taskWorkflows references workflow Y with executionMode=entityLifecycle; expected entityLifecycles". O bucket de um `flowRef` e 100% determinado pelo `executionMode` do workflow, entao era erro deterministico que o LLM reparador nao conseguia consertar, derrubando o indice e a task.
+- Correcao: `validatePageFlowRefsAgainstWorkflowIndex` deixou de lancar erro em bucket errado e passou a AUTO-CORRIGIR — re-bucketiza cada workflow id pelo seu `executionMode` e deduplica, mutando `flowRefs` in place. So lanca erro em workflow id desconhecido. Aplica em geracao do pageIndex, no reparo e no page definition (todos chamam a funcao).
+- Robustez do restart: os caminhos de falha do critic (`failIndexIntents`) e do repair so emitem o `update-status` que falha o STEP do indice quando o pai dele resolve como step `agent`. Antes, alcancar um avo cujo id nao resolve mais (apos restart manual) fazia o backend lancar "Parent step not found", quebrando o restart (409 + recursao em `_processIntentsStream`). Ver TODO-FINAL-029 para a robustez mais profunda no `collab-messages`.
+- Build: `tsc -p tsconfig.frontend.json` ok.
+
+### TODO-FINAL-029 - Robustez de restart de step de critic/repair (collab-messages)
+
+Problema:
+- Ao clicar "restart" num step de critic/repair que falhou, o frontend (`mls-102025`/`aiAgentOrchestration.js`) re-executa o `afterPromptStep`, que pode emitir `update-status` para um step ancestral cujo id nao resolve mais -> backend `intentUpdateStatus` lanca `DomainError: Parent step not found in intentUpdateStatus: <id>`, retorna 409 Conflict em `/exec`, e o `_processIntentsStream` entra em recursao/loop.
+- O guard adicionado no agente (so falha o indice quando o pai resolve) evita o crash vindo do agente, mas a robustez do mecanismo de restart de subarvore critic/repair e do tratamento de pai ausente e do `collab-messages`/frontend.
+
+Acao (collab-messages + mls-102025):
+- `intentUpdateStatus`: tratar pai/step ausente de forma defensiva (ignorar/trace em vez de lancar) durante restart, ou validar antes de aplicar.
+- `restartStep` (aiAgentOrchestration): ao reiniciar um step de critic/repair, reconciliar a subarvore (o indice pai e os checkpoints) em vez de re-emitir intents para ancestrais possivelmente removidos; evitar recursao infinita em `_processIntentsStream` quando o backend responde 409.
+- Considerar: para steps de critic/repair, o restart deveria reiniciar o STEP DO INDICE (re-gerar) em vez do filho critic/repair isolado.
+
+Criterio de aceite:
+- Restart de um critic/repair falho nao gera "Parent step not found", 409 em loop, nem recursao infinita.
+- O usuario consegue reiniciar o planejamento de um indice de forma consistente.
+
 ### TODO-FINAL-025 - Reaproveitar plugins existentes e evitar drafts duplicados em `l2/plugins`
 
 Problema:
@@ -846,6 +867,44 @@ Criterio de aceite:
 - Persistencia: como o workflow e salvo como artefato `workflow` com `data={ workflowDefinition, defsPlan }` (TODO-FINAL-011/014), a metadata vai automaticamente para `l4/workflows/{workflowId}.defs.ts` e para o trace — sem mudanca no writer.
 - Decisao mantida: workflows continuam globais em `l4/workflows` (nao movidos para dentro de modulo).
 - Build: `tsc -p tsconfig.frontend.json` ok em mls-base.
+
+### TODO-FINAL-028 - Surfacar erro de payload `type:"result"` no status, titulo e mensagem da task
+
+Problema:
+- Quando um agente do planejamento retorna um payload `type:"result"` (erro de negocio, nao um plano), por exemplo o root `agentNewSolution` recusando um nome de modulo ja existente:
+```
+[
+  {
+    "type": "result",
+    "result": "The module \"barbershopProUsa\" already exists. Please choose a different module name.",
+    "status": "completed",
+    "stepId": 27,
+    "interaction": null,
+    "nextSteps": null
+  }
+]
+```
+- Hoje o `afterPromptStep` do `agentNewSolution` detecta `payload.type === 'result'` e marca o step como `failed`, MAS nao propaga a string de erro: o `createUpdateStatusIntent` e chamado sem `traceMsg`. Resultado: a task falha, porem a explicacao so aparece ao inspecionar o payload manualmente (foi assim que o erro foi descoberto). Nao fica no titulo da task nem na mensagem da task.
+- Isso vale potencialmente para qualquer agente cujo contrato permita retornar `type:"result"` como erro de negocio.
+
+Esperado:
+- Status do step/task = `failed` (ja ocorre).
+- O texto do erro (`payload.result`) deve aparecer:
+  - no `traceMsg` do step,
+  - no titulo da task (ou em campo visivel equivalente),
+  - na mensagem que carrega a task (explicacao do erro para o usuario), sem precisar abrir o payload.
+
+Acao (provavelmente em dois pontos):
+- Agente (`agentNewSolution.afterPromptStep`, e revisar outros agentes que aceitam `type:"result"`): ao detectar `payload.type === 'result'`, passar `payload.result` como `traceMsg` no `update-status` `failed`; avaliar tambem setar titulo/`last_update_log` da task com a mensagem de erro.
+- Backend `collab-messages` (`updateStepStatus`/`updateTaskDetails`): garantir que, em falha, a `traceMsg`/motivo seja persistida e enviada na atualizacao da mensagem da task (`taskTitle`/conteudo), nao apenas o status.
+- Frontend `mls-102025` (collab-messages): renderizar o motivo da falha (traceMsg/result) no titulo/cartao da task e na mensagem, de forma visivel ao usuario.
+
+Decisao em aberto:
+- Para o caso especifico de nome de modulo, hoje `reserveModuleNameFromFolders` ja auto-incrementa para um nome livre; avaliar se o root deveria auto-resolver (renomear) em vez de retornar erro, OU manter o erro mas surfaca-lo bem. Esta TODO trata do surfacing generico de `type:"result"`; a politica de auto-rename do nome de modulo pode ser uma sub-decisao.
+
+Criterio de aceite:
+- Um run que recebe `type:"result"` (ex.: "module already exists") mostra status `failed` E o texto do erro no titulo da task e na mensagem da task, sem necessidade de abrir o payload.
+- Comportamento consistente para qualquer agente que possa retornar `type:"result"` como erro.
 
 ### TODO-FINAL-001 - Encerrar a task de planejamento sem materializar (DONE)
 
