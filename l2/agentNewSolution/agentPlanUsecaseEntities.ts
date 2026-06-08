@@ -43,7 +43,18 @@ const PLAN_USECASE_ENTITIES_ALIASES = [PLAN_USECASE_ENTITIES_STEP_ID, 'plan-usec
 
 export interface PlanUsecaseEntitiesResult {
   backendArchitecture: Record<string, unknown>;
+  /**
+   * Domain entity abstractions used by layer_3 usecases (identified by usecaseEntityId).
+   * These group related usecases by domain concept (e.g. OrderEntity, PaymentEntity).
+   * Correspond to `approvedArtifacts.usecaseEntities` in the final plan, but at a finer
+   * granularity: one approved entity group may produce N individual usecases.
+   */
   usecaseEntities: unknown[];
+  /**
+   * Individual usecase operations (identified by usecaseId, e.g. 'createOrder').
+   * These are what validators and usecaseRefs reference — never usecaseEntityId.
+   * Coverage validator builds its usecaseIds set from this array.
+   */
   usecases: unknown[];
   controllerRules: {
     bffMustCallUsecases: boolean;
@@ -52,6 +63,31 @@ export interface PlanUsecaseEntitiesResult {
 }
 
 export type PlanUsecaseEntitiesOutput = PlannerOutput<PlanUsecaseEntitiesResult>;
+
+/** Ownership values for table references — mirrors foreignRefs.targetOwnership in table definitions. */
+export type TableOwnership = 'moduleOwned' | 'mdmOwned' | 'horizontalOwned' | 'pluginOwned';
+
+/**
+ * A table reference with explicit ownership so the materializer knows whether to call
+ * ctx.data.mdm* (mdmOwned) or a module-local layer_1 runtime (moduleOwned).
+ */
+export interface TableRef {
+  tableName: string;
+  ownership: TableOwnership;
+}
+
+const TABLE_OWNERSHIP_ENUM: TableOwnership[] = ['moduleOwned', 'mdmOwned', 'horizontalOwned', 'pluginOwned'];
+
+/** JSON schema fragment reused in usecaseEntities.sourceTables and usecases.readsTables/writesTables. */
+const TABLE_REF_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['tableName', 'ownership'],
+  properties: {
+    tableName: { type: 'string' },
+    ownership: { enum: TABLE_OWNERSHIP_ENUM },
+  },
+} as const;
 
 export const PLAN_USECASE_ENTITIES_RESULT_SCHEMA: Record<string, unknown> = {
     type: 'object',
@@ -79,7 +115,7 @@ export const PLAN_USECASE_ENTITIES_RESULT_SCHEMA: Record<string, unknown> = {
             usecaseEntityId: { type: 'string' },
             title: { type: 'string' },
             purpose: { type: 'string' },
-            sourceTables: { type: 'array', items: { type: 'string' } },
+            sourceTables: { type: 'array', items: TABLE_REF_SCHEMA },
             allowedOperations: { type: 'array', items: { type: 'string' } },
             layer: { const: 'layer_3_usecases' },
             rulesApplied: { type: 'array', items: { type: 'string' } },
@@ -100,8 +136,8 @@ export const PLAN_USECASE_ENTITIES_RESULT_SCHEMA: Record<string, unknown> = {
             layer: { const: 'layer_3_usecases' },
             inputEntities: { type: 'array', items: { type: 'string' } },
             outputEntities: { type: 'array', items: { type: 'string' } },
-            readsTables: { type: 'array', items: { type: 'string' } },
-            writesTables: { type: 'array', items: { type: 'string' } },
+            readsTables: { type: 'array', items: TABLE_REF_SCHEMA },
+            writesTables: { type: 'array', items: TABLE_REF_SCHEMA },
             commands: { type: 'array', items: { type: 'string' } },
             rulesApplied: { type: 'array', items: { type: 'string' } },
           },
@@ -246,7 +282,7 @@ function normalizeUsecaseEntity(value: unknown, path: string): unknown {
   assertString(entity.usecaseEntityId, `${path}.usecaseEntityId`);
   assertString(entity.title, `${path}.title`);
   assertString(entity.purpose, `${path}.purpose`);
-  normalizeStringArray(entity.sourceTables, `${path}.sourceTables`);
+  normalizeTableRefArray(entity.sourceTables, `${path}.sourceTables`);
   normalizeStringArray(entity.allowedOperations, `${path}.allowedOperations`);
   if (entity.layer !== 'layer_3_usecases') throw new Error(`${path}.layer must be layer_3_usecases`);
   if (entity.rulesApplied !== undefined) normalizeStringArray(entity.rulesApplied, `${path}.rulesApplied`);
@@ -262,11 +298,25 @@ function normalizeUsecase(value: unknown, path: string): unknown {
   if (usecase.layer !== 'layer_3_usecases') throw new Error(`${path}.layer must be layer_3_usecases`);
   normalizeStringArray(usecase.inputEntities, `${path}.inputEntities`);
   normalizeStringArray(usecase.outputEntities, `${path}.outputEntities`);
-  normalizeStringArray(usecase.readsTables, `${path}.readsTables`);
-  normalizeStringArray(usecase.writesTables, `${path}.writesTables`);
+  normalizeTableRefArray(usecase.readsTables, `${path}.readsTables`);
+  normalizeTableRefArray(usecase.writesTables, `${path}.writesTables`);
   if (usecase.commands !== undefined) normalizeStringArray(usecase.commands, `${path}.commands`);
   normalizeStringArray(usecase.rulesApplied, `${path}.rulesApplied`);
   return usecase;
+}
+
+function normalizeTableRef(value: unknown, path: string): TableRef {
+  const ref = assertRecord(value, path);
+  const tableName = assertString(ref.tableName, `${path}.tableName`);
+  const ownership = assertString(ref.ownership, `${path}.ownership`);
+  if (!TABLE_OWNERSHIP_ENUM.includes(ownership as TableOwnership)) {
+    throw new Error(`${path}.ownership must be one of: ${TABLE_OWNERSHIP_ENUM.join(', ')}`);
+  }
+  return { tableName, ownership: ownership as TableOwnership };
+}
+
+function normalizeTableRefArray(value: unknown, path: string): TableRef[] {
+  return assertArray(value, path).map((item, index) => normalizeTableRef(item, `${path}[${index}]`));
 }
 
 function normalizeStringArray(value: unknown, path: string): string[] {
@@ -334,4 +384,13 @@ Do not return prose.
 - Only layer_3_usecases may access tables from layer_1_external.
 - BFF commands generated later must be able to reference these use cases by usecaseId.
 - Do not generate TypeScript code.
+
+## Table references (sourceTables, readsTables, writesTables)
+Each entry must be an object { tableName, ownership } — never a plain string.
+Set ownership based on who owns the table:
+- "moduleOwned"    — tables in this module's layer_1_external (from the table definitions context)
+- "mdmOwned"       — entities in persistenceIndex.excludedEntities with ownership "mdmOwned"; accessed at runtime via ctx.data.mdmDocument / ctx.data.mdmEntityIndex (project 102034)
+- "horizontalOwned"— entities excluded with ownership "horizontalOwned"
+- "pluginOwned"    — entities excluded with ownership "pluginOwned"
+MDM-owned tables must still appear in readsTables/writesTables so the materializer knows the usecase depends on MDM, but with ownership "mdmOwned".
 `;

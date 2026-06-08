@@ -56,6 +56,12 @@ export interface FinalSolutionPlanResult {
     mdm: unknown[];
     metricTables: unknown[];
     metricDashboards: unknown[];
+    /**
+     * Approved usecase entity groups (by usecaseEntityId, e.g. 'OrderEntity').
+     * These are entity-level groupings — not individual usecases.
+     * Individual usecases (with usecaseId) live in PlanUsecaseEntitiesResult.usecases.
+     * Validators and usecaseRefs always reference usecaseId, never usecaseEntityId.
+     */
     usecaseEntities: unknown[];
   };
   decisions: unknown[];

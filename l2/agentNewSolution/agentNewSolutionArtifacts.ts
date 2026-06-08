@@ -142,7 +142,16 @@ export async function saveNewSolutionPlanArtifacts(
 
       // TODO-FINAL-015: reference-only candidates (the target module already exists) are recorded
       // in the manifest but never written, so we don't overwrite an existing module.
-      if (!candidate.referenceOnly) await saveStorContent(fileInfo, source, false);
+      if (!candidate.referenceOnly) {
+        if (candidate.artifactType === 'project' && isRecord(candidate.data)) {
+          // l5/project.json is the shared project configuration (orgName, designSystems, etc.).
+          // Do a merge instead of overwrite: preserve all existing fields and only add/replace
+          // the modules entry for this moduleName.
+          await mergeAndSaveProjectJson(fileInfo, candidate.data);
+        } else {
+          await saveStorContent(fileInfo, source, false);
+        }
+      }
 
       saved.push({
         artifactType: candidate.artifactType,
@@ -810,6 +819,39 @@ function getTraceShortName(agentName: string, stepId: number): string {
     .replace(/^-+|-+$/g, '')
     .toLowerCase();
   return `${String(stepId).padStart(3, '0')}-${safeAgentName || 'agent'}`;
+}
+
+/**
+ * Merge-save for l5/project.json: reads the existing file, preserves all top-level
+ * fields (orgName, designSystems, languages, etc.) and only adds/replaces the
+ * modules entry for the incoming moduleName. Never overwrites unrelated modules.
+ */
+async function mergeAndSaveProjectJson(
+  fileInfo: Pick<mls.stor.IFileInfo, 'project' | 'level' | 'folder' | 'shortName' | 'extension'>,
+  newData: Record<string, unknown>,
+): Promise<void> {
+  const key = mls.stor.getKeyToFile(fileInfo);
+  const existingFile = mls.stor.files[key];
+  const existingRaw = existingFile ? await existingFile.getContent() : undefined;
+  const existing = typeof existingRaw === 'string' ? parseMaybeJson(existingRaw) : undefined;
+  const base: Record<string, unknown> = isRecord(existing) ? { ...existing } : {};
+
+  // Build a map of existing modules keyed by moduleName, then overlay incoming modules.
+  const existingModules = Array.isArray(base.modules) ? base.modules.filter(isRecord) : [];
+  const incomingModules = Array.isArray(newData.modules) ? newData.modules.filter(isRecord) : [];
+
+  const moduleMap = new Map<string, Record<string, unknown>>();
+  for (const m of existingModules) {
+    const name = readString(m.moduleName);
+    if (name) moduleMap.set(name, m);
+  }
+  for (const m of incomingModules) {
+    const name = readString(m.moduleName);
+    if (name) moduleMap.set(name, m); // add or replace
+  }
+
+  const merged = { ...base, modules: [...moduleMap.values()] };
+  await saveStorContent(fileInfo, `${JSON.stringify(merged, null, 2)}\n`, false);
 }
 
 async function saveStorContent(

@@ -30,7 +30,7 @@ const RECOMMEND_IMPLEMENTATIONS_SCHEMA_VERSION_ALIASES = [RECOMMEND_IMPLEMENTATI
 
 type RecommendationStatus = 'ok' | 'needs_input' | 'failed';
 type Priority = 'now' | 'soon' | 'later' | 'never';
-type ArtifactType = 'page' | 'workflow' | 'plugin' | 'agent' | 'horizontalModule' | 'mdm' | 'ontology' | 'metric' | 'metricTable' | 'usecaseEntity';
+type ArtifactType = 'page' | 'workflow' | 'plugin' | 'agent' | 'horizontalModule' | 'mdm' | 'ontology' | 'metric' | 'metricTable' | 'usecaseEntity' | 'metricDashboard';
 
 interface InitialNewSolutionPlanSummary {
   userLanguage: string;
@@ -119,7 +119,7 @@ export const recommendImplementationsToolSchema = {
                 properties: {
                   recommendationId: { type: 'string' },
                   artifactType: {
-                    enum: ['page', 'workflow', 'plugin', 'agent', 'horizontalModule', 'mdm', 'ontology', 'metric', 'metricTable', 'usecaseEntity'],
+                    enum: ['page', 'workflow', 'plugin', 'agent', 'horizontalModule', 'mdm', 'ontology', 'metric', 'metricTable', 'usecaseEntity', 'metricDashboard'],
                   },
                   title: { type: 'string' },
                   description: { type: 'string' },
@@ -464,8 +464,8 @@ function validateRecommendImplementationsOutput(
     if (!hasNowArtifact(recommendations, 'metricTable')) {
       throw new Error('initial metrics/dashboard was requested, but no now metricTable recommendation exists');
     }
-    if (!hasNowAdminDashboard(recommendations)) {
-      throw new Error('initial metrics/dashboard was requested, but no now admin dashboard page recommendation exists');
+    if (!hasNowArtifact(recommendations, 'metricDashboard')) {
+      throw new Error('initial metrics/dashboard was requested, but no now metricDashboard recommendation exists');
     }
   }
 
@@ -482,13 +482,6 @@ function hasNowArtifact(recommendations: ImplementationRecommendation[], artifac
   return recommendations.some(item => item.artifactType === artifactType && item.priority === 'now');
 }
 
-function hasNowAdminDashboard(recommendations: ImplementationRecommendation[]): boolean {
-  return recommendations.some(item =>
-    item.artifactType === 'page' &&
-    item.priority === 'now' &&
-    /\b(admin|administrativo|dashboard|painel|metric|metrica)\b/.test(normalizeText(`${item.recommendationId} ${item.title} ${item.description}`))
-  );
-}
 
 function requiresUsecasePlanning(scope: DiscoverSolutionScopeOutput): boolean {
   const signals = scope.result.artifactSignals;
@@ -599,17 +592,12 @@ function assertArtifactType(value: unknown, path: string): ArtifactType {
     value === 'ontology' ||
     value === 'metric' ||
     value === 'metricTable' ||
-    value === 'usecaseEntity'
+    value === 'usecaseEntity' ||
+    value === 'metricDashboard'
   ) return value;
   throw new Error(`${path} must be a valid artifactType`);
 }
 
-function normalizeText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
 
 const systemPrompt = `
 <!-- modelType: codeinstruct -->
@@ -626,11 +614,11 @@ Do not return prose.
 
 ## Rules
 - The tool arguments must satisfy the provided schema.
-- artifactType must be one of: page, workflow, plugin, agent, horizontalModule, mdm, ontology, metric, metricTable, usecaseEntity.
+- artifactType must be one of: page, workflow, plugin, agent, horizontalModule, mdm, ontology, metric, metricTable, usecaseEntity, metricDashboard.
 - priority and defaultPriority must be now, soon, later, or never.
 - Always include at least one MDM recommendation with priority "now".
 - Include metricTable recommendations with priority "now" when the clarification answer accepted initial metrics/dashboard.
-- Include an admin dashboard page recommendation with priority "now" when the clarification answer accepted initial metrics/dashboard.
+- Include a metricDashboard recommendation (artifactType: "metricDashboard") with priority "now" when the clarification answer accepted initial metrics/dashboard. Use the actorId from the final plan (e.g. the admin or operations actor) as the recommendationId prefix. Do not use artifactType "page" for this recommendation.
 - Include usecaseEntity planning with priority "now" when the discovered scope contains writes, lifecycle workflows, metric updates, table updates, commands, or backend usecase signals.
 - Include payment plugins only when payment, billing, subscription, checkout, invoice, or financial collection is materially relevant.
 - Mark payment plugins as "now" only when online payment is required for the MVP; otherwise use "soon" or "later".
