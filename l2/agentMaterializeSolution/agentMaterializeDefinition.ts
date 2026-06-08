@@ -2,6 +2,7 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { createStorFile, IReqCreateStorFile } from '/_102027_/l2/libStor.js';
+import { updateVariableJson } from '/_102027_/l2/defsAST.js';
 
 export function createAgent(): IAgentAsync {
   return {
@@ -210,6 +211,14 @@ async function afterPromptStep(
       `mls-${project}/l1/${moduleName}/layer_2_controllers/${pageId}.defs.ts`,
       result.controllerFile,
     );
+
+    // Inject pipeline into the original plan defs
+    const planSrc = await readStorFile(path);
+    if (planSrc) {
+      const pipeline = buildPipeline(project, moduleName, pageId);
+      const updatedPlan = updateVariableJson(planSrc, 'materializeIndex', pipeline);
+      await writeStorFile(path, updatedPlan);
+    }
   } catch (err) {
     status = 'failed';
     console.error(`[agentMaterializeDefinition](afterPromptStep)`, err);
@@ -228,6 +237,45 @@ async function afterPromptStep(
   };
 
   return [updateStatus];
+}
+
+// ─── pipeline ────────────────────────────────────────────────────────────────
+
+function buildPipeline(project: number, moduleName: string, pageId: string): object[] {
+  const dt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const controllerDefsRef = `_${project}_/l1/${moduleName}/layer_2_controllers/${pageId}.defs.ts`;
+  const sharedDefsRef  = `_${project}_/l2/${moduleName}/web/shared/${pageId}.defs.ts`;
+  const desktopDefsRef = `_${project}_/l2/${moduleName}/web/desktop/page11/${pageId}.defs.ts`;
+
+  return [
+    {
+      id: 'contracts',
+      agent: 'agentMaterializeContracts',
+      defsPath: controllerDefsRef,
+      moduleName,
+      outputPath: `_${project}_/l2/${moduleName}/web/contracts/${pageId}.ts`,
+      dependsOn: [],
+      specUpdatedAt: dt,
+    },
+    {
+      id: 'shared',
+      agent: 'agentMaterializePageShared',
+      defsPath: sharedDefsRef,
+      moduleName,
+      outputPath: `_${project}_/l2/${moduleName}/web/shared/${pageId}.ts`,
+      dependsOn: ['contracts'],
+      specUpdatedAt: dt,
+    },
+    {
+      id: 'page',
+      agent: 'agentMaterializePage',
+      defsPath: desktopDefsRef,
+      moduleName,
+      outputPath: `_${project}_/l2/${moduleName}/web/desktop/page11/${pageId}.ts`,
+      dependsOn: ['contracts', 'shared'],
+      specUpdatedAt: dt,
+    },
+  ];
 }
 
 // ─── output type ──────────────────────────────────────────────────────────────
