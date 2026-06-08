@@ -248,7 +248,7 @@ async function afterPromptStep(
   const path = (payload?.type === 'flexible' && payload.result?.path) ? payload.result.path as string : '';
   const stepOri = context.task ? (findPreviousAgentStep(context.task, parentStep.stepId))?.stepId : parentStep.stepId;
 
-  const newStep = {
+  const newStep: mls.msg.AgentIntentAddStep = {
     type: 'add-step',
     messageId: context.message.orderAt,
     threadId: context.message.threadId,
