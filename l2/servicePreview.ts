@@ -405,19 +405,19 @@ export class ServicePreview extends ServiceBase {
 
   private setLastOpenedFile() {
 
-
     const lastFileOpened = getLastOpenedFiles(mls.actualProject || 0);
     if (this.level === 2) {
       const levelKey = String(this.level);
       if (!lastFileOpened || !lastFileOpened[levelKey as any]) {
-        const lastFileLeft = (lastFileOpened[levelKey as any] as OpenedFileL2).left;
-        if (!lastFileLeft) {
-          this.clearPreview();
-          return;
-        }
-        mls.actual[this.level].setFullName(lastFileLeft);
-
+        this.clearPreview();
+        return;
       }
+      const lastFileLeft = (lastFileOpened[levelKey as any] as OpenedFileL2).left;
+      if (!lastFileLeft) {
+        this.clearPreview();
+        return;
+      }
+      mls.actual[this.level].setFullName(lastFileLeft);
     }
   }
 
