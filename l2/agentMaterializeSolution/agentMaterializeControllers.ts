@@ -3,6 +3,24 @@
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { createStorFile } from '/_102027_/l2/libStor.js';
 
+// Promise-chain lock: only one write per router file at a time.
+// Each call chains onto the previous promise, so concurrent calls are serialized.
+const routerFileLocks = new Map<string, Promise<void>>();
+
+function withRouterLock<T>(routerKey: string, fn: () => Promise<T>): Promise<T> {
+    const prev = routerFileLocks.get(routerKey) ?? Promise.resolve();
+    let releaseLock!: () => void;
+    const hold = new Promise<void>((res) => { releaseLock = res; });
+    routerFileLocks.set(routerKey, prev.then(() => hold));
+    return prev.then(async () => {
+        try {
+            return await fn();
+        } finally {
+            releaseLock();
+        }
+    });
+}
+
 interface ControllerStepArgs {
     pageId: string;
     pageDefsFileReference: string;
@@ -136,12 +154,13 @@ async function afterPromptStep(
         await saveFile(output.result.fileReference, output.result.fileContent);
 
         const fileInfo = mls.stor.convertFileReferenceToFile(output.result.fileReference);
-        await updateRouterFile(
+        const routerKey = `_${fileInfo.project}_/l${fileInfo.level}/${output.result.moduleName}/layer_2_controllers/router.ts`;
+        await withRouterLock(routerKey, () => updateRouterFile(
             fileInfo.project,
             output.result.moduleName,
             fileInfo.level,
             output.result.routerEntries
-        );
+        ));
     }
 
     const updateStatus: mls.msg.AgentIntentUpdateStatus = {
@@ -247,7 +266,7 @@ async function saveFile(fileReference: string, content: string): Promise<void> {
             status: 'new'
         }, true, true, true);
     } else {
-        const file = await mls.stor.addOrUpdateFile({ ...fileInfo, content, extension: '.ts', versionRef: new Date().toISOString() });
+        const file = await mls.stor.addOrUpdateFile({ ...fileInfo, extension: '.ts', versionRef: new Date().toISOString() });
         if (!file) throw new Error(`[saveFile] addOrUpdateFile failed: ${fileReference}`);
         const model = await file.getOrCreateModel();
         model.model.setValue(content);
@@ -283,7 +302,7 @@ async function updateRouterFile(
             status: 'new'
         }, true, true, true);
     } else {
-        const file = await mls.stor.addOrUpdateFile({ ...fileInfo, content: updatedContent, extension: '.ts', versionRef: new Date().toISOString() });
+        const file = await mls.stor.addOrUpdateFile({ ...fileInfo, extension: '.ts', versionRef: new Date().toISOString() });
         if (!file) throw new Error(`[updateRouterFile] addOrUpdateFile failed`);
         const model = await file.getOrCreateModel();
         model.model.setValue(updatedContent);
@@ -363,14 +382,27 @@ export const petShopStripeGetOrderHistoryHandler: BffHandler = async ({ request,
 \`\`\`
 
 
-## Usecase Import:
-- Use the importPath provided in the usecase contract section
-- Use the functionName from implementation.functionName if present; otherwise derive from the usecaseId (strip "usecase" prefix, camelCase)
+## Usecase Imports and Types — CRITICAL RULE:
+When a usecase defs has an \`implementation\` section, you MUST import the function AND types from the usecase file. NEVER redeclare interfaces that already exist in a usecase.
 
-## Input/Output types:
-- If the usecase defs has implementation.inputTypeName/outputTypeName, use those type names
-- If not, derive from the bffCommand input/output spec using TypeScript interfaces
-- ALL interfaces and types must be exported with \`export\`
+\`\`\`typescript
+// CORRECT — import function and types together from the usecase file:
+import { getOrderHistory, type GetOrderHistoryInput, type OrderHistoryResult } from '/_102030_/l1/petShopStripe/layer_3_usecases/usecaseGetOrderHistory.js';
+
+export const petShopStripeGetOrderHistoryHandler: BffHandler = async ({ request, ctx }) => {
+    const input = request.params as GetOrderHistoryInput;
+    const result = await getOrderHistory(ctx, input);
+    return ok(result);
+};
+
+// WRONG — never redeclare types that come from a usecase:
+// export interface GetOrderHistoryInput { ... }  ← forbidden duplicate
+\`\`\`
+
+- Use \`implementation.functionName\` for the function to call
+- Use \`implementation.inputTypeName\` / \`implementation.outputTypeName\` for the type names in the import
+- The importPath for each usecase is provided in the "Usecase Implementation Contracts" section
+- Only declare local types for fields that are NOT covered by any usecaseRef \`implementation\`
 
 ## Router entries:
 Return one entry per bffCommand with:
@@ -380,7 +412,7 @@ Return one entry per bffCommand with:
 
 ## File generation rules:
 1. First line: \`/// <mls fileReference="<outputFileReference>" enhancement="_blank" />\`
-2. All exported type/interface declarations
+2. Import types from usecase files — never redeclare them locally
 3. All handlers exported as const
 
 ## Output format:

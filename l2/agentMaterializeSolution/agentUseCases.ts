@@ -54,7 +54,7 @@ async function beforePromptImplicit(
         },
         executionMode: {
             type: 'parallel',
-            args: items.slice(0, 1).map((item) => JSON.stringify(item))
+            args: items.map((item) => JSON.stringify(item))
         }
     };
     return [addMessageAI];
@@ -119,7 +119,6 @@ async function afterPromptStep(
 
     const payload = step.interaction?.payload?.[0];
     if (payload?.type !== 'flexible' || !payload.result) throw new Error(`[afterPromptStep] invalid payload: ${payload}`);
-    debugger;
     const output: Output = payload;
     const intents = await processOutput(context, output.result.fileContent, output.result.fileReference);
 
