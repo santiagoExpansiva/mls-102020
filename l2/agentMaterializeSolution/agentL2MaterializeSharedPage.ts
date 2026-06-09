@@ -2,7 +2,7 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js'
 import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
-import { getMaterializeOrchestrator } from '/_102020_/l2/L2Solution/materializeOrchestrator.js';
+import { getMaterializeOrchestrator } from '/_102020_/l2/agentMaterializeSolution/materializeOrchestrator.js';
 
 export function createAgent(): IAgentAsync {
   return {
@@ -114,7 +114,7 @@ async function afterPromptStep(
     taskId: context.task?.PK || '',
     parentStepId: parentStep.stepId,
     stepId: step.stepId,
-    cleaner: 'input_output',
+    //cleaner: 'input_output',
     status
   };
 
@@ -169,7 +169,7 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
   return newSteps;
 }
 
-async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }, moduleName: string, device: string): Promise<string> {
+async function getSkill(info: { path: string, item: any, project?: number }, moduleName: string, device: string): Promise<string> {
 
   const project = info.project || 0;
   const mod = await import(`/_${project}_/l2/${moduleName}/module.js`) as any;

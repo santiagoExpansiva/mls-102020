@@ -119,28 +119,27 @@ export class MaterializeOrchestrator {
     }
 
     public async getSkill(path: string): Promise<string> {
+
+        let module: any;
+        if (path.startsWith('/')) path = path.slice(1);
+        const f = mls.stor.convertFileReferenceToFile(path);
+        if (!f) return '';
+
         try {
 
-            if (path.startsWith('/')) path = path.slice(1);
-
-            const f = mls.stor.convertFileReferenceToFile(path);
-            if (!f) return '';
-
-            const module = await collabImport(f as any);
-
-            if (!module) {
-                console.info(`[getSkill]Módulo não registrado: ${path}`);
-                return '';
-            }
-
-            let src = module.skill;
-
-            return await this.processTemplate(src);
+            module = await collabImport(f as any);
 
         } catch (err) {
-            console.error(`Erro em ${path}`, err);
+            module = await this.getModuleByBuild(path);
+        }
+
+        if (!module) {
+            console.info(`[getSkill]Módulo não registrado: ${path}`);
             return '';
         }
+
+        let src = module.skill;
+        return await this.processTemplate(src);
     }
 
     private async processTemplate(input: string): Promise<string> {
@@ -178,7 +177,11 @@ export class MaterializeOrchestrator {
                 try {
                     const f = mls.stor.convertFileReferenceToFile(filePath);
                     if (!f) continue;
-                    let module = await collabImport(f as any);
+                    let module: any;
+
+                    try {
+                        module = await collabImport(f as any);
+                    } catch (e) { }
 
                     if (!module || !(exportName in module)) {
                         module = await this.getModuleByBuild(filePath);
@@ -285,7 +288,13 @@ export class MaterializeOrchestrator {
         try {
             const f = mls.stor.convertFileReferenceToFile(path);
             if (!f) return '';
-            const module = await collabImport(f as any);
+
+            let module: any;
+            try {
+                module = await collabImport(f as any);
+            } catch (e) { 
+                module = await this.getModuleByBuild(path);
+            }
 
             if (!module) {
                 console.info(`Módulo não registrado: ${path}`);
@@ -357,7 +366,12 @@ export class MaterializeOrchestrator {
             const f = mls.stor.convertFileReferenceToFile(path);
             if (!f) return '';
 
-            const module = await collabImport(f as any);
+            let module: any;
+            try {
+                module = await collabImport(f as any);
+            } catch (e) { 
+                module = await this.getModuleByBuild(path);
+            }
 
             if (module && variable in module) {
                 const result = module[variable];

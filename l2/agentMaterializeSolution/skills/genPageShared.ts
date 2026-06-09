@@ -13,8 +13,31 @@ It never renders, never registers a custom element, and never dispatches events.
 - \`##User data\`: a JSON array of command descriptors — the **Origins** list for this page.
   Each entry has \`commandName\`, \`kind\` ("query" or "command"), \`purpose\`, \`input\`, and \`output\`.
 - \`##User info\`: a JSON object with at minimum \`moduleName\`, \`device\`, \`project\`, and \`item.outputPath\` (the full output file path).
+- \`##Contracts\`: the **full TypeScript source** of the contracts file that the shared class may import from.
 
 Extract \`pageName\` from the last segment of \`item.outputPath\` (strip the leading path and the \`.ts\` extension).
+
+---
+
+## MANDATORY FIRST STEP — inventory the contracts file
+
+Read \`##Contracts\` completely before writing any code.
+
+Scan every \`export interface\` declaration and record the exact name:
+\`\`\`
+PetShopStripeGetCartInput
+PetShopStripeGetCartOutput
+PetShopStripeUpdateCartInput
+PetShopStripeUpdateCartOutput
+...
+\`\`\`
+
+This list is the **only** source of interface names you may import or reference.
+
+**Rules:**
+- If \`##Contracts\` contains exported interfaces → import and use only names from this list.
+- If \`##Contracts\` is empty, missing, or contains no \`export interface\` declarations → do NOT write a contracts import line; use \`any\` for all types that would otherwise reference a contract interface.
+- NEVER invent an interface name. If a name does not appear in the list above, it does not exist.
 
 ---
 
@@ -143,12 +166,21 @@ import {
   runBlockingUiAction,
 } from '/_102029_/l2/interactionRuntime.js';
 import { subscribe, unsubscribe, getState, setState } from '/_102029_/l2/collabState.js';
-import type { /* only interfaces actually used */ } from '/_{project}_/l2/{moduleName}/{device}/contracts/{pageName}.js';
+// contracts import — see rules below
 \`\`\`
 
+**Contracts import rules (apply AFTER reading the MANDATORY FIRST STEP list):**
+
+- If the list has at least one interface → add:
+  \`\`\`typescript
+  import type { InterfaceA, InterfaceB } from '/_{project}_/l2/{moduleName}/{device}/contracts/{pageName}.js';
+  \`\`\`
+  Include ONLY names that appear in the list AND are actually referenced in the class body.
+  The path is built from \`project\`, \`moduleName\`, \`device\`, and \`pageName\` (from \`##User info\`).
+
+- If the list is empty → omit the contracts import line entirely.
+
 Import \`initState\` only if there are action state keys to initialize.
-Import ONLY the interface types actually referenced in the class body.
-The contracts import path is built from \`project\`, \`moduleName\`, \`device\`, and \`pageName\` (from \`##User info\`).
 
 ### 3. i18n block
 
@@ -175,9 +207,16 @@ Never write \`as const\` on message objects.
 
 ### 4. Reactive properties
 
-For each top-level key in the \`output\` of every **query** command:
-- Array value \`[{...}]\` → \`@property() {key}: Array<...> = [];\`
-- Object value \`{...}\` → \`@property() {key}: {...} | undefined = undefined;\`
+For each top-level key in the \`output\` of every **query** command, declare a reactive property.
+To determine the TypeScript type, look up the matching interface from the MANDATORY FIRST STEP list:
+
+- If there is an interface whose name contains the command name in PascalCase and ends with \`Output\`
+  (e.g., command \`getCart\` → look for \`...GetCartOutput\` in the list):
+  - Array value \`[{...}]\` → \`@property() {key}: InterfaceName['key'] = [];\`
+  - Object value \`{...}\` → \`@property() {key}: InterfaceName['key'] | undefined = undefined;\`
+- If NO matching interface is found in the list → use \`any\`:
+  - Array value → \`@property() {key}: any[] = [];\`
+  - Object value → \`@property() {key}: any = undefined;\`
 
 For each **command** entry:
 - \`@property() {commandName}State: 'idle' | 'loading' | 'success' | 'error' = 'idle';\`
@@ -242,9 +281,29 @@ export class {Prefix}{PageNamePascal}Base extends CollabLitElement {
 
 ---
 
-## Shape → TypeScript type mapping (for method signatures)
+## Method parameter typing
 
-When writing typed method params derived from an \`input\` shape:
+For each load/action method, type the \`params\` argument using the MANDATORY FIRST STEP list:
+
+- If the list has an interface matching the command input (name contains command in PascalCase + \`Input\`):
+  \`\`\`typescript
+  async getCart(params: PetShopStripeGetCartInput, options?: BffClientOptions): Promise<void>
+  async updateCart(params: PetShopStripeUpdateCartInput, signal?: AbortSignal): Promise<void>
+  \`\`\`
+- If NO matching input interface is found → use an inline type derived from the \`input\` shape, or \`any\`:
+  \`\`\`typescript
+  async getCart(params: any, options?: BffClientOptions): Promise<void>
+  \`\`\`
+
+For \`execBff\` generic type parameter — use the matching Output interface if it exists in the list, otherwise \`any\`:
+\`\`\`typescript
+const response = await execBff<PetShopStripeGetCartOutput>(...)  // interface exists in list
+const response = await execBff<any>(...)                         // no interface in list
+\`\`\`
+
+## Shape → inline TypeScript type mapping (fallback when no interface)
+
+When no matching interface is found and you must write an inline type from an \`input\`/\`output\` shape:
 - \`"string"\` → \`string\`; \`"number"\` → \`number\`; \`"boolean"\` → \`boolean\`
 - \`"A|B"\` → \`'A' | 'B'\`
 - Key ending with \`?\` → optional field (\`?: type\`)

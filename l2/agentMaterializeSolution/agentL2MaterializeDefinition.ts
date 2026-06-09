@@ -91,7 +91,7 @@ async function writeStorFile(mlsPath: string, src: string): Promise<void> {
 
 function buildPageDefsFile(fileRef: string, pageSpecJson: string, sharedRef: string): string {
   const bt = '`';
-  const bt3 = '```';
+  const bt3 = '\\\`\\\`\\\`';
   return (
     `/// <mls fileReference="${fileRef}"  enhancement="_blank"/>\n` +
     `export const skill = ${bt}\n` +
@@ -110,7 +110,7 @@ function buildPageDefsFile(fileRef: string, pageSpecJson: string, sharedRef: str
 
 function buildSharedDefsFile(fileRef: string, commandsJson: string, contractsRef: string): string {
   const bt = '`';
-  const bt3 = '```';
+  const bt3 = '\\\`\\\`\\\`';
   return (
     `/// <mls fileReference="${fileRef}"  enhancement="_blank"/>\n` +
     `export const skill = ${bt}\n` +
@@ -129,7 +129,7 @@ function buildSharedDefsFile(fileRef: string, commandsJson: string, contractsRef
 
 function buildContractDefsFile(fileRef: string, commandsJson: string): string {
   const bt = '`';
-  const bt3 = '```';
+  const bt3 = '\\\`\\\`\\\`';
   return (
     `/// <mls fileReference="${fileRef}"  enhancement="_blank"/>\n` +
     `export const skill = ${bt}\n` +
@@ -247,15 +247,15 @@ async function afterPromptStep(
     const contractsRef = `_${project}_/l2/${moduleName}/web/contracts/${pageId}.ts`;
 
     await writeStorFile(
-      `mls-${project}/l2/${moduleName}/web/desktop/page11/${pageId}.defs.ts`,
+      `_${project}_/l2/${moduleName}/web/desktop/page11/${pageId}.defs.ts`,
       buildPageDefsFile(pageDefsRef, pageSpecJson, sharedRef),
     );
     await writeStorFile(
-      `mls-${project}/l2/${moduleName}/web/shared/${pageId}.defs.ts`,
+      `_${project}_/l2/${moduleName}/web/shared/${pageId}.defs.ts`,
       buildSharedDefsFile(sharedDefsRef, commandsJson, contractsRef),
     );
     await writeStorFile(
-      `mls-${project}/l1/${moduleName}/layer_2_controllers/${pageId}.defs.ts`,
+      `_${project}_/l1/${moduleName}/layer_2_controllers/${pageId}.defs.ts`,
       buildContractDefsFile(contractDefsRef, commandsJson),
     );
 
@@ -312,7 +312,7 @@ async function afterPromptStep(
     },
   };
 
-  return [newStep, updateStatus];
+  return [newStep];
 }
 
 // ─── pipeline ─────────────────────────────────────────────────────────────────

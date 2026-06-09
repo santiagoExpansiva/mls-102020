@@ -120,7 +120,7 @@ async function afterPromptStep(
     taskId: context.task?.PK || '',
     parentStepId: parentStep.stepId,
     stepId: step.stepId,
-    cleaner: 'input_output',
+    //cleaner: 'input_output',
     status
   };
 
@@ -277,7 +277,7 @@ async function saveFile(ref: string, src: string) {
   await mls.stor.localStor.setContent(sf, { contentType: 'string', content: src });
 }
 
-async function getSkill(info: { path: string, item: mls.defs.MaterializeEntry, project?: number }, moduleName: string, device: string, type: string): Promise<string> {
+async function getSkill(info: { path: string, item: any, project?: number }, moduleName: string, device: string, type: string): Promise<string> {
 
   const project = info.project || 0;
 
@@ -363,7 +363,7 @@ void bootstrapCollabApp({
   pages: [],
 });
 `
-  await saveFile(`_${mls.actualProject}_/l2/${moduleName}/index.html`, srcHtml, false);
+  await saveFile(`_${mls.actualProject}_/l2/${moduleName}/index.html`, srcHtml);
   await saveFile(`_${mls.actualProject}_/l2/${moduleName}/index.ts`, srcTS);
 
 }

@@ -62,7 +62,7 @@ async function beforePromptStep(
   hookSequential: number,
   args?: string
 ): Promise<mls.msg.AgentIntent[]> {
-
+  debugger;
   if (!args) throw new Error(`(${agent.agentName})[beforePromptStep] args invalid`);
 
   console.info('--------agentMaterializeContract--------')
@@ -115,7 +115,7 @@ async function afterPromptStep(
     taskId: context.task?.PK || '',
     parentStepId: parentStep.stepId,
     stepId: step.stepId,
-    cleaner: 'input_output',
+    //cleaner: 'input_output',
     status
   };
 
@@ -180,7 +180,7 @@ async function getSkill(info: { path: string, item: any, project?: number, [k: s
   info.interfaceOutputPath = `/_${project}_/l2/${moduleName}/${device}/contracts/${pageName}.ts`;
 
   const orch = getMaterializeOrchestrator(info.path);
-  const user = orch.getVar(info.item.defsPath, 'skill')
+  const user = await orch.getVar(info.item.defsPath, 'skill')
   const skill = await orch.getSkill(info.item.skillPath);
   const prompt = `##Skill\n${skill}\n\n##User data\n${user}\n\n##User info\n${JSON.stringify(info)}`;
 
