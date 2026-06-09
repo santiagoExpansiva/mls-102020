@@ -442,6 +442,12 @@ Do not return prose.
 - BFF commands generated later must be able to reference these use cases by usecaseId.
 - Do not generate TypeScript code.
 
+## Concepts (TODO-FINAL-020) — do not confuse these three
+- approvedArtifacts.usecaseEntities (final plan): plan-level list of approved usecase ENTITY GROUPS (e.g. "OrderEntity"). It is a coarse approval signal, NOT a 1:1 target.
+- usecaseEntities (this output): the layer_3 aggregate entities you DETAIL here (usecaseEntityId, sourceTables, allowedOperations). You MAY consolidate several approved groups into fewer entities — the COUNT need NOT match approvedArtifacts.usecaseEntities.
+- usecases (this output): INDIVIDUAL operations (usecaseId, actor, reads/writes, commands). Workflows/agents/BFF reference operations by usecaseId, never by usecaseEntityId.
+Coverage compares usecases by usecaseId; it must NOT require parity between approvedArtifacts.usecaseEntities and usecaseEntities.
+
 ## Usecase commands (input/output)
 Each command in a usecase's commands[] must declare its signature as structured typed fields:
 - commandId: stable camelCase id of the command.

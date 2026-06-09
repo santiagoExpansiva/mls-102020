@@ -75,6 +75,29 @@ export async function reserveNewSolutionModuleArtifacts(initial: NewSolutionInit
   }, source, false);
 }
 
+// TODO-FINAL-018: trace policy. The first agent (agentNewSolution) seeds `_saveTrace` in the
+// task's longMemory (the `_` prefix keeps it OUT of the LLM prompt — see collab-messages
+// appendLongTermMemoryToInteraction). Every agent consults it before writing a trace file.
+// Default true; change SAVE_TRACE_DEFAULT in source to disable, or set the memory key per task.
+export const SAVE_TRACE_DEFAULT = true;
+export const SAVE_TRACE_MEMORY_KEY = '_saveTrace';
+
+export function saveTraceMemorySeed(): Record<string, string> {
+  return { [SAVE_TRACE_MEMORY_KEY]: String(SAVE_TRACE_DEFAULT) };
+}
+
+export function shouldSaveTrace(context: mls.msg.ExecutionContext): boolean {
+  try {
+    const longMemory = (context.task?.iaCompressed as { longMemory?: Record<string, string> } | undefined)?.longMemory;
+    const flag = longMemory?.[SAVE_TRACE_MEMORY_KEY];
+    if (flag === 'true') return true;
+    if (flag === 'false') return false;
+    return SAVE_TRACE_DEFAULT;
+  } catch {
+    return SAVE_TRACE_DEFAULT;
+  }
+}
+
 export async function saveNewSolutionAgentTracePayload(
   context: mls.msg.ExecutionContext,
   agentName: string,
@@ -82,6 +105,11 @@ export async function saveNewSolutionAgentTracePayload(
   moduleNameOverride?: string,
 ): Promise<void> {
   try {
+    // TODO-FINAL-018: skip trace persistence when disabled for this task (still log size telemetry).
+    if (!shouldSaveTrace(context)) {
+      logTaskSizeIfLarge(context, agentName);
+      return;
+    }
     const payload = step.interaction?.payload?.[0];
     if (!payload) return;
 
@@ -104,6 +132,34 @@ export async function saveNewSolutionAgentTracePayload(
     }, JSON.stringify(trace, null, 2), false);
   } catch (error) {
     console.warn(`[saveNewSolutionAgentTracePayload] failed for ${agentName}`, error);
+  }
+
+  // TODO-FINAL-030 (R7): size telemetry. Every agent calls this in afterPromptStep, so it is the
+  // single place to watch the task growing toward the ~400KB ceiling (above which the task can
+  // become unavailable). Logs only; no behavior change.
+  logTaskSizeIfLarge(context, agentName);
+}
+
+const TASK_SIZE_WARN_BYTES = 300_000;
+const TASK_SIZE_CRITICAL_BYTES = 400_000;
+
+/** Approximate serialized size of the task's AI tree (chars ~= bytes for mostly-ASCII). */
+export function estimateTaskBytes(context: mls.msg.ExecutionContext): number {
+  try {
+    const ia = context.task?.iaCompressed;
+    return ia ? JSON.stringify(ia).length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function logTaskSizeIfLarge(context: mls.msg.ExecutionContext, label: string): void {
+  const bytes = estimateTaskBytes(context);
+  const kb = Math.round(bytes / 1024);
+  if (bytes >= TASK_SIZE_CRITICAL_BYTES) {
+    console.warn(`[taskSize] CRITICAL ~${kb}KB after ${label} (ceiling ~400KB) — task may become unavailable; needs early payload cleanup (TODO-FINAL-030 R3-R6)`);
+  } else if (bytes >= TASK_SIZE_WARN_BYTES) {
+    console.warn(`[taskSize] WARN ~${kb}KB after ${label} (approaching ~400KB ceiling)`);
   }
 }
 

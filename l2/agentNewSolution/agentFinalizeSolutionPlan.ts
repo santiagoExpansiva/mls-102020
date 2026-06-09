@@ -10,6 +10,7 @@ import {
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
   findStepByPlanId,
+  getActorIdSet,
   getPlannerOutput,
   getPlanningContextSnapshot,
   hasAcceptedNowArtifact,
@@ -133,6 +134,11 @@ async function afterPromptStep(
     console.error(`[${agent.agentName}](afterPromptStep) ${traceMsg}`);
   }
 
+  // TODO-FINAL-019: advisory actor-contract check at the source. Every actor reference in the
+  // final plan must be one of actors[].actorId (no hard-coded/translated names). Non-fatal here
+  // (downstream index validators are the hard gates); surfaces drift early via console.warn.
+  if (status === 'completed' && output && output.status === 'ok') warnFinalizeActorConsistency(output);
+
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
   if (status === 'completed' && output) await saveNewSolutionPlanArtifacts(context, agent.agentName, step, output);
 
@@ -207,6 +213,30 @@ function validateFinalizeSolutionPlanOutput(output: FinalSolutionPlanOutput, con
     throw new Error('accepted usecaseEntity planning, but final plan has no usecaseEntities');
   }
   if (output.status === 'needs_input' && output.questions.length === 0) throw new Error('needs_input final plan must include questions');
+}
+
+// TODO-FINAL-019: warn (non-fatal) about actor references that are not declared in actors[].actorId.
+function warnFinalizeActorConsistency(output: FinalSolutionPlanOutput): void {
+  const actorIds = getActorIdSet(output.result.actors);
+  if (actorIds.size === 0) return;
+  const unknown = new Set<string>();
+  const check = (value: unknown) => {
+    if (typeof value === 'string' && value.trim() && !actorIds.has(value)) unknown.add(value);
+  };
+  const asRecords = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.filter((v): v is Record<string, unknown> => !!v && typeof v === 'object') : [];
+
+  for (const cap of asRecords(output.result.capabilities)) check(cap.actor);
+  for (const ua of asRecords(output.result.userActions)) check(ua.actor);
+  for (const page of asRecords(output.result.approvedArtifacts.pages)) check(page.actor);
+  for (const dash of asRecords(output.result.approvedArtifacts.metricDashboards)) check(dash.actor);
+  for (const wf of asRecords(output.result.approvedArtifacts.workflows)) {
+    if (Array.isArray(wf.actors)) wf.actors.forEach(check);
+    else check(wf.actor);
+  }
+
+  if (unknown.size > 0) {
+    console.warn(`[agentFinalizeSolutionPlan] actor refs not in actors[].actorId (TODO-FINAL-019): ${[...unknown].join(', ')}. Downstream index validators will reject these.`);
+  }
 }
 
 function buildHumanPrompt(

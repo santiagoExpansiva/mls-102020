@@ -13,6 +13,7 @@ import {
   assertRecord,
   assertString,
   createPlannerVariableToolSchema,
+  getActorIdSet,
   getPlanningContextSnapshot,
   isRecord,
   normalizeStringList,
@@ -242,12 +243,8 @@ function getFinalPlanSafe(context: mls.msg.ExecutionContext): FinalSolutionPlanO
 }
 
 function getActorIds(context: mls.msg.ExecutionContext): Set<string> {
-  const finalPlan = getFinalPlanSafe(context);
-  const ids = new Set<string>();
-  for (const actor of finalPlan?.result.actors || []) {
-    if (isRecord(actor) && typeof actor.actorId === 'string') ids.add(actor.actorId);
-  }
-  return ids;
+  // TODO-FINAL-019: single source of the actor contract (shared getActorIdSet).
+  return getActorIdSet(getFinalPlanSafe(context)?.result.actors);
 }
 
 function getModuleTableIds(context: mls.msg.ExecutionContext): Set<string> {

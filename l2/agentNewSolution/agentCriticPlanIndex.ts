@@ -234,7 +234,9 @@ async function approveIndexIntents(
       hookSequential,
       'completed',
       `${config.indexName} approved (attempt ${healthReport.attempts}); checkpoint frozen`,
-      'input',
+      // TODO-FINAL-030: the critique payload is dead after approval (healthReport already frozen in
+      // the checkpoint, no further getLatestCritiqueJson read) — clear it fully to keep the task light.
+      'input_output',
     ),
     createPlannerUpdateStatusIntent(
       context,

@@ -6,6 +6,7 @@ import {
   getExistingModuleFolders,
   reserveNewSolutionModuleArtifacts,
   saveNewSolutionAgentTracePayload,
+  saveTraceMemorySeed,
 } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import {
   normalizeInitialPlan,
@@ -87,6 +88,9 @@ async function beforePromptImplicit(
       longTermMemory: {
         taskName: 'newModule',
         flowName: 'newSolution',
+        // TODO-FINAL-018: trace policy flag (not sent to LLM — `_` prefix). All planning agents
+        // consult it via shouldSaveTrace before writing trace files. Default true.
+        ...saveTraceMemorySeed(),
       },
     }
   };

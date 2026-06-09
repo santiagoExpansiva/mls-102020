@@ -525,6 +525,20 @@ export function compactFinalPlan(finalPlanResultValue: unknown, includeOntologyF
   };
 }
 
+/**
+ * TODO-FINAL-019: single source for the actor contract. All agents/validators compare against
+ * `finalPlan.result.actors[].actorId` — never hard-coded names ("admin", "administrator", ...)
+ * or translations. This keeps the flow language-agnostic (pt-BR/en-US/...). Pass the actors array.
+ */
+export function getActorIdSet(actors: unknown): Set<string> {
+  const ids = new Set<string>();
+  if (!Array.isArray(actors)) return ids;
+  for (const actor of actors) {
+    if (isRecordValue(actor) && typeof actor.actorId === 'string' && actor.actorId.trim()) ids.add(actor.actorId);
+  }
+  return ids;
+}
+
 /** Collect non-empty string values from the given fields of a record into a target set. */
 export function collectStringRefs(record: unknown, fields: string[], target: Set<string>): void {
   if (!isRecordValue(record)) return;

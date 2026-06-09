@@ -523,6 +523,13 @@ Criterio de aceite:
 
 Resposta: colocar no primeiro agente uma variável 'saveTrace' e incluir esta variável na memória da task, aquela que não vai para a LLM, assim todos os outros agentes podem consultar se precisa ou não salvar os trace, default = true, pode ser alterado no código fonte.
 
+**EXECUTED** (2026-06-08):
+- Flag `saveTrace` na memoria da task, exatamente como pedido. Usa a chave `_saveTrace` em `iaCompressed.longMemory`; o prefixo `_` garante que NAO vai para o prompt da LLM (confirmado em `collab-messages` `appendLongTermMemoryToInteraction`, que filtra chaves `_`).
+- `agentNewSolution` (primeiro agente) semeia `_saveTrace` via `saveTraceMemorySeed()` no `longTermMemory` do `add-message-ai` (entra em `longMemory` na criacao da task).
+- Todos os agentes consultam via `shouldSaveTrace(context)` dentro de `saveNewSolutionAgentTracePayload` (chamado por todos no afterPrompt): se `_saveTrace === 'false'`, pula a gravacao do trace (mas mantem a telemetria de tamanho do R7). Default = `SAVE_TRACE_DEFAULT = true`, alteravel no codigo-fonte.
+- Retencao: cada step grava em `l2/{module}/trace/{stepId}-{agent}.json` (um por step; retry sobrescreve o mesmo arquivo => "ultimo payload por step"). A compactacao/remocao automatica apos `.defs.ts` salvo (item mais agressivo da retencao) NAO foi implementada — o controle principal e o flag (desligar quando nao precisar de debug). Critic aprovado tambem ja limpa seu payload da task (TODO-FINAL-030).
+- Build: `tsc -p tsconfig.frontend.json` ok.
+
 ### TODO-FINAL-019 - Ajustar contrato de atores sem hard-code
 
 Problema:
@@ -536,6 +543,13 @@ Acao:
 Criterio de aceite:
 - O fluxo funciona igual em pt-BR, en-US ou qualquer idioma, desde que os actorIds sejam consistentes.
 
+**EXECUTED** (2026-06-08):
+- Auditoria: nenhum validador usa nome de ator hard-coded; todos comparam contra `actors[].actorId` (pageIndex, e os checkpoints de metrics/workflow/page/usecase do TODO-FINAL-024). A unica mencao a "admin" e num comentario de prompt (guia), nao em validador.
+- Fonte unica do contrato: novo `getActorIdSet(actors)` em `agentPlanningShared.ts`. `agentPlanPageIndex.getFinalPlanActorIds` e `agentPlanIndexReview.getActorIds` passaram a usa-lo (remove duplicacao/drift).
+- Checagem advisory na FONTE: `agentFinalizeSolutionPlan` (`warnFinalizeActorConsistency`) avisa (console.warn, nao-fatal) quando `capabilities[].actor`, `userActions[].actor`, `approvedArtifacts.pages[].actor`, `metricDashboards[].actor` ou `workflows[].actors[]` referenciam um ator fora de `actors[].actorId`. Os gates duros continuam downstream (pageIndex lanca; checkpoints marcam erro), entao o contrato e enforced sem travar cedo.
+- Resultado: idioma-agnostico; um ator so existe se estiver em `actors[].actorId`.
+- Build: `tsc -p tsconfig.frontend.json` ok.
+
 ### TODO-FINAL-020 - Revisar consistencia entre plano final e planos especializados
 
 Problema:
@@ -548,6 +562,15 @@ Acao:
 
 Criterio de aceite:
 - Coverage consegue validar usecases sem falso positivo nem lacuna escondida.
+
+**EXECUTED** (2026-06-08):
+- Definicao dos tres conceitos (documentada no agente de usecase, secao "## Concepts", e ja referida em `agentFinalizeSolutionPlan`):
+  - `approvedArtifacts.usecaseEntities` (final plan): lista plan-level de GRUPOS de entidade aprovados (ex. "OrderEntity"); sinal grosso de aprovacao, NAO alvo 1:1.
+  - `usecaseEntities` (output do usecase plan): entidades agregadas de layer_3 detalhadas (usecaseEntityId, sourceTables, allowedOperations); PODEM consolidar varios grupos aprovados — a contagem NAO precisa bater.
+  - `usecases` (output do usecase plan): operacoes INDIVIDUAIS (usecaseId, actor, reads/writes, commands). Workflows/agents/BFF referenciam por `usecaseId`, nunca por `usecaseEntityId`.
+- Sem paridade de contagem exigida em lugar nenhum: `validateFinalizeSolutionPlanOutput` so exige `approvedArtifacts.usecaseEntities` nao-vazio quando aceito como "now"; `validatePlanUsecaseEntitiesOutput` so exige `usecaseEntities`/`usecases` nao-vazios quando ha tabelas module-owned; a coverage compara `usecases` por `usecaseId`. Nenhum compara contagem de usecaseEntities entre plano final e plano especializado -> sem falso positivo (o caso "11 vs 1" do problema e modelagem valida).
+- Prompt do agente reforca explicitamente que coverage compara por `usecaseId` e nao exige paridade.
+- Build: `tsc -p tsconfig.frontend.json` ok.
 
 ### TODO-FINAL-021 - Converter paginas e workflows para paralelo controlado
 
@@ -784,7 +807,18 @@ R1 — Reduzir inputs dos 4 indices grandes (maior ganho, baixo risco, so prompt
 - `agentPlanWorkflowIndex`: `{ finalPlan: compact, persistenceTables(summary), metricTables(ids/title), usecases(id/title/actor) }` — dropou final plan completo, table/metric definitions completas e usecase plan completo.
 - `agentPlanUsecaseEntities`: `{ finalPlan: compact, persistenceTables(summary), excludedEntities(id/ownership), metricTables(summary) }` — dropou table/metric definitions completas (usecases referenciam por nome/ownership, nao por coluna).
 - Esperado: corta a maior parte dos ~315KB de input desses 4 (o `fields` da ontologia + dumps completos eram o grosso) e acelera a geracao (prompt menor).
-- Build: `tsc -p tsconfig.frontend.json` ok. R2-R7 (limpeza de payload por checkpoint/cedo) seguem pendentes.
+- Build: `tsc -p tsconfig.frontend.json` ok.
+
+**EXECUTED R7** (2026-06-08) - telemetria de tamanho:
+- `estimateTaskBytes(context)` + `logTaskSizeIfLarge(context, label)` em `agentNewSolutionArtifacts.ts`. Chamado em `saveNewSolutionAgentTracePayload` (que todo agente invoca no afterPrompt), entao loga o tamanho aproximado da task a cada step. WARN >=300KB, CRITICAL >=400KB. So loga, sem mudar comportamento — serve para confirmar se R1 basta e detectar crescimento cedo.
+
+**R2** - ja atendido: inputs sao limpos no complete (`cleaner="input"`/`input_output`); nenhum input sobrevive ao complete do proprio step.
+
+**DEFERIDO R3-R6** (decisao tecnica, 2026-06-08):
+- R3 (fallback por checkpoint nos getters de indice) e o pre-requisito de R4/R5/R6, e exige tornar `getPlanXIndexOutput`/`getFinalizeSolutionPlanOutput` ASSINCRONOS — confirmado que NAO ha leitura sincrona de conteudo no stor (`getContent` e sempre `Promise`). Isso cascateia para dentro do fluxo critic/repair recem-criado: a interface `getCurrentOutput` e sincrona e helpers como `getModuleTableIds`/`getUsecaseIds` em `agentPlanIndexReview.ts` usam `safe(() => ...)` sincrono. Mesmo muro que adiou a limpeza do usecase.
+- Custo/beneficio: apos R1, os inputs grandes (~315KB) sairam; os payloads de indice/plan somam ~104KB (finalize ~29KB, usecase ~16KB, pageIndex ~15KB, etc.), entao o pico deve ficar com folga abaixo de 400KB sem R3-R6. A telemetria (R7) confirma em runs reais.
+- Recomendacao: so investir em R3-R6 (migracao coordenada dos getters de indice + finalize para fallback por checkpoint/arquivo, async) SE a telemetria mostrar CRITICAL em modulos realistas. Caso necessario, fazer junto com a limpeza do usecase (mesma migracao), e mover a coverage para ler do persistido (R6).
+- Ganho seguro PARCIAL ja aplicado (sem async): o step de critic APROVADOR e limpo com `cleaner="input_output"` (a critica e morta apos aprovacao; healthReport ja congelado no checkpoint). Cobre o caso comum (1 tentativa -> aprova). Payloads de repair NAO sao limpos (sao a fonte do indice via `getPlannerOutputWithRepair` ate existir fallback por checkpoint). Critic de tentativas anteriores (caso raro multi-attempt) ainda ficam — poderiam ser limpos varrendo os filhos, mas o ganho e marginal.
 
 R2 — Garantir limpeza imediata de input no complete: confirmar que TODO step de indice/def completa com `cleaner` (input ja limpa; indices via `approveIndexIntents` usam `input`). Inputs nunca devem sobreviver ao complete do proprio step.
 
@@ -1085,8 +1119,8 @@ Criterio de aceite:
 8. Adotar strict tool mode nos agentes compativeis: `TODO-FINAL-026` (feito; finalize/blueprint/coverage/pageDefinition fora do strict por schema com mapa dinamico/objeto livre).
 9. Reduzir tokens nos maiores consumidores: `TODO-FINAL-006`, `TODO-FINAL-007`, `TODO-FINAL-008`, `TODO-FINAL-009` (feito).
 10. Completar mapeamento/metadata de artefatos plan, incluindo workflow global com refs de modulo: `TODO-FINAL-013` (obsoleto, coberto pelo writer/014), `TODO-FINAL-015` (feito), `TODO-FINAL-016` (feito/ja cumprido), `TODO-FINAL-027` (feito).
-11. Criar testes e politica de trace: `TODO-FINAL-017`, `TODO-FINAL-018`.
-12. Consolidar regras transversais: `TODO-FINAL-019`, `TODO-FINAL-020`.
-13. Manter a task leve (teto ~400KB): `TODO-FINAL-030` — reduzir inputs dos indices (R1, maior ganho) + limpar payloads cedo via checkpoint/arquivo (R3-R6).
+11. Criar testes e politica de trace: `TODO-FINAL-017`, `TODO-FINAL-018` (feito — flag `_saveTrace` na memoria da task).
+12. Consolidar regras transversais: `TODO-FINAL-019` (feito), `TODO-FINAL-020` (feito).
+13. Manter a task leve (teto ~400KB): `TODO-FINAL-030` — R1 (reduzir inputs dos 4 indices) + R2 + R7 (telemetria) feitos; critic aprovador limpo (input_output). R3-R6 (limpeza de payload via fallback async por checkpoint) deferidos: so se a telemetria mostrar CRITICAL.
 
 Resposta: um exemplo de módule dentro do <module>/l2, pode ser achada em /Volumes/WagnerSSD1/collab/mls-base/mls-102020/l2/agents/newSolution/run30/module.ts

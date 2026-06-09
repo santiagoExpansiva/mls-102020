@@ -13,6 +13,7 @@ import {
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
   findStepByPlanId,
+  getActorIdSet,
   getPlannerOutputWithRepair,
   getPlanningContextSnapshot,
   summarizeRecords,
@@ -422,10 +423,8 @@ function getFlowRefBucketForExecutionMode(executionMode: string): PageFlowRefBuc
 }
 
 function getFinalPlanActorIds(finalPlan: FinalSolutionPlanOutput): Set<string> {
-  return new Set(finalPlan.result.actors.map((actor, index) => {
-    const record = assertRecord(actor, `result.actors[${index}]`);
-    return assertString(record.actorId, `result.actors[${index}].actorId`);
-  }));
+  // TODO-FINAL-019: single source of the actor contract (shared getActorIdSet).
+  return getActorIdSet(finalPlan.result.actors);
 }
 
 function getMetricDashboardActorIds(finalPlan: FinalSolutionPlanOutput, finalPlanActorIds: Set<string>): Set<string> {
