@@ -261,7 +261,7 @@ function generatePlaygroundState(scenarios: IExamples[]): string {
 }
 
 const system1 = `
-<!-- modelType: code -->
+<!-- modelType: codeinstruct -->
 <!-- modelTypeList: geminiChat (2.5 pro), code (grok), deepseekchat, codeflash (gemini), deepseekreasoner, mini (4.1) ou nano (openai), codeinstruct (4.1), codereasoning(gpt5), code2 (kimi 2.5) -->
 
 Task: Analyze the provided TypeScript code and produce usage examples for the component according to the following criteria:

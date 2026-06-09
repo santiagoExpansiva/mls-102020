@@ -133,7 +133,7 @@ async function afterPromptStep(
                 rags: null,
             }
         };
-        return [fixStep];
+        return [fixStep, updateStatus];
     }
 
     return [updateStatus];
