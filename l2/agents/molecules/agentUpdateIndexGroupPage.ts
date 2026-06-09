@@ -120,7 +120,7 @@ async function afterPromptStep(
 
     // ── calculate remaining groups (stateless: derived from original prompt) ──
     const allGroups = resolveTargetGroups(agent.agentName, context.message.content);
-    const currentIndex = allGroups.indexOf(currentGroup);
+    const currentIndex = allGroups.findIndex((g) => g.toLowerCase() === currentGroup.toLowerCase());
     const remaining = allGroups
         .slice(currentIndex + 1)
         .filter((g) => getMoleculeFiles(g).length > 0);
