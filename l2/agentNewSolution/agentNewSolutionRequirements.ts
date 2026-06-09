@@ -2,7 +2,7 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { getAgentStepByAgentName, getAllSteps, notifyTaskChange } from '/_102027_/l2/aiAgentHelper.js';
-import { saveNewSolutionAgentTracePayload, getExistingModuleFolders } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { saveNewSolutionAgentTracePayload, getExistingModuleFolders, getPlannedModuleName } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import {
   ImplementationRecommendation,
   RecommendImplementationsOutput,
@@ -34,7 +34,11 @@ async function beforePromptStep(
   if (!context.task) throw new Error(`(${agent.agentName})[beforePromptStep] task invalid`);
 
   const initialPlan = getInitialPlan(context);
-  const existingFolders = getExistingProjectFolders();
+  // Exclude the module being created in this run: the root agentNewSolution already reserved
+  // l5/{module}/module.defs.ts + trace before this step, and we must not let the LLM treat the
+  // in-progress module as a pre-existing one (which made it reject the request).
+  const planned = getPlannedModuleName(context);
+  const existingFolders = getExistingProjectFolders().filter(folder => folder !== planned);
 
   const continueIntent: mls.msg.AgentIntentPromptReady = {
     type: 'prompt_ready',

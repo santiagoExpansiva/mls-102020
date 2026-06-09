@@ -1,6 +1,6 @@
 /// <mls fileReference="_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.ts" enhancement="_102027_/l2/enhancementAgent"/>
 
-import { createStorFile } from '/_102027_/l2/libStor.js';
+import { createStorFile, deleteFile } from '/_102027_/l2/libStor.js';
 import { getAgentStepByAgentName } from '/_102027_/l2/aiAgentHelper.js';
 import {
   normalizeModuleFolderName,
@@ -409,6 +409,160 @@ export async function saveNewSolutionPlanHealthReport(
   }
 }
 
+// ─── Process file (l5/{module}/process.defs.ts) ────────────────────────────────
+// Permanent, append-friendly record of the planning RUNS for a module. It lives in l5 (next to
+// module.defs.ts) so it survives "clear traces" (which only wipes l2/{module}/trace/*). The
+// newSolution run is written here at the end of the flow; future maintenance runs append.
+
+export const PROCESS_SCHEMA_VERSION = '2026-06-08';
+
+export type NewSolutionProcessNextStepKind = 'horizontalModule' | 'plugin' | 'materialize';
+export type NewSolutionProcessNextStepStatus = 'pending' | 'taskOpened' | 'dismissed';
+
+export interface NewSolutionProcessNextStep {
+  id: string;
+  kind: NewSolutionProcessNextStepKind;
+  title: string;
+  description: string;
+  moduleId?: string;
+  pluginId?: string;
+  status: NewSolutionProcessNextStepStatus;
+  taskId?: string;
+}
+
+export interface NewSolutionProcessRun {
+  runId: string;
+  kind: 'newSolution' | 'maintenance';
+  startedAt: string;
+  finishedAt?: string;
+  initialPrompt: string;
+  userLanguage: string;
+  decisions: unknown[];
+  deferredItems: unknown[];
+  openDetails: { title: string; description: string }[];
+  healthReport: unknown;
+  nextSteps: NewSolutionProcessNextStep[];
+}
+
+export interface NewSolutionProcess {
+  schemaVersion: string;
+  moduleName: string;
+  runs: NewSolutionProcessRun[];
+}
+
+function processFileInfo(moduleName: string): Pick<mls.stor.IFileInfo, 'project' | 'level' | 'folder' | 'shortName' | 'extension'> {
+  return {
+    project: mls.actualProject || 0,
+    level: 5,
+    folder: normalizeModuleFolderName(moduleName, 'module'),
+    shortName: 'process',
+    extension: '.defs.ts',
+  };
+}
+
+/** Reads and parses l5/{module}/process.defs.ts, or null when it does not exist yet. */
+export async function readNewSolutionProcess(moduleName: string): Promise<NewSolutionProcess | null> {
+  try {
+    const fileInfo = processFileInfo(moduleName);
+    const file = mls.stor.files[mls.stor.getKeyToFile(fileInfo)];
+    if (!file) return null;
+    const raw = await file.getContent();
+    if (typeof raw !== 'string') return null;
+    const parsed = parsePlanArtifactSource(raw, '.defs.ts');
+    if (!isRecord(parsed)) return null;
+    const runs = Array.isArray(parsed.runs) ? (parsed.runs as NewSolutionProcessRun[]) : [];
+    return {
+      schemaVersion: readString(parsed.schemaVersion) || PROCESS_SCHEMA_VERSION,
+      moduleName: readString(parsed.moduleName) || normalizeModuleFolderName(moduleName, 'module'),
+      runs,
+    };
+  } catch (error) {
+    console.warn(`[readNewSolutionProcess] failed for ${moduleName}`, error);
+    return null;
+  }
+}
+
+/**
+ * Append-friendly writer for l5/{module}/process.defs.ts. Reads the existing file (if any),
+ * replaces the run with the same runId or appends it, and rewrites the file. Idempotent per runId.
+ */
+export async function saveNewSolutionProcessRun(
+  context: mls.msg.ExecutionContext,
+  run: NewSolutionProcessRun,
+): Promise<void> {
+  const moduleName = normalizeModuleFolderName(getInitialModuleName(context), 'module');
+  await writeNewSolutionProcessRun(moduleName, run);
+}
+
+/** Same as saveNewSolutionProcessRun but keyed by an explicit moduleName (no ExecutionContext).
+ * Used by the front-end resume web component when finalizing the run. */
+export async function writeNewSolutionProcessRun(
+  moduleNameInput: string,
+  run: NewSolutionProcessRun,
+): Promise<void> {
+  try {
+    const moduleName = normalizeModuleFolderName(moduleNameInput, 'module');
+    const existing = await readNewSolutionProcess(moduleName);
+    const runs = existing?.runs ? [...existing.runs] : [];
+    const index = runs.findIndex(r => r && r.runId === run.runId);
+    if (index >= 0) runs[index] = run;
+    else runs.push(run);
+
+    const process: NewSolutionProcess = {
+      schemaVersion: PROCESS_SCHEMA_VERSION,
+      moduleName,
+      runs,
+    };
+
+    const fileInfo = processFileInfo(moduleName);
+    const source = buildPlanDefsSource(`${toExportIdentifier(moduleName)}Process`, process, fileInfo);
+    await saveStorContent(fileInfo, source, false);
+
+    await updatePlanArtifactsManifest(moduleName, [{
+      artifactType: 'process',
+      artifactId: 'process',
+      moduleName,
+      filePath: toPlanArtifactPath(fileInfo),
+      project: fileInfo.project,
+      level: fileInfo.level,
+      folder: fileInfo.folder,
+      shortName: fileInfo.shortName,
+      extension: fileInfo.extension,
+      checksum: checksumString(stableStringify(process)),
+      schemaVersion: PROCESS_SCHEMA_VERSION,
+      status: 'report',
+      agentName: 'agentValidateSolutionCoverage',
+      stepId: 0,
+      planId: 'final-resume',
+      savedAt: new Date().toISOString(),
+    }]);
+  } catch (error) {
+    console.warn(`[saveNewSolutionProcessRun] failed`, error);
+  }
+}
+
+/**
+ * Deletes every file under l2/{module}/trace (the "clear traces" action). The permanent l5
+ * artifacts (module/rules/process.defs.ts) are untouched. Uses libStor.deleteFile, so on
+ * collab.codes the files are marked deleted until the PR (and hard-deleted when still 'new').
+ * Returns the number of trace files removed.
+ */
+export async function deleteNewSolutionTraceFolder(moduleName: string): Promise<number> {
+  const project = mls.actualProject || 0;
+  const folder = `${normalizeModuleFolderName(moduleName, 'module')}/trace`;
+  let removed = 0;
+  for (const file of Object.values(mls.stor.files)) {
+    if (file.project !== project || file.level !== 2 || file.folder !== folder) continue;
+    try {
+      await deleteFile(file);
+      removed += 1;
+    } catch (error) {
+      console.warn(`[deleteNewSolutionTraceFolder] failed to delete ${file.shortName}`, error);
+    }
+  }
+  return removed;
+}
+
 function getInitialModuleName(context: mls.msg.ExecutionContext): string {
   if (!context.task) return 'module';
   const agentStep = getAgentStepByAgentName(context.task, 'agentNewSolution') as mls.msg.AIAgentStep | null;
@@ -418,6 +572,22 @@ function getInitialModuleName(context: mls.msg.ExecutionContext): string {
     : undefined;
 
   return result?.moduleName || normalizeModuleFolderName(undefined, result?.userPrompt || 'module');
+}
+
+/**
+ * The module being created in the CURRENT task, or null when the root agentNewSolution has not
+ * produced a plan yet. Unlike getInitialModuleName, this never falls back to a derived name — so
+ * callers can safely exclude the in-progress module from the "already existing modules" list shown
+ * to the flow's own agents (the root reserves l5/{module}/module.defs.ts + trace at the very start,
+ * which would otherwise make downstream steps treat the new module as a pre-existing one).
+ */
+export function getPlannedModuleName(context: mls.msg.ExecutionContext): string | null {
+  if (!context.task) return null;
+  const agentStep = getAgentStepByAgentName(context.task, 'agentNewSolution') as mls.msg.AIAgentStep | null;
+  const payload = agentStep?.interaction?.payload?.[0] as mls.msg.AIFlexibleResultStep | undefined;
+  if (!payload || payload.type !== 'flexible' || !isRecord(payload.result)) return null;
+  const name = readString(payload.result.moduleName);
+  return name ? normalizeModuleFolderName(name, 'module') : null;
 }
 
 function getPayloadModuleName(payload: unknown): string | undefined {
@@ -466,13 +636,33 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
   if (!result) return [];
 
   if (agentName === 'agentFinalizeSolutionPlan') {
+    // module.defs.ts keeps only module-level definition data. These are persisted elsewhere
+    // and kept here would be redundant and hard to maintain after edits:
+    //  - rules            -> rules.defs.ts (separate artifact pushed below)
+    //  - userActions      -> captured by the page index / page definitions
+    //  - approvedArtifacts -> each entry (pages, workflows, usecaseEntities, plugins, agents,
+    //                         horizontalModules, mdm, metricTables, metricDashboards) is saved
+    //                         as its own .defs.ts and/or frozen index checkpoint.
+    // decisions/deferredItems also leave module.defs.ts: they describe the planning RUN, not the
+    // module structure, and now live in l5/{module}/process.defs.ts (see saveNewSolutionProcessRun).
+    // What remains is the purely structural module backbone: module, actors, capabilities,
+    // ontology, relationships.
+    const {
+      rules: _rules,
+      userActions: _userActions,
+      approvedArtifacts: _approvedArtifacts,
+      decisions: _decisions,
+      deferredItems: _deferredItems,
+      ...moduleData
+    } = result;
+
     const candidates: PlanArtifactCandidate[] = [
       {
         artifactType: 'module',
         artifactId: moduleName,
         exportName: 'modulePlan',
         moduleName,
-        data: result,
+        data: moduleData,
       },
       {
         artifactType: 'project',
