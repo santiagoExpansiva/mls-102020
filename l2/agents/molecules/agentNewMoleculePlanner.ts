@@ -75,7 +75,7 @@ async function beforePromptStep(
     hookSequential: number,
     args?: string
 ): Promise<mls.msg.AgentIntent[]> {
-debugger;
+
     if (!args) throw new Error(`(${agent.agentName})[beforePromptStep] args invalid`);
     if (!mls.actualProject) throw new Error(`(${agent.agentName})[beforePromptStep] project invalid: ${mls.actualProject}`);
     const data: { group: string, prompt: string } = JSON.parse(args);
@@ -111,7 +111,7 @@ async function afterPromptStep(
     step: mls.msg.AIAgentStep,
     hookSequential: number,
 ): Promise<mls.msg.AgentIntent[]> {
-debugger
+
 
     if (!agent || !context || !step) throw new Error(`[afterPromptStep] invalid params, agent:${!!agent}, context:${!!context}, step:${!!step}`);
 
@@ -131,7 +131,7 @@ async function beforeClarificationStep(
     hookSequential: number,
     json: ClarificationData
 ): Promise<HTMLElement> {
-debugger
+
     if (!context.task) throw new Error(`[beforeClarificationStep] invalid task: undefined`)
 
     const intentsToClarification: mls.msg.AgentIntent[] = processOutput(agent, context, parentStep, step, hookSequential, json);

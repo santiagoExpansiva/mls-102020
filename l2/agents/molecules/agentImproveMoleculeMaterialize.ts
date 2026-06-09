@@ -98,7 +98,7 @@ async function preparePrompts(context: mls.msg.ExecutionContext, data: IDataProm
     const groupMatch = defsContent.match(/export const group = '([^']+)'/);
     const group = groupMatch?.[1] || '';
     const groupSkill = group ? await getGroupSkill(group) : '';
-    if (context.task) await appendLongTermMemory(context, { page: data.page });
+    if (context.task) await appendLongTermMemory(context, { page: data.page, group });
     return {
         systemContext: currentTs || '(no ts file found)',
         humanContent: data.prompt,
@@ -146,8 +146,8 @@ async function afterPromptStep(
 
     // When needsPlayground is true, a child agent (agentNewMoleculePlayground) will be triggered.
     // Per parent-agent pattern: do not include updateStatus alongside add-step to avoid breaking child execution.
-    const hasChildAgent = intents.some((i) => i.type === 'add-step');
-    if (hasChildAgent) return intents;
+    // const hasChildAgent = intents.some((i) => i.type === 'add-step');
+    // if (hasChildAgent) return intents;
 
     return [...intents, updateStatus];
 }
