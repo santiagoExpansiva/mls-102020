@@ -215,10 +215,17 @@ function buildPlannedTree(initialPlan: InitialNewSolutionPlan): PlannedAgentStep
     plannedAgent('plan-validate-solution-coverage', 'agentValidateSolutionCoverage', title('plan-validate-solution-coverage'), ['plan-mdm', 'plan-horizontals', 'plan-plugins', 'plan-persistence-index', 'plan-table-definition', 'plan-metrics-index', 'plan-metric-table-definition', 'plan-usecase-entities', 'plan-workflow-definition', 'plan-agents', 'plan-page-definition'], 'sequential'),
   ];
 
+  // The former materialization step is now the "Final data" (Dados finais) resume screen:
+  // a no-LLM wrapper agent (agentNewSolutionFinal) whose child clarification step renders the
+  // self-sufficient resume web component. Real materialization is deferred to a "next step".
+  const finalChildren: PlannedAIPayload[] = [
+    plannedClarification('final-resume', title('final-resume'), ['org-materialization']),
+  ];
+
   return [
     plannedAgent('org-requirements', 'agentNewSolutionRequirements', title('org-requirements'), [], 'sequential', undefined, requirementsChildren, 'waiting_human_input'),
     plannedAgent('org-planner', 'agentNewSolutionPlanner', title('org-planner'), ['org-requirements'], 'sequential', undefined, plannerChildren),
-    plannedAgent('org-materialization', 'agentNewSolutionMaterialization', title('org-materialization'), ['plan-validate-solution-coverage'], 'manual_later'),
+    plannedAgent('org-materialization', 'agentNewSolutionFinal', title('org-materialization'), ['plan-validate-solution-coverage'], 'manual_later', undefined, finalChildren),
   ];
 }
 
@@ -287,7 +294,7 @@ function getLocalizedTitle(initialPlan: InitialNewSolutionPlan, planId: NewSolut
 const fallbackTitlesEn: Record<NewSolutionPlanId, string> = {
   'org-requirements': 'Requirements',
   'org-planner': 'Planner',
-  'org-materialization': 'Materialization',
+  'org-materialization': 'Final data',
   'req-discover-scope': 'Discover solution scope',
   'req-clarification-answer': 'Answer initial clarification',
   'req-recommend-implementations': 'Recommend implementations',
@@ -309,12 +316,13 @@ const fallbackTitlesEn: Record<NewSolutionPlanId, string> = {
   'plan-page-index': 'Plan page index',
   'plan-page-definition': 'Plan page definitions',
   'plan-validate-solution-coverage': 'Validate solution coverage',
+  'final-resume': 'Final data',
 };
 
 const fallbackTitlesPt: Record<NewSolutionPlanId, string> = {
   'org-requirements': 'Requisitos',
   'org-planner': 'Planner',
-  'org-materialization': 'Materializacao',
+  'org-materialization': 'Dados finais',
   'req-discover-scope': 'Descobrir escopo da solucao',
   'req-clarification-answer': 'Responder clarificacao inicial',
   'req-recommend-implementations': 'Recomendar implementacoes',
@@ -336,6 +344,7 @@ const fallbackTitlesPt: Record<NewSolutionPlanId, string> = {
   'plan-page-index': 'Planejar indice de paginas',
   'plan-page-definition': 'Planejar definicoes de paginas',
   'plan-validate-solution-coverage': 'Validar cobertura da solucao',
+  'final-resume': 'Dados finais',
 };
 
 const systemPrompt = `

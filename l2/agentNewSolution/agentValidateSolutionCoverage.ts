@@ -16,7 +16,14 @@ import {
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
-import { saveNewSolutionAgentTracePayload, saveNewSolutionPlanHealthReport } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import {
+  saveNewSolutionAgentTracePayload,
+  saveNewSolutionPlanHealthReport,
+  saveNewSolutionProcessRun,
+  getExistingModuleFolders,
+} from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import type { NewSolutionProcessNextStep, NewSolutionProcessRun } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { normalizeModuleFolderName } from '/_102020_/l2/agentNewSolution/agentNewSolutionPlan.js';
 import { getPlanAgentsOutput } from '/_102020_/l2/agentNewSolution/agentPlanAgents.js';
 import type { PlanAgentsOutput } from '/_102020_/l2/agentNewSolution/agentPlanAgents.js';
 import { getPlanHorizontalsOutput } from '/_102020_/l2/agentNewSolution/agentPlanHorizontals.js';
@@ -240,12 +247,16 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
   if (status === 'completed' && output && output.status === 'ok') {
-    await saveNewSolutionPlanHealthReport(context, agent.agentName, step, {
+    const healthReport = {
       summary: output.result.summary,
       issues: output.result.issues,
       checklistResults: output.result.checklistResults || null,
       readyToSaveDefs: output.result.readyToSaveDefs,
-    });
+    };
+    await saveNewSolutionPlanHealthReport(context, agent.agentName, step, healthReport);
+    // Persist the permanent newSolution run (l5/{module}/process.defs.ts). It feeds the
+    // "Dados finais" resume screen and survives "clear traces".
+    await saveProcessRun(context, healthReport);
   }
 
   const updateIntents: mls.msg.AgentIntent[] = [
@@ -291,6 +302,110 @@ async function afterPromptStep(
   }
 
   return updateIntents;
+}
+
+interface RootInitialPlan {
+  userPrompt: string;
+  userLanguage: string;
+  openDetails: { title: string; description: string }[];
+}
+
+function readRootInitialPlan(context: mls.msg.ExecutionContext): RootInitialPlan {
+  const empty: RootInitialPlan = { userPrompt: '', userLanguage: '', openDetails: [] };
+  if (!context.task) return empty;
+  const rootStep = getAgentStepByAgentName(context.task, 'agentNewSolution') as mls.msg.AIAgentStep | null;
+  const payload = rootStep?.interaction?.payload?.[0] as mls.msg.AIFlexibleResultStep | undefined;
+  const result = payload?.type === 'flexible' && payload.result && typeof payload.result === 'object'
+    ? (payload.result as Record<string, unknown>)
+    : undefined;
+  if (!result) return empty;
+  const openDetails = Array.isArray(result.openDetails)
+    ? (result.openDetails as Record<string, unknown>[]).map(d => ({
+        title: typeof d?.title === 'string' ? d.title : '',
+        description: typeof d?.description === 'string' ? d.description : '',
+      }))
+    : [];
+  return {
+    userPrompt: typeof result.userPrompt === 'string' ? result.userPrompt : '',
+    userLanguage: typeof result.userLanguage === 'string' ? result.userLanguage : '',
+    openDetails,
+  };
+}
+
+function buildNextSteps(context: mls.msg.ExecutionContext): NewSolutionProcessNextStep[] {
+  const steps: NewSolutionProcessNextStep[] = [];
+  const existingFolders = getExistingModuleFolders();
+
+  try {
+    const horizontals = getPlanHorizontalsOutput(context);
+    for (const module of horizontals.result.horizontalModules) {
+      const folder = normalizeModuleFolderName(module.horizontalModuleId, module.horizontalModuleId);
+      // referenceOnly modules already exist — nothing to create, so they are not a "next step".
+      if (existingFolders.has(folder)) continue;
+      steps.push({
+        id: `horizontalModule:${module.horizontalModuleId}`,
+        kind: 'horizontalModule',
+        title: module.horizontalModuleId,
+        description: module.reason || '',
+        moduleId: folder,
+        status: 'pending',
+      });
+    }
+  } catch (error) {
+    console.warn('[agentValidateSolutionCoverage](buildNextSteps) horizontals unavailable', error);
+  }
+
+  try {
+    const plugins = getPlanPluginsOutput(context);
+    for (const plugin of plugins.result.plugins) {
+      if (plugin.resolution !== 'create_draft') continue;
+      steps.push({
+        id: `plugin:${plugin.pluginId}`,
+        kind: 'plugin',
+        title: plugin.pluginId,
+        description: plugin.reason || '',
+        pluginId: plugin.pluginId,
+        status: 'pending',
+      });
+    }
+  } catch (error) {
+    console.warn('[agentValidateSolutionCoverage](buildNextSteps) plugins unavailable', error);
+  }
+
+  return steps;
+}
+
+async function saveProcessRun(context: mls.msg.ExecutionContext, healthReport: unknown): Promise<void> {
+  try {
+    const initial = readRootInitialPlan(context);
+    let decisions: unknown[] = [];
+    let deferredItems: unknown[] = [];
+    try {
+      const finalize = getFinalizeSolutionPlanOutput(context);
+      decisions = finalize.result.decisions || [];
+      deferredItems = finalize.result.deferredItems || [];
+    } catch (error) {
+      console.warn('[agentValidateSolutionCoverage](saveProcessRun) finalize output unavailable', error);
+    }
+
+    const run: NewSolutionProcessRun = {
+      runId: 'newSolution',
+      kind: 'newSolution',
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      initialPrompt: initial.userPrompt,
+      userLanguage: initial.userLanguage,
+      decisions,
+      deferredItems,
+      openDetails: initial.openDetails,
+      healthReport,
+      nextSteps: buildNextSteps(context),
+    };
+
+    await saveNewSolutionProcessRun(context, run);
+  } catch (error) {
+    console.warn('[agentValidateSolutionCoverage](saveProcessRun) failed', error);
+  }
 }
 
 export function getValidateSolutionCoverageOutput(context: mls.msg.ExecutionContext): ValidateSolutionCoverageOutput {

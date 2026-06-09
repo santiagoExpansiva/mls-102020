@@ -1,0 +1,201 @@
+/// <mls fileReference="_102020_/l2/agentNewSolution/widgetNewSolutionResume.less" enhancement="_blank"/>
+
+widget-new-solution-resume-102020 {
+
+  display: block;
+  font-size: 14px;
+  color: var(--text-primary-color, #e2e2e2);
+
+  .ns-resume {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 8px 4px;
+  }
+
+  .ns-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .ns-state {
+    padding: 16px;
+    opacity: 0.8;
+  }
+
+  .ns-error {
+    color: var(--error-color, #e57373);
+  }
+
+  .ns-muted {
+    opacity: 0.65;
+    margin: 4px 0;
+  }
+
+  .ns-section {
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    padding: 4px 10px;
+    background: var(--bg-secondary-color, rgba(255, 255, 255, 0.03));
+  }
+
+  .ns-section-head {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 6px 0;
+    user-select: none;
+  }
+
+  .ns-section-body {
+    padding: 6px 0 10px;
+  }
+
+  .ns-prompt {
+    white-space: pre-wrap;
+    margin: 0 0 6px;
+    line-height: 1.45;
+  }
+
+  .ns-link {
+    background: none;
+    border: none;
+    color: var(--active-color, #4f9dff);
+    cursor: pointer;
+    padding: 0;
+    font-size: 13px;
+    text-decoration: underline;
+  }
+
+  .ns-list {
+    margin: 0;
+    padding-left: 18px;
+
+    li { margin: 3px 0; }
+  }
+
+  .ns-health-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .ns-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ns-badge--ok { background: rgba(76, 175, 80, 0.18); color: #7ed085; }
+  .ns-badge--bad { background: rgba(229, 115, 115, 0.18); color: #e57373; }
+
+  .ns-counts { opacity: 0.8; font-size: 13px; }
+
+  .ns-ready { font-size: 12px; }
+  .ns-ready--ok { color: #7ed085; }
+  .ns-ready--no { opacity: 0.7; }
+
+  .ns-issues {
+    margin: 4px 0;
+    padding-left: 14px;
+    list-style: none;
+
+    li {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 3px 0;
+      border-left: 3px solid transparent;
+      padding-left: 8px;
+    }
+  }
+
+  .ns-issues--error li { border-left-color: #e57373; }
+  .ns-issues--warning li { border-left-color: #e0b040; }
+
+  .ns-issue-code { font-family: monospace; font-size: 12px; opacity: 0.85; }
+  .ns-issue-msg { flex: 1 1 200px; }
+  .ns-issue-path { font-family: monospace; font-size: 11px; opacity: 0.6; }
+
+  .ns-next {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ns-next-item {
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 6px;
+    padding: 8px 10px;
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+  }
+
+  .ns-next-item--opened { opacity: 0.7; }
+
+  .ns-next-kind {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.6;
+  }
+
+  .ns-next-title { font-weight: 600; }
+
+  .ns-next-desc { font-size: 13px; opacity: 0.8; margin: 4px 0 0 24px; }
+
+  .ns-next-agent {
+    font-family: monospace;
+    font-size: 12px;
+    opacity: 0.55;
+    margin: 4px 0 0 24px;
+  }
+
+  .ns-next-opened { font-size: 12px; color: #7ed085; margin-left: 24px; }
+
+  .ns-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+
+  .ns-clear {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .ns-finish {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 6px;
+    background: var(--active-color, #4f9dff);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:disabled { opacity: 0.5; cursor: default; }
+  }
+
+  .ns-done {
+    padding: 10px;
+    border-radius: 6px;
+    background: rgba(76, 175, 80, 0.15);
+    color: #7ed085;
+  }
+}

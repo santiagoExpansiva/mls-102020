@@ -25,6 +25,7 @@ export const PLAN_IDS = [
   'plan-page-index',
   'plan-page-definition',
   'plan-validate-solution-coverage',
+  'final-resume',
 ] as const;
 
 export type NewSolutionPlanId = typeof PLAN_IDS[number];
