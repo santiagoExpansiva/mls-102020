@@ -169,7 +169,36 @@ export interface SavePlanArtifactsOptions {
   ontologyEntities?: Record<string, unknown>;
 }
 
+// Serializes ALL artifact persistence PER MODULE. parallel_dynamic/parallel_static steps (mdm,
+// horizontals, plugins, table/metricTable/workflow/usecase/page definitions) run as concurrent
+// async children in the SAME browser context, and several write distinct files INTO THE SAME folder
+// (e.g. all page .defs.ts go to l2/{module}). The underlying stor/localStor layer is not safe for
+// concurrent writes to one folder — overlapping saves clobber each other's folder bookkeeping and
+// only a few files survive (observed: 11 page steps ran, only 4 .defs.ts persisted). Trace files
+// survive because they live in a different folder ({module}/trace). The LLM generation already ran
+// in parallel in beforePromptStep; only the (fast) save is queued here, so throughput is unaffected.
+const moduleWriteChains = new Map<string, Promise<unknown>>();
+
+function runExclusivePerModule<T>(moduleName: string, fn: () => Promise<T>): Promise<T> {
+  const previous = moduleWriteChains.get(moduleName) || Promise.resolve();
+  const next = previous.catch(() => undefined).then(fn);
+  moduleWriteChains.set(moduleName, next.catch(() => undefined));
+  return next;
+}
+
 export async function saveNewSolutionPlanArtifacts(
+  context: mls.msg.ExecutionContext,
+  agentName: string,
+  step: mls.msg.AIAgentStep,
+  output: unknown,
+  options?: SavePlanArtifactsOptions,
+): Promise<PlanArtifactReference[]> {
+  if (!isRecord(output) || output.status !== 'ok') return [];
+  const moduleName = normalizeModuleFolderName(getModuleNameFromPlannerOutput(output) || getInitialModuleName(context), 'module');
+  return runExclusivePerModule(moduleName, () => doSaveNewSolutionPlanArtifacts(context, agentName, step, output, options));
+}
+
+async function doSaveNewSolutionPlanArtifacts(
   context: mls.msg.ExecutionContext,
   agentName: string,
   step: mls.msg.AIAgentStep,
@@ -1002,7 +1031,27 @@ function parsePlanArtifactSource(content: string, extension: string): unknown {
   return parseMaybeJson(content.slice(start + 2, end));
 }
 
+// Serializes manifest updates PER MODULE. parallel_dynamic steps (table/metricTable/workflow/page
+// definitions) run as concurrent async children in the SAME browser context and each does a
+// read-modify-write of the single l2/{module}/trace/plan-artifacts.json. Without serialization they
+// all read the same baseline and the last writer clobbers the others (lost update) — leaving the
+// manifest referencing only a few artifacts. Since getPlanPageDefinitionOutputs (and the coverage
+// validator) enumerate saved artifacts FROM this manifest, the dropped entries surface as
+// "page.def.missing" even though every child ran. A per-module promise chain makes each
+// read-modify-write atomic relative to the others.
+const manifestUpdateChains = new Map<string, Promise<void>>();
+
 async function updatePlanArtifactsManifest(moduleName: string, references: PlanArtifactReference[]): Promise<void> {
+  if (references.length === 0) return;
+  const previous = manifestUpdateChains.get(moduleName) || Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(() => writePlanArtifactsManifest(moduleName, references));
+  manifestUpdateChains.set(moduleName, next.catch(() => undefined));
+  return next;
+}
+
+async function writePlanArtifactsManifest(moduleName: string, references: PlanArtifactReference[]): Promise<void> {
   if (references.length === 0) return;
 
   const fileInfo = planArtifactsManifestFileInfo(moduleName);
@@ -1173,14 +1222,23 @@ async function saveStorContent(
   needCreateModel: boolean,
 ): Promise<void> {
   const key = mls.stor.getKeyToFile(fileInfo);
-  let storFile = mls.stor.files[key];
+  const storFile = mls.stor.files[key];
 
   if (!storFile) {
-    storFile = await createStorFile({ ...fileInfo, source }, needCreateModel, needCreateModel, false);
-  } else if (needCreateModel) {
-    const model = await storFile.getOrCreateModel();
-    if (model?.model) model.model.setValue(source);
+    // createStorFile already registers the index entry AND persists the content to IndexedDB
+    // (its own localStor.setContent), and for l2 it applies the tripleslash transform. Calling
+    // setContent again here would be a redundant second write (extra concurrent IndexedDB I/O)
+    // and could overwrite that canonical content with the raw source. So we stop here.
+    await createStorFile({ ...fileInfo, source }, needCreateModel, needCreateModel, false);
+    if (needCreateModel) console.warn(`[saveStorContent] created file for ${key} with initial content, skipping create model`);
+    return;
   }
+
+  if (needCreateModel) {
+    const model = await storFile.getOrCreateModel();
+    if (model.model) model.model.setValue(source);
+  }
+  if (!source) console.warn(`[saveStorContent] empty source for ${key}`);
 
   await mls.stor.localStor.setContent(storFile, { contentType: 'string', content: source });
 }
