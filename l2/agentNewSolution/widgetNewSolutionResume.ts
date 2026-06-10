@@ -330,7 +330,8 @@ export class WidgetNewSolutionResume102020 extends StateLitElement {
 
   private _renderActions(): TemplateResult {
     const m = this._msg;
-    if (this._finished) return html`<div class="ns-done">${m.finished}</div>`;
+    // View/maintenance mode: the run already finished (reopened via the step list). No "Encerrar".
+    if (this._finished || this._run?.finishedAt) return html`<div class="ns-done">${m.finished}</div>`;
     return html`
       <div class="ns-actions">
         <label class="ns-clear">
