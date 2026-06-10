@@ -297,7 +297,7 @@
         "plan-table-definition", "plan-metrics-index", "plan-metric-table-definition",
         "plan-usecase-entities", "plan-workflow-definition", "plan-agents", "plan-page-definition"
       ],
-      "goal": "Relatorio tecnico NAO-bloqueante de cobertura/integracao (TODO-FINAL-023/024). Com status=ok completa mesmo sem readiness e fecha o root agentNewSolution (plan-only, TODO-FINAL-001).",
+      "goal": "Relatorio tecnico NAO-bloqueante de cobertura/integracao (TODO-FINAL-023/024). Com status=ok completa e grava o run em process.defs.ts. NAO fecha mais o root: o fluxo segue para 'Revendo plano' (sequential) e o root e fechado no 'Encerrar' da tela final.",
       "input": ["coverageSnapshot compacto (counts/ids/matriz)", "deterministicIssues pre-computadas no cliente"],
       "output": {
         "result": "ValidationReport { summary{passed,errorCount,warningCount}, issues[{severity,code,message,path}], readyToSaveDefs }",
@@ -309,7 +309,7 @@
       "planId": "org-materialization",
       "agentName": "agentNewSolutionFinal",
       "type": "agent",
-      "executionMode": "manual_later",
+      "executionMode": "sequential",
       "dependsOn": ["plan-validate-solution-coverage"],
       "goal": "Step 'Revendo plano'. Wrapper sem LLM (igual agentNewSolutionPlanner). Ao completar, libera o filho clarification 'final-resume' que renderiza a tela 'Resumo final do planejamento' (widget-new-solution-resume-102020).",
       "input": ["l5/{module}/process.defs.ts (run newSolution)", "l2/{module}/trace/plan-health-report.json (fallback)"],

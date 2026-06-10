@@ -113,7 +113,17 @@ export async function saveNewSolutionAgentTracePayload(
     const payload = step.interaction?.payload?.[0];
     if (!payload) return;
 
-    const moduleName = normalizeModuleFolderName(moduleNameOverride || getPayloadModuleName(payload) || getInitialModuleName(context), 'module');
+    // Do not write trace before the user approved the final module name in the clarification.
+    // Until then there is no real folder to write into, and using a tentative/payload-derived name
+    // creates duplicate module folders (e.g. propertyFlowCrm vs propertyflowCrm). Always use the
+    // single authoritative approved name.
+    const moduleName = moduleNameOverride
+      ? normalizeModuleFolderName(moduleNameOverride, 'module')
+      : getApprovedModuleName(context);
+    if (!moduleName) {
+      logTaskSizeIfLarge(context, agentName);
+      return;
+    }
     const trace = {
       savedAt: new Date().toISOString(),
       agentName,
@@ -169,36 +179,7 @@ export interface SavePlanArtifactsOptions {
   ontologyEntities?: Record<string, unknown>;
 }
 
-// Serializes ALL artifact persistence PER MODULE. parallel_dynamic/parallel_static steps (mdm,
-// horizontals, plugins, table/metricTable/workflow/usecase/page definitions) run as concurrent
-// async children in the SAME browser context, and several write distinct files INTO THE SAME folder
-// (e.g. all page .defs.ts go to l2/{module}). The underlying stor/localStor layer is not safe for
-// concurrent writes to one folder — overlapping saves clobber each other's folder bookkeeping and
-// only a few files survive (observed: 11 page steps ran, only 4 .defs.ts persisted). Trace files
-// survive because they live in a different folder ({module}/trace). The LLM generation already ran
-// in parallel in beforePromptStep; only the (fast) save is queued here, so throughput is unaffected.
-const moduleWriteChains = new Map<string, Promise<unknown>>();
-
-function runExclusivePerModule<T>(moduleName: string, fn: () => Promise<T>): Promise<T> {
-  const previous = moduleWriteChains.get(moduleName) || Promise.resolve();
-  const next = previous.catch(() => undefined).then(fn);
-  moduleWriteChains.set(moduleName, next.catch(() => undefined));
-  return next;
-}
-
 export async function saveNewSolutionPlanArtifacts(
-  context: mls.msg.ExecutionContext,
-  agentName: string,
-  step: mls.msg.AIAgentStep,
-  output: unknown,
-  options?: SavePlanArtifactsOptions,
-): Promise<PlanArtifactReference[]> {
-  if (!isRecord(output) || output.status !== 'ok') return [];
-  const moduleName = normalizeModuleFolderName(getModuleNameFromPlannerOutput(output) || getInitialModuleName(context), 'module');
-  return runExclusivePerModule(moduleName, () => doSaveNewSolutionPlanArtifacts(context, agentName, step, output, options));
-}
-
-async function doSaveNewSolutionPlanArtifacts(
   context: mls.msg.ExecutionContext,
   agentName: string,
   step: mls.msg.AIAgentStep,
@@ -208,7 +189,9 @@ async function doSaveNewSolutionPlanArtifacts(
   try {
     if (!isRecord(output) || output.status !== 'ok') return [];
 
-    const moduleName = normalizeModuleFolderName(getModuleNameFromPlannerOutput(output) || getInitialModuleName(context), 'module');
+    // Single authoritative folder for the run (approved name). Do NOT re-derive from the step's own
+    // LLM payload — that caused divergent module folders when agents disagreed on casing.
+    const moduleName = runModuleName(context);
     const planId = readString((step as any).planning?.planId) || '';
     const candidates = buildPlanArtifactCandidates(agentName, moduleName, output, options);
     if (candidates.length === 0) return [];
@@ -309,7 +292,7 @@ export async function saveNewSolutionIndexCheckpoint(
   healthReport: PlanIndexHealthReport,
 ): Promise<void> {
   try {
-    const moduleName = normalizeModuleFolderName(getInitialModuleName(context), 'module');
+    const moduleName = runModuleName(context);
     const planId = readString((indexStep as any).planning?.planId) || '';
     const checkpoint = {
       schemaVersion: PLAN_ARTIFACT_SCHEMA_VERSION,
@@ -396,7 +379,7 @@ export async function saveNewSolutionPlanHealthReport(
   report: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const moduleName = normalizeModuleFolderName(getInitialModuleName(context), 'module');
+    const moduleName = runModuleName(context);
     const planId = readString((step as any).planning?.planId) || '';
     const document = {
       schemaVersion: PLAN_ARTIFACT_SCHEMA_VERSION,
@@ -592,7 +575,10 @@ export async function deleteNewSolutionTraceFolder(moduleName: string): Promise<
   return removed;
 }
 
-function getInitialModuleName(context: mls.msg.ExecutionContext): string {
+// The TENTATIVE module name picked by the root agentNewSolution LLM. It is only a suggestion /
+// prompt default — NOT the final folder name. The final name is approved by the user in the
+// requirements clarification (see getApprovedModuleName).
+export function getInitialModuleName(context: mls.msg.ExecutionContext): string {
   if (!context.task) return 'module';
   const agentStep = getAgentStepByAgentName(context.task, 'agentNewSolution') as mls.msg.AIAgentStep | null;
   const payload = agentStep?.interaction?.payload?.[0] as mls.msg.AIFlexibleResultStep | undefined;
@@ -604,19 +590,35 @@ function getInitialModuleName(context: mls.msg.ExecutionContext): string {
 }
 
 /**
- * The module being created in the CURRENT task, or null when the root agentNewSolution has not
- * produced a plan yet. Unlike getInitialModuleName, this never falls back to a derived name — so
- * callers can safely exclude the in-progress module from the "already existing modules" list shown
- * to the flow's own agents (the root reserves l5/{module}/module.defs.ts + trace at the very start,
- * which would otherwise make downstream steps treat the new module as a pre-existing one).
+ * The module name APPROVED by the user in the requirements clarification (req-clarification-answer).
+ * Returns null until that clarification is answered — before that point the run has no final module
+ * name, so nothing must be written to disk (no trace, no reservation). When the clarification answer
+ * omits a module name, it falls back to the root's tentative name (LLM suggestion / prompt default).
+ * This is the single authoritative source for the run's folder, eliminating the divergence caused by
+ * each step re-deriving the name from its own LLM payload.
  */
-export function getPlannedModuleName(context: mls.msg.ExecutionContext): string | null {
+export function getApprovedModuleName(context: mls.msg.ExecutionContext): string | null {
   if (!context.task) return null;
-  const agentStep = getAgentStepByAgentName(context.task, 'agentNewSolution') as mls.msg.AIAgentStep | null;
-  const payload = agentStep?.interaction?.payload?.[0] as mls.msg.AIFlexibleResultStep | undefined;
-  if (!payload || payload.type !== 'flexible' || !isRecord(payload.result)) return null;
-  const name = readString(payload.result.moduleName);
-  return name ? normalizeModuleFolderName(name, 'module') : null;
+  const reqStep = getAgentStepByAgentName(context.task, 'agentNewSolutionRequirements') as mls.msg.AIAgentStep | null;
+  const answerStep = (reqStep?.nextSteps || []).find(s =>
+    s.type === 'result' && (s as { planning?: { planId?: string } }).planning?.planId === 'req-clarification-answer'
+  ) as mls.msg.AIResultStep | undefined;
+  if (!answerStep?.result) return null;
+
+  let chosen: string | undefined;
+  try {
+    const parsed = parseMaybeJson(answerStep.result);
+    if (isRecord(parsed) && isRecord(parsed.answers)) chosen = readString(parsed.answers.moduleName);
+  } catch {
+    chosen = undefined;
+  }
+  return normalizeModuleFolderName(chosen || getInitialModuleName(context), 'module');
+}
+
+/** Authoritative module folder for the current run: the approved name once the clarification is
+ * answered, otherwise the root's tentative name (for writers that only run post-clarification). */
+function runModuleName(context: mls.msg.ExecutionContext): string {
+  return getApprovedModuleName(context) || normalizeModuleFolderName(getInitialModuleName(context), 'module');
 }
 
 function getPayloadModuleName(payload: unknown): string | undefined {
@@ -723,7 +725,9 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
       artifactType: 'table',
       artifactId: id,
       exportName: readString(getRecord(result.defsPlan)?.exportName) || `${toExportIdentifier(id)}TablePlan`,
-      moduleName: normalizeModuleFolderName(readString(table.moduleId) || moduleName, moduleName),
+      // Use the authoritative run module name (module-owned table). Ignoring table.moduleId avoids
+      // the LLM's casing drift creating a second module folder.
+      moduleName,
       data: { tableDefinition: table, defsPlan: result.defsPlan },
     }];
   }
@@ -736,7 +740,8 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
       artifactType: 'metricTable',
       artifactId: id,
       exportName: readString(getRecord(result.defsPlan)?.exportName) || `${toExportIdentifier(id)}MetricTablePlan`,
-      moduleName: normalizeModuleFolderName(readString(table.moduleId) || moduleName, moduleName),
+      // Authoritative run module name (module-owned metric table); ignore metricTable.moduleId casing.
+      moduleName,
       data: { metricTableDefinition: table, defsPlan: result.defsPlan },
     }];
   }
@@ -984,7 +989,7 @@ export async function readSavedPlanArtifactDataList(
   artifactType: string,
 ): Promise<Record<string, unknown>[]> {
   try {
-    const moduleName = normalizeModuleFolderName(getInitialModuleName(context), 'module');
+    const moduleName = runModuleName(context);
     const manifestFile = mls.stor.files[mls.stor.getKeyToFile(planArtifactsManifestFileInfo(moduleName))];
     if (!manifestFile) return [];
     const manifest = parseMaybeJson(await manifestFile.getContent());
@@ -1031,27 +1036,7 @@ function parsePlanArtifactSource(content: string, extension: string): unknown {
   return parseMaybeJson(content.slice(start + 2, end));
 }
 
-// Serializes manifest updates PER MODULE. parallel_dynamic steps (table/metricTable/workflow/page
-// definitions) run as concurrent async children in the SAME browser context and each does a
-// read-modify-write of the single l2/{module}/trace/plan-artifacts.json. Without serialization they
-// all read the same baseline and the last writer clobbers the others (lost update) — leaving the
-// manifest referencing only a few artifacts. Since getPlanPageDefinitionOutputs (and the coverage
-// validator) enumerate saved artifacts FROM this manifest, the dropped entries surface as
-// "page.def.missing" even though every child ran. A per-module promise chain makes each
-// read-modify-write atomic relative to the others.
-const manifestUpdateChains = new Map<string, Promise<void>>();
-
 async function updatePlanArtifactsManifest(moduleName: string, references: PlanArtifactReference[]): Promise<void> {
-  if (references.length === 0) return;
-  const previous = manifestUpdateChains.get(moduleName) || Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
-    .then(() => writePlanArtifactsManifest(moduleName, references));
-  manifestUpdateChains.set(moduleName, next.catch(() => undefined));
-  return next;
-}
-
-async function writePlanArtifactsManifest(moduleName: string, references: PlanArtifactReference[]): Promise<void> {
   if (references.length === 0) return;
 
   const fileInfo = planArtifactsManifestFileInfo(moduleName);
@@ -1222,23 +1207,14 @@ async function saveStorContent(
   needCreateModel: boolean,
 ): Promise<void> {
   const key = mls.stor.getKeyToFile(fileInfo);
-  const storFile = mls.stor.files[key];
+  let storFile = mls.stor.files[key];
 
   if (!storFile) {
-    // createStorFile already registers the index entry AND persists the content to IndexedDB
-    // (its own localStor.setContent), and for l2 it applies the tripleslash transform. Calling
-    // setContent again here would be a redundant second write (extra concurrent IndexedDB I/O)
-    // and could overwrite that canonical content with the raw source. So we stop here.
-    await createStorFile({ ...fileInfo, source }, needCreateModel, needCreateModel, false);
-    if (needCreateModel) console.warn(`[saveStorContent] created file for ${key} with initial content, skipping create model`);
-    return;
-  }
-
-  if (needCreateModel) {
+    storFile = await createStorFile({ ...fileInfo, source }, needCreateModel, needCreateModel, false);
+  } else if (needCreateModel) {
     const model = await storFile.getOrCreateModel();
-    if (model.model) model.model.setValue(source);
+    if (model?.model) model.model.setValue(source);
   }
-  if (!source) console.warn(`[saveStorContent] empty source for ${key}`);
 
   await mls.stor.localStor.setContent(storFile, { contentType: 'string', content: source });
 }

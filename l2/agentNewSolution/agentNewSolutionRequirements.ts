@@ -2,7 +2,13 @@
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { getAgentStepByAgentName, getAllSteps, notifyTaskChange } from '/_102027_/l2/aiAgentHelper.js';
-import { saveNewSolutionAgentTracePayload, getExistingModuleFolders, getPlannedModuleName } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import {
+  saveNewSolutionAgentTracePayload,
+  getExistingModuleFolders,
+  getInitialModuleName,
+  reserveNewSolutionModuleArtifacts,
+  normalizeModuleFolderName,
+} from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import {
   ImplementationRecommendation,
   RecommendImplementationsOutput,
@@ -34,11 +40,9 @@ async function beforePromptStep(
   if (!context.task) throw new Error(`(${agent.agentName})[beforePromptStep] task invalid`);
 
   const initialPlan = getInitialPlan(context);
-  // Exclude the module being created in this run: the root agentNewSolution already reserved
-  // l5/{module}/module.defs.ts + trace before this step, and we must not let the LLM treat the
-  // in-progress module as a pre-existing one (which made it reject the request).
-  const planned = getPlannedModuleName(context);
-  const existingFolders = getExistingProjectFolders().filter(folder => folder !== planned);
+  // No reservation has happened yet (deferred to the clarification answer), so the in-progress
+  // module is not in the folder list and does not need excluding.
+  const existingFolders = getExistingProjectFolders();
 
   const continueIntent: mls.msg.AgentIntentPromptReady = {
     type: 'prompt_ready',
@@ -170,13 +174,41 @@ async function applyClarificationResult(
 ): Promise<void> {
   if (!context.task) throw new Error(`[${agent.agentName}](applyClarificationResult) task invalid`);
 
-  const status: mls.msg.AIStepStatus = action === 'continue' ? 'completed' : 'failed';
+  // The module name is FINALIZED here (first clarification). Use the user's answer, falling back to
+  // the root's tentative name (LLM suggestion / prompt default) when the answer omits it. Validate
+  // it against existing folders: if it already exists, abort the task instead of creating a
+  // duplicate. Only after this is the module reserved and trace/artifacts start being written.
+  let finalModuleName: string | undefined;
+  let collisionMsg: string | undefined;
+  if (action === 'continue') {
+    const tentative = getInitialModuleName(context);
+    finalModuleName = normalizeModuleFolderName(readModuleNameAnswer(value) || tentative, tentative);
+    if (getExistingModuleFolders().has(finalModuleName)) {
+      const lang = (value.userLanguage || '').toLowerCase();
+      collisionMsg = lang.startsWith('pt')
+        ? `O módulo "${finalModuleName}" já existe. Escolha outro nome para o módulo.`
+        : `Module "${finalModuleName}" already exists. Please choose a different module name.`;
+    }
+  }
+
+  // A name collision turns the approval into a failure (aborts the task with a clear reason).
+  const effectiveAction: 'continue' | 'cancel' = collisionMsg ? 'cancel' : action;
+  const status: mls.msg.AIStepStatus = effectiveAction === 'continue' ? 'completed' : 'failed';
   const intents: mls.msg.AgentIntent[] = [
-    createUpdateStatusIntent(context, parentStep, step, hookSequential, status),
+    createUpdateStatusIntent(context, parentStep, step, hookSequential, status, collisionMsg),
   ];
 
-  if (action === 'continue') {
+  if (effectiveAction === 'continue' && finalModuleName) {
+    const initialPlan = getInitialPlan(context);
+    await reserveNewSolutionModuleArtifacts({
+      moduleName: finalModuleName,
+      requestKind: initialPlan.requestKind,
+      userLanguage: initialPlan.userLanguage,
+      userPrompt: initialPlan.userPrompt,
+    });
+
     const answerResult = normalizeClarificationAnswer(value);
+    answerResult.answers.moduleName = finalModuleName; // authoritative name for the whole run
     const plannedAnswerStep = findStepByPlanId(context.task, 'req-clarification-answer');
 
     intents.unshift(createClarificationAnswerResultIntent(context, parentStep, answerResult));
@@ -201,7 +233,7 @@ async function applyClarificationResult(
   notifyTaskChange(context);
 
   const queueFrontEnd = context.task.iaCompressed?.queueFrontEnd || [];
-  const hasHookToContinue = action === 'continue' && queueFrontEnd.some(hook => hook.type !== 'pooling');
+  const hasHookToContinue = effectiveAction === 'continue' && queueFrontEnd.some(hook => hook.type !== 'pooling');
 
   if (mls.isTraceAgent) {
     console.log(
@@ -330,6 +362,7 @@ function createUpdateStatusIntent(
   step: mls.msg.AIPayload,
   hookSequential: number,
   status: mls.msg.AIStepStatus,
+  traceMsg?: string,
 ): mls.msg.AgentIntentUpdateStatus {
   return {
     type: 'update-status',
@@ -340,7 +373,13 @@ function createUpdateStatusIntent(
     parentStepId: parentStep.stepId,
     stepId: step.stepId,
     status,
+    traceMsg,
   };
+}
+
+function readModuleNameAnswer(value: RequirementsClarification): string | undefined {
+  const answer = value.questions?.moduleName?.answer;
+  return typeof answer === 'string' && answer.trim() ? answer.trim() : undefined;
 }
 
 function normalizeClarificationAnswer(value: RequirementsClarification): RequirementsClarificationAnswer {

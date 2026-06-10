@@ -389,6 +389,10 @@ export class WidgetNewSolutionResume102020 extends StateLitElement {
       // 4. Clean leftover step inputs/outputs now that everything permanent is saved.
       if (ret?.task) await this._cleanLeftoverPayloads(ret.task);
 
+      // 5. Close the root agentNewSolution step — the flow ends here. Coverage no longer closes it
+      // (the final "Revendo plano" step is sequential, so the flow continues to this screen).
+      if (ret?.task) await this._closeRoot(ret.task);
+
       this._finished = true;
       this._run = { ...run };
     } catch (error) {
@@ -483,6 +487,35 @@ export class WidgetNewSolutionResume102020 extends StateLitElement {
       await mls.api.msgApplyIntents({ userId: v.senderId, intents });
     } catch (error) {
       console.warn('[widgetNewSolutionResume](cleanLeftoverPayloads) failed', error);
+    }
+  }
+
+  // Completes the root agentNewSolution step (plan-only flow ends at this screen). It is a
+  // top-level agent step, so intentUpdateStatus uses self-parent (its own stepId) as the agent
+  // parent — same pattern agentNewSolution uses for its own status updates.
+  private async _closeRoot(task: mls.msg.TaskData): Promise<void> {
+    try {
+      const v = this.value!;
+      const root = getAllSteps(task.iaCompressed?.nextSteps || []).find(s =>
+        s.type === 'agent' && (s as mls.msg.AIAgentStep & { agentName?: string }).agentName === 'agentNewSolution'
+      );
+      if (!root || root.status === 'completed') return;
+      await mls.api.msgApplyIntents({
+        userId: v.senderId,
+        intents: [{
+          type: 'update-status',
+          hookSequential: 0,
+          messageId: v.messageId,
+          threadId: v.threadId,
+          taskId: v.taskId,
+          parentStepId: root.stepId,
+          stepId: root.stepId,
+          status: 'completed',
+          traceMsg: 'plan-only: root agentNewSolution closed after the final resume screen (Encerrar).',
+        }],
+      });
+    } catch (error) {
+      console.warn('[widgetNewSolutionResume](closeRoot) failed', error);
     }
   }
 

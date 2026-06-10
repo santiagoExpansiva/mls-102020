@@ -4,9 +4,6 @@ import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { getAgentStepByAgentName } from '/_102027_/l2/aiAgentHelper.js';
 import {
   getExistingModuleFolders,
-  getPlannedModuleName,
-  reserveNewSolutionModuleArtifacts,
-  saveNewSolutionAgentTracePayload,
   saveTraceMemorySeed,
 } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import {
@@ -67,10 +64,7 @@ async function beforePromptImplicit(
   const normalizedPrompt = (userPrompt || '').trim();
   if (normalizedPrompt.length < 5) throw new Error('invalid prompt');
 
-  // Exclude the module being created in THIS task (set on a retry) so the root never sees its own
-  // reserved folder as a pre-existing module.
-  const planned = getPlannedModuleName(context);
-  const folders = Array.from(getExistingModuleFolders()).filter(folder => folder !== planned);
+  const folders = Array.from(getExistingModuleFolders());
 
   const addMessageAI: mls.msg.AgentIntentAddMessageAI = {
     type: 'add-message-ai',
@@ -129,9 +123,11 @@ async function afterPromptStep(
     if (payload.type !== 'flexible' || !payload.result) throw new Error(`[afterPromptStep] invalid payload: ${JSON.stringify(payload)}`);
 
     const initialPlan = normalizeInitialPlan(payload.result, getExistingModuleFolders());
+    // Tentative module name only (LLM suggestion / prompt default). The FINAL name is approved by
+    // the user in the requirements clarification, where it is validated and the module artifacts are
+    // reserved. Nothing is written to disk here (no reservation, no trace) — writing before the name
+    // is final created premature/duplicate module folders. See agentNewSolutionRequirements.
     payload.result.moduleName = initialPlan.moduleName;
-    await reserveNewSolutionModuleArtifacts(initialPlan);
-    await saveNewSolutionAgentTracePayload(context, agent.agentName, step, initialPlan.moduleName);
 
     const plannedSteps = buildPlannedTree(initialPlan);
     const addStepIntents: mls.msg.AgentIntentAddStep[] = plannedSteps.map((plannedStep) => ({
@@ -234,7 +230,7 @@ function buildPlannedTree(initialPlan: InitialNewSolutionPlan): PlannedAgentStep
   return [
     plannedAgent('org-requirements', 'agentNewSolutionRequirements', title('org-requirements'), [], 'sequential', undefined, requirementsChildren, 'waiting_human_input'),
     plannedAgent('org-planner', 'agentNewSolutionPlanner', title('org-planner'), ['org-requirements'], 'sequential', undefined, plannerChildren),
-    plannedAgent('org-materialization', 'agentNewSolutionFinal', title('org-materialization'), ['plan-validate-solution-coverage'], 'manual_later', undefined, finalChildren),
+    plannedAgent('org-materialization', 'agentNewSolutionFinal', title('org-materialization'), ['plan-validate-solution-coverage'], 'sequential', undefined, finalChildren),
   ];
 }
 

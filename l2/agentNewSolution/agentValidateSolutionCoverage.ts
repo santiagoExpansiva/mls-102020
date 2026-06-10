@@ -1,7 +1,7 @@
 /// <mls fileReference="_102020_/l2/agentNewSolution/agentValidateSolutionCoverage.ts" enhancement="_102027_/l2/enhancementAgent"/>
 
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
-import { getAgentStepByAgentName, getAllSteps } from '/_102027_/l2/aiAgentHelper.js';
+import { getAgentStepByAgentName } from '/_102027_/l2/aiAgentHelper.js';
 import {
   PlannerOutput,
   assertArray,
@@ -263,46 +263,10 @@ async function afterPromptStep(
     createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined),
   ];
 
-  if (status === 'completed') {
-    // TODO-FINAL-001: close root planning agent for plan-only mode.
-    // Evidence from final.md diagnosis (run30): root step stays waiting_after_prompt,
-    // org-materialization waiting_dependency, orphan frontend hook on completed pageIndex.
-    // Action: upon validate completion, explicitly complete the root `agentNewSolution` step
-    // so the task does not remain `in progress`. Materialization remains 'manual_later'.
-    const rootStep = getAgentStepByAgentName(context.task, 'agentNewSolution');
-    if (rootStep && rootStep.type === 'agent' && rootStep.status !== 'completed') {
-      // Find the actual parent step that owns this root agent step (the one that added it as nextStep).
-      // This is the correct parentStepId to use when updating the root's status.
-      const allSteps = getAllSteps(context.task.iaCompressed?.nextSteps || []);
-      let parentStepIdForRoot: number | undefined;
-      for (const s of allSteps) {
-        const nextSteps = (s as any).nextSteps || [];
-        if (nextSteps.some((ns: any) => ns && ns.stepId === rootStep.stepId)) {
-          parentStepIdForRoot = (s as any).stepId;
-          break;
-        }
-      }
-      // Fallback: the root agentNewSolution is a top-level step, so no other step lists it as a
-      // child. intentUpdateStatus requires an agent parent — the root itself is an agent step, so
-      // self-parent (rootStep.stepId), exactly like agentNewSolution's own update-status. Never 0
-      // (parentStepId 0 does not resolve to a step -> "Parent step not found in intentUpdateStatus").
-      if (parentStepIdForRoot === undefined || parentStepIdForRoot === 0) {
-        parentStepIdForRoot = rootStep.stepId;
-      }
-
-      updateIntents.push({
-        type: 'update-status',
-        hookSequential,
-        messageId: context.message.orderAt,
-        threadId: context.message.threadId,
-        taskId: context.task?.PK || '',
-        parentStepId: parentStepIdForRoot ?? parentStep.stepId,
-        stepId: rootStep.stepId,
-        status: 'completed',
-        traceMsg: 'plan-only: root agentNewSolution closed after plan-validate-solution-coverage. Materialization left pending for next task. Orphan hooks for planning steps (e.g. agentPlanPageIndex) should be cleaned by system.',
-      });
-    }
-  }
+  // NOTE: the root agentNewSolution is intentionally NOT closed here anymore. The flow now continues
+  // to the final "Revendo plano"/"Resumo final do planejamento" step (org-materialization is
+  // sequential), and the root is closed by the resume screen's "Encerrar" action
+  // (widgetNewSolutionResume). Closing the root here would mark the task done before that screen.
 
   return updateIntents;
 }
