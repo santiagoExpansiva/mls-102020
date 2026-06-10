@@ -1,6 +1,6 @@
 /// <mls fileReference="_102020_/l2/agentNewSolution/agentPlanIndexReview.ts" enhancement="_102027_/l2/enhancementAgent"/>
 
-// TODO-FINAL-023 / TODO-FINAL-024
+// 
 // Per-index review configuration used by agentCriticPlanIndex and agentRepairPlanIndex.
 // Each plan index has its own contract, schema, deterministic checkpoint, minimal context
 // and continuation (fan-out) logic. One critic LLM call and one repair LLM call per index,
@@ -243,7 +243,7 @@ function getFinalPlanSafe(context: mls.msg.ExecutionContext): FinalSolutionPlanO
 }
 
 function getActorIds(context: mls.msg.ExecutionContext): Set<string> {
-  // TODO-FINAL-019: single source of the actor contract (shared getActorIdSet).
+  // single source of the actor contract (shared getActorIdSet).
   return getActorIdSet(getFinalPlanSafe(context)?.result.actors);
 }
 
@@ -367,7 +367,7 @@ function metricWriteLooksJustified(
 
 //#endregion
 
-//#region per-index local checkpoints (TODO-FINAL-023 deterministic validations)
+//#region per-index local checkpoints
 
 function checkpointPersistenceIndex(context: mls.msg.ExecutionContext, output: PlanPersistenceIndexOutput): PlanIndexLocalFindings {
   const errors: PlanIndexHealthFinding[] = [];
@@ -491,8 +491,10 @@ function checkpointWorkflowIndex(context: mls.msg.ExecutionContext, output: Plan
         errors.push(finding('error', 'workflow.actorUnknown', `workflow ${workflow.workflowId} actor ${actor} is not a final plan actorId`, path));
       }
     }
+    // E2-001: persistenceRefs may contain metric table ids (T-009 superset contract) — validate
+    // against module tables UNION metric tables, never against transactional tables only.
     for (const ref of workflow.persistenceRefs) {
-      if (tableIds.size > 0 && !tableIds.has(ref)) {
+      if (tableIds.size > 0 && !tableIds.has(ref) && !metricTableOnlyIds.has(ref)) {
         errors.push(finding('error', 'workflow.persistenceRef.unknown', `workflow ${workflow.workflowId} references unknown module table ${ref}`, path));
       }
     }
@@ -613,6 +615,19 @@ function checkpointUsecasePlan(context: mls.msg.ExecutionContext, output: PlanUs
     metricTableByName.set(table.tableName, table);
   }
 
+  // layer_4_entities coverage: tables owned by some usecaseEntity group (their sourceTables).
+  // Every table a usecase touches should belong to a group — the group becomes the
+  // layer_4_entities/{Entity}.defs.ts contract and feeds usecase.entityRefs (layer4.md §8).
+  const entityCoveredTables = new Set<string>();
+  for (const entityValue of output.result.usecaseEntities) {
+    if (!isRecord(entityValue)) continue;
+    const sourceTables = Array.isArray(entityValue.sourceTables) ? entityValue.sourceTables : [];
+    for (const tableValue of sourceTables) {
+      const name = typeof tableValue === 'string' ? tableValue : (isRecord(tableValue) && typeof tableValue.tableName === 'string' ? tableValue.tableName : '');
+      if (name) entityCoveredTables.add(name);
+    }
+  }
+
   // Usecase table refs may be plain strings (legacy) or { tableName, ownership } objects.
   const toTableRef = (value: unknown): { name: string; ownership: string } | null => {
     if (typeof value === 'string' && value.trim()) return { name: value.trim(), ownership: '' };
@@ -636,6 +651,11 @@ function checkpointUsecasePlan(context: mls.msg.ExecutionContext, output: PlanUs
 
     for (const ref of [...reads, ...writes]) {
       if (!ref) continue;
+      // layer_4_entities coverage: a usecase table with no owning usecaseEntity group means the
+      // derived entityRefs/contract will miss it (warning so the critic/repair adds the coverage).
+      if (entityCoveredTables.size > 0 && !entityCoveredTables.has(ref.name)) {
+        warnings.push(finding('warning', 'usecase.entityCoverage.missing', `usecase ${usecaseId} touches table ${ref.name}, which is not in any usecaseEntity sourceTables (no layer_4 entity will own it)`, path));
+      }
       const isWrite = writes.some(write => write && write.name === ref.name);
       const metricTable = metricTableByName.get(ref.name);
       if (metricTable) {
@@ -820,7 +840,7 @@ const reviewConfigs: Record<PlanIndexName, PlanIndexReviewConfig> = {
     skipCriticWhen: output => (output as PlanPluginsOutput).result.plugins.length === 0,
     onApproved: async (context, indexStep, output, healthReport) => {
       await saveNewSolutionIndexCheckpoint(context, 'pluginPlan', 'agentPlanPlugins', indexStep, output, healthReport);
-      // TODO-FINAL-011: incremental plan artifacts now persist the approved (possibly repaired) plugin plan.
+      // incremental plan artifacts now persist the approved (possibly repaired) plugin plan.
       await saveNewSolutionPlanArtifacts(context, 'agentPlanPlugins', indexStep, output);
     },
     createChildrenIntents: () => [],
@@ -856,7 +876,7 @@ const reviewConfigs: Record<PlanIndexName, PlanIndexReviewConfig> = {
     },
     onApproved: async (context, indexStep, output, healthReport) => {
       await saveNewSolutionIndexCheckpoint(context, 'usecasePlan', 'agentPlanUsecaseEntities', indexStep, output, healthReport);
-      // TODO-FINAL-011: incremental plan artifacts now persist the approved (possibly repaired) usecase plan.
+      // incremental plan artifacts now persist the approved (possibly repaired) usecase plan.
       await saveNewSolutionPlanArtifacts(context, 'agentPlanUsecaseEntities', indexStep, output);
     },
     createChildrenIntents: () => [],

@@ -44,7 +44,7 @@ interface PlanArtifactCandidate {
   moduleName: string;
   data: unknown;
   status?: PlanArtifactReference['status'];
-  // TODO-FINAL-015: when true, the target module already exists; record a manifest reference
+  // when true, the target module already exists; record a manifest reference
   // entry but do NOT create/overwrite the file.
   referenceOnly?: boolean;
   // When true, write `data` directly as the exported value (no metadata envelope). Used by
@@ -75,7 +75,7 @@ export async function reserveNewSolutionModuleArtifacts(initial: NewSolutionInit
   }, source, false);
 }
 
-// TODO-FINAL-018: trace policy. The first agent (agentNewSolution) seeds `_saveTrace` in the
+// trace policy. The first agent (agentNewSolution) seeds `_saveTrace` in the
 // task's longMemory (the `_` prefix keeps it OUT of the LLM prompt — see collab-messages
 // appendLongTermMemoryToInteraction). Every agent consults it before writing a trace file.
 // Default true; change SAVE_TRACE_DEFAULT in source to disable, or set the memory key per task.
@@ -105,7 +105,7 @@ export async function saveNewSolutionAgentTracePayload(
   moduleNameOverride?: string,
 ): Promise<void> {
   try {
-    // TODO-FINAL-018: skip trace persistence when disabled for this task (still log size telemetry).
+    // skip trace persistence when disabled for this task (still log size telemetry).
     if (!shouldSaveTrace(context)) {
       logTaskSizeIfLarge(context, agentName);
       return;
@@ -144,7 +144,7 @@ export async function saveNewSolutionAgentTracePayload(
     console.warn(`[saveNewSolutionAgentTracePayload] failed for ${agentName}`, error);
   }
 
-  // TODO-FINAL-030 (R7): size telemetry. Every agent calls this in afterPromptStep, so it is the
+  // size telemetry. Every agent calls this in afterPromptStep, so it is the
   // single place to watch the task growing toward the ~400KB ceiling (above which the task can
   // become unavailable). Logs only; no behavior change.
   logTaskSizeIfLarge(context, agentName);
@@ -167,7 +167,7 @@ export function logTaskSizeIfLarge(context: mls.msg.ExecutionContext, label: str
   const bytes = estimateTaskBytes(context);
   const kb = Math.round(bytes / 1024);
   if (bytes >= TASK_SIZE_CRITICAL_BYTES) {
-    console.warn(`[taskSize] CRITICAL ~${kb}KB after ${label} (ceiling ~400KB) — task may become unavailable; needs early payload cleanup (TODO-FINAL-030 R3-R6)`);
+    console.warn(`[taskSize] CRITICAL ~${kb}KB after ${label} (ceiling ~400KB) — task may become unavailable; needs early payload cleanup (see strategic4Clean.md)`);
   } else if (bytes >= TASK_SIZE_WARN_BYTES) {
     console.warn(`[taskSize] WARN ~${kb}KB after ${label} (approaching ~400KB ceiling)`);
   }
@@ -224,7 +224,7 @@ export async function saveNewSolutionPlanArtifacts(
         : buildPlanDefsSource(candidate.exportName, fileValue, fileInfo);
       const checksum = checksumString(stableStringify(fileValue));
 
-      // TODO-FINAL-015: reference-only candidates (the target module already exists) are recorded
+      // reference-only candidates (the target module already exists) are recorded
       // in the manifest but never written, so we don't overwrite an existing module.
       if (!candidate.referenceOnly) {
         if (candidate.artifactType === 'project' && isRecord(candidate.data)) {
@@ -282,7 +282,7 @@ export interface PlanIndexHealthReport {
 }
 
 /**
- * TODO-FINAL-023: freeze an approved plan index as a checkpoint file plus manifest entry.
+ * freeze an approved plan index as a checkpoint file plus manifest entry.
  * The frozen file is the persisted source for getters that no longer want to rely on
  * the task payload (file-based fallback for future payload cleanup).
  */
@@ -347,7 +347,7 @@ export async function saveNewSolutionIndexCheckpoint(
 }
 
 /**
- * TODO-FINAL-023: file-based reader for a frozen index checkpoint.
+ * file-based reader for a frozen index checkpoint.
  * Allows getters/consumers to read approved indices from disk instead of task payloads
  * once the payload cleanup is enabled.
  */
@@ -372,7 +372,7 @@ export async function readNewSolutionIndexCheckpoint(moduleName: string, indexNa
 }
 
 /**
- * TODO-FINAL-023/024: persist the final coverage validation as a non-blocking technical report.
+ * persist the final coverage validation as a non-blocking technical report.
  * The report lives in trace plus manifest; it must not block the end user at the end of the flow.
  */
 export async function saveNewSolutionPlanHealthReport(
@@ -751,10 +751,66 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
 
   if (agentName === 'agentPlanUsecaseEntities') {
     const usecases = Array.isArray(result.usecases) ? result.usecases : [];
-    return usecases.flatMap((value): PlanArtifactCandidate[] => {
+    const usecaseEntities = Array.isArray(result.usecaseEntities) ? result.usecaseEntities : [];
+
+    // layer_4_entities (see mls-102045/layer4.md §8): each usecaseEntity group becomes a
+    // deterministic l1/{module}/layer_4_entities/{Entity}.defs.ts contract. Field shapes stay in
+    // the table defs (single source of truth); this defs carries the entity-level contract only.
+    // tableName -> entityIds map used to derive usecase.entityRefs below.
+    const entityIdsByTable = new Map<string, string[]>();
+    const entityCandidates: PlanArtifactCandidate[] = [];
+    for (const value of usecaseEntities) {
+      const entity = getRecord(value);
+      const entityId = readString(entity?.usecaseEntityId);
+      if (!entity || !entityId) continue;
+      const sourceTables = Array.isArray(entity.sourceTables) ? entity.sourceTables : [];
+      for (const tableValue of sourceTables) {
+        const tableName = readString(getRecord(tableValue)?.tableName);
+        if (!tableName) continue;
+        const list = entityIdsByTable.get(tableName) || [];
+        if (!list.includes(entityId)) list.push(entityId);
+        entityIdsByTable.set(tableName, list);
+      }
+      const className = entityId.charAt(0).toUpperCase() + entityId.slice(1);
+      const usecaseRefs = usecases
+        .map(item => getRecord(item))
+        .filter((usecase): usecase is Record<string, unknown> =>
+          !!usecase && usecaseTouchesEntityTables(usecase, sourceTables))
+        .map(usecase => readString(usecase.usecaseId) || '')
+        .filter(Boolean);
+      entityCandidates.push({
+        artifactType: 'entity',
+        artifactId: entityId,
+        exportName: 'entity',
+        moduleName,
+        bareExport: true,
+        data: {
+          entityId,
+          title: readString(entity.title) || entityId,
+          purpose: readString(entity.purpose) || '',
+          layer: 'layer_4_entities',
+          sourceTables: sourceTables,
+          allowedOperations: Array.isArray(entity.allowedOperations) ? entity.allowedOperations : [],
+          rulesApplied: Array.isArray(entity.rulesApplied) ? entity.rulesApplied : [],
+          usecaseRefs,
+          // Materialization plan: the contract is a TypeScript interface exported from the SAME
+          // layer_4_entities/{Entity}.ts file, so layer_3 imports contract + instance together.
+          materialization: {
+            fileName: `layer_4_entities/${className}.ts`,
+            className,
+            contractName: `I${className}`,
+          },
+        },
+      });
+    }
+
+    const usecaseCandidates = usecases.flatMap((value): PlanArtifactCandidate[] => {
       const usecase = getRecord(value);
       const id = readString(usecase?.usecaseId);
       if (!usecase || !id) return [];
+      // Derived layer_4 references: entities whose sourceTables intersect this usecase's
+      // reads/writesTables. The L3 materializer imports the entity contracts from these refs.
+      const entityRefs = collectUsecaseEntityRefs(usecase, entityIdsByTable);
       // The usecase .defs.ts exports the usecase object directly under a fixed name `useCase`
       // (every usecase file uses the same variable). No metadata envelope, and no global
       // backendArchitecture/controllerRules — those are not needed per usecase.
@@ -764,9 +820,11 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
         exportName: 'useCase',
         moduleName,
         bareExport: true,
-        data: usecase,
+        data: entityRefs.length > 0 ? { ...usecase, entityRefs } : usecase,
       }];
     });
+
+    return [...entityCandidates, ...usecaseCandidates];
   }
 
   if (agentName === 'agentPlanWorkflowDefinition') {
@@ -795,7 +853,7 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
     }];
   }
 
-  // TODO-FINAL-015: horizontal modules (finance, notifications, ...). Reference the module when
+  // horizontal modules (finance, notifications, ...). Reference the module when
   // it already exists; otherwise create a draft l5/{id}/module.defs.ts with the intended shape.
   // Each horizontal module gets its own creation task later; the origin module references it.
   if (agentName === 'agentPlanHorizontals') {
@@ -825,7 +883,7 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
     });
   }
 
-  // TODO-FINAL-015: MDM domains. Same create-if-missing / reference-if-exists rule as horizontals
+  // MDM domains. Same create-if-missing / reference-if-exists rule as horizontals
   // (decision: MDM also gets a draft l5/{domainId}/module.defs.ts when no module exists yet).
   // T-003: when the shared MDM infrastructure exists (options.mdmInfrastructureModuleRef, e.g.
   // '102034'), every domain is a reference to it — no l5/{domainId}/module.defs.ts draft (E-002/E-018).
@@ -935,6 +993,38 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
   return [];
 }
 
+// layer_4_entities helpers: usecase table refs may be strings (legacy) or { tableName, ownership }.
+function usecaseTableNames(usecase: Record<string, unknown>): Set<string> {
+  const names = new Set<string>();
+  for (const key of ['readsTables', 'writesTables']) {
+    const refs = Array.isArray(usecase[key]) ? usecase[key] as unknown[] : [];
+    for (const ref of refs) {
+      const name = typeof ref === 'string' ? ref : readString(getRecord(ref)?.tableName);
+      if (name) names.add(name);
+    }
+  }
+  return names;
+}
+
+function usecaseTouchesEntityTables(usecase: Record<string, unknown>, sourceTables: unknown[]): boolean {
+  const names = usecaseTableNames(usecase);
+  if (names.size === 0) return false;
+  return sourceTables.some(tableValue => {
+    const tableName = readString(getRecord(tableValue)?.tableName);
+    return !!tableName && names.has(tableName);
+  });
+}
+
+function collectUsecaseEntityRefs(usecase: Record<string, unknown>, entityIdsByTable: Map<string, string[]>): string[] {
+  const refs: string[] = [];
+  for (const tableName of usecaseTableNames(usecase)) {
+    for (const entityId of entityIdsByTable.get(tableName) || []) {
+      if (!refs.includes(entityId)) refs.push(entityId);
+    }
+  }
+  return refs.sort();
+}
+
 function buildProjectPlanData(moduleName: string, finalPlan: Record<string, unknown>): Record<string, unknown> {
   return {
     schemaVersion: PLAN_ARTIFACT_SCHEMA_VERSION,
@@ -958,7 +1048,7 @@ function resolvePlanArtifactFileInfo(candidate: PlanArtifactCandidate): Pick<mls
   if (candidate.artifactType === 'rules') {
     return { project, level: 5, folder: candidate.moduleName, shortName: 'rules', extension: '.defs.ts' };
   }
-  // TODO-FINAL-015: horizontal/MDM modules registered as l5/{moduleId}/module.defs.ts (drafts when
+  // horizontal/MDM modules registered as l5/{moduleId}/module.defs.ts (drafts when
   // missing). Reference-only candidates resolve to the same canonical path without being written.
   if (candidate.artifactType === 'horizontalModule' || candidate.artifactType === 'mdmDomain') {
     return { project, level: 5, folder: candidate.moduleName, shortName: 'module', extension: '.defs.ts' };
@@ -972,6 +1062,10 @@ function resolvePlanArtifactFileInfo(candidate: PlanArtifactCandidate): Pick<mls
   }
   if (candidate.artifactType === 'usecase') {
     return { project, level: 1, folder: `${candidate.moduleName}/layer_3_usecases`, shortName, extension: '.defs.ts' };
+  }
+  // layer_4_entities contract defs (see mls-102045/layer4.md §8): one per usecaseEntity group.
+  if (candidate.artifactType === 'entity') {
+    return { project, level: 1, folder: `${candidate.moduleName}/layer_4_entities`, shortName, extension: '.defs.ts' };
   }
   if (candidate.artifactType === 'workflow') {
     return { project, level: 4, folder: 'workflows', shortName, extension: '.defs.ts' };
@@ -1000,7 +1094,7 @@ function planArtifactsManifestFileInfo(moduleName: string): Pick<mls.stor.IFileI
 }
 
 /**
- * TODO-FINAL-010/023: file-based reader for saved plan artifacts of a given type.
+ * file-based reader for saved plan artifacts of a given type.
  * Lets getters reconstruct outputs from the saved .defs.ts when the task payload was cleared
  * with cleaner="input_output". Reads the manifest, then each referenced artifact file, and
  * returns the inner `data` object of each artifact (idempotent, best-effort, never throws).

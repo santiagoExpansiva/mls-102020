@@ -417,7 +417,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-010/023: clear the full payload (input_output) only when the .defs.ts was
+  // /023: clear the full payload (input_output) only when the .defs.ts was
   // actually saved; the coverage validator now reads page definitions back from the saved
   // files via getPlanPageDefinitionOutputs. If the save produced nothing, keep the payload
   // (cleaner="input") so the page is not lost from the task.
@@ -481,7 +481,7 @@ async function buildPageFanOutReconcileIntents(
   }
 }
 
-// TODO-FINAL-010/023: page definition payloads are cleared from the task with
+// /023: page definition payloads are cleared from the task with
 // cleaner="input_output" once the .defs.ts is saved, so this getter must also read the saved
 // files. Fast path: task payloads (present for not-yet-saved or failed steps). Fallback: the
 // saved page artifacts, reconstructed into PlannerOutput. Merge by pageId, task payload wins.
@@ -733,7 +733,7 @@ function buildHumanPrompt(
   workflowDefinitions: PlanWorkflowDefinitionOutput[],
   agentsPlan: PlanAgentsOutput,
 ): string {
-  // TODO-FINAL-006: send only the artifacts THIS page references, not the whole plan.
+  // send only the artifacts THIS page references, not the whole plan.
   void horizontals; void agentsPlan; void persistenceIndex; // not needed for a single page definition
   const fp = finalPlan.result;
 

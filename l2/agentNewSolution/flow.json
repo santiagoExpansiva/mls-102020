@@ -223,11 +223,14 @@
       "type": "agent",
       "executionMode": "sequential",
       "dependsOn": ["plan-persistence-index", "plan-metrics-index"],
-      "goal": "Planejar entidades e casos de uso do layer_3_usecases (writes, lifecycle, BFF, updates de metrica). Depende dos INDICES (persistencia + metricas), nao das definicoes (column/hypertable detail not needed) — roda em paralelo com plan-table-definition / plan-metric-table-definition.",
+      "goal": "Planejar entidades e casos de uso do layer_3_usecases (writes, lifecycle, BFF, updates de metrica). Depende dos INDICES (persistencia + metricas), nao das definicoes (column/hypertable detail not needed) — roda em paralelo com plan-table-definition / plan-metric-table-definition. layer4.md §8: os usecaseEntities viram contratos layer_4_entities (deterministico, sem LLM) e cada usecase ganha entityRefs derivado (intersecao reads/writesTables x sourceTables).",
       "input": ["finalize plan", "plan-persistence-index (resumo)", "plan-metrics-index (resumo)"],
       "output": {
-        "result": "PlanUsecaseEntitiesResult { usecases[], backendArchitecture, controllerRules }",
-        "savedArtifact": "l1/{module}/layer_3_usecases/{usecaseId}.defs.ts  (um por usecase)"
+        "result": "PlanUsecaseEntitiesResult { usecases[], usecaseEntities[], backendArchitecture, controllerRules }",
+        "savedArtifact": [
+          "l1/{module}/layer_3_usecases/{usecaseId}.defs.ts  (um por usecase, com entityRefs derivado)",
+          "l1/{module}/layer_4_entities/{usecaseEntityId}.defs.ts  (um por usecaseEntity: contrato da entity — sourceTables, allowedOperations, usecaseRefs, materialization {fileName, className, contractName})"
+        ]
       },
       "criticRepair": { "index": "usecasePlan", "checkpoint": "l2/{module}/trace/checkpoint-usecasePlan.json" }
     },

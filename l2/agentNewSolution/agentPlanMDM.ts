@@ -186,7 +186,7 @@ async function afterPromptStep(
   }
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
-  // TODO-FINAL-015: persist MDM domains (draft l5/{domainId}/module.defs.ts or manifest reference)
+  // persist MDM domains (draft l5/{domainId}/module.defs.ts or manifest reference)
   // + per-masterEntity l1 reference (generateTable:false) enriched with the ontology entity shape,
   // so usecase materialization and l1 mock generation can use the MDM entities.
   if (status === 'completed' && output) {

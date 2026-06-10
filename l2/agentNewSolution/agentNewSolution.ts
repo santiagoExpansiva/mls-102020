@@ -86,7 +86,7 @@ async function beforePromptImplicit(
       longTermMemory: {
         taskName: 'newModule',
         flowName: 'newSolution',
-        // TODO-FINAL-018: trace policy flag (not sent to LLM — `_` prefix). All planning agents
+        // trace policy flag (not sent to LLM — `_` prefix). All planning agents
         // consult it via shouldSaveTrace before writing trace files. Default true.
         ...saveTraceMemorySeed(),
       },
@@ -105,7 +105,7 @@ async function afterPromptStep(
 ): Promise<mls.msg.AgentIntent[]> {
   if (!agent || !context || !step) throw new Error(`[afterPromptStep] invalid params, agent:${!!agent}, context:${!!context}, step:${!!step}`);
 
-  // TODO-FINAL-028: this is the ROOT planning step. It has no resolvable parent step,
+  // this is the ROOT planning step. It has no resolvable parent step,
   // so a thrown error here is dropped by the generic orchestration handler (the step
   // stays waiting_after_prompt and the task fails with no visible reason). Catch any
   // failure and surface it as a failed update-status with the real reason in traceMsg.

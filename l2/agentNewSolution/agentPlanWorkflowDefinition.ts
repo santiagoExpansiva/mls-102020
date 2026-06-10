@@ -73,7 +73,7 @@ export interface PlanWorkflowDefinitionResult {
     purpose: string;
     executionMode: string;
     createsTask: boolean;
-    // TODO-FINAL-027: per-module impact metadata (always present; arrays may be empty).
+    // per-module impact metadata (always present; arrays may be empty).
     workflowScope: WorkflowScope;
     moduleRefs: string[];
     pageRefsByModule: WorkflowPageRefByModule[];
@@ -202,7 +202,7 @@ const planWorkflowDefinitionToolSchema = createPlannerVariableToolSchema(
               },
             },
           },
-          // TODO-FINAL-027: explicit per-module impact metadata so a future maintenance agent
+          // explicit per-module impact metadata so a future maintenance agent
           // can read a global l4 workflow and know exactly which modules/pages/entities/artifacts
           // it touches. Arrays may be empty (single-module workflows), but must be present.
           workflowScope: { enum: ['singleModule', 'multiModule', 'multiModuleExternal'] },
@@ -315,7 +315,7 @@ async function afterPromptStep(
     // contains only this workflow's index item, so the content is always for the selector — a
     // workflowId different from the selector is a label slip. Coerce instead of failing the child.
     if (workflowSelector && output.result.workflowDefinition.workflowId !== workflowSelector) {
-      console.warn(`[${agent.agentName}](afterPromptStep) coercing workflowId '${output.result.workflowDefinition.workflowId}' to selector '${workflowSelector}'`);
+      console.log(`[${agent.agentName}](afterPromptStep) coercing workflowId '${output.result.workflowDefinition.workflowId}' to selector '${workflowSelector}'`);
       output.result.workflowDefinition.workflowId = workflowSelector;
     }
     const persistenceIdMaps = buildWorkflowPersistenceIdMaps(context);
@@ -336,7 +336,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-010/023: clear the full payload only when the .defs.ts was saved; the coverage
+  // /023: clear the full payload only when the .defs.ts was saved; the coverage
   // validator and downstream readers now read workflow definitions back from the saved files.
   let cleaner: 'input' | 'input_output' | undefined;
   if (status === 'completed' && output) {
@@ -425,7 +425,7 @@ function normalizeWorkflowPersistenceRefs(output: PlanWorkflowDefinitionOutput, 
     if (maps.knownIds.has(value)) {
       normalized.push(value);
     } else if (maps.idByName.has(value)) {
-      console.warn(`[agentPlanWorkflowDefinition] normalizing persistenceRef '${value}' to canonical id '${maps.idByName.get(value)}' (T-008)`);
+      console.log(`[agentPlanWorkflowDefinition] normalizing persistenceRef '${value}' to canonical id '${maps.idByName.get(value)}' (T-008)`);
       normalized.push(maps.idByName.get(value)!);
     } else {
       unresolved.push(value);
@@ -461,7 +461,7 @@ async function buildWorkflowFanOutReconcileIntents(
   }
 }
 
-// TODO-FINAL-010/023: also reads workflow definitions back from saved .defs.ts when the task
+// /023: also reads workflow definitions back from saved .defs.ts when the task
 // payload was cleared with cleaner="input_output".
 export function getPlanWorkflowDefinitionOutputs(context: mls.msg.ExecutionContext): Promise<PlanWorkflowDefinitionOutput[]> {
   return getPlannerOutputsWithFileFallback(
@@ -547,7 +547,7 @@ function normalizePlanWorkflowDefinitionResult(value: unknown): PlanWorkflowDefi
       purpose: assertString(workflowDefinition.purpose, 'result.workflowDefinition.purpose'),
       executionMode: assertString(workflowDefinition.executionMode, 'result.workflowDefinition.executionMode'),
       createsTask: assertBoolean(workflowDefinition.createsTask, 'result.workflowDefinition.createsTask'),
-      // TODO-FINAL-027
+      // 
       workflowScope: normalizeWorkflowScope(workflowDefinition.workflowScope),
       moduleRefs: normalizeStringArray(workflowDefinition.moduleRefs, 'result.workflowDefinition.moduleRefs'),
       pageRefsByModule: assertArray(workflowDefinition.pageRefsByModule ?? [], 'result.workflowDefinition.pageRefsByModule')
@@ -570,7 +570,7 @@ function assertBoolean(value: unknown, path: string): boolean {
   return value;
 }
 
-// TODO-FINAL-027 helpers
+// helpers
 function normalizeStringArray(value: unknown, path: string): string[] {
   return assertArray(value ?? [], path).map((item, index) => assertString(item, `${path}[${index}]`));
 }
@@ -630,7 +630,7 @@ function validatePlanWorkflowDefinitionOutput(output: PlanWorkflowDefinitionOutp
     if (transitions.length === 0) throw new Error(`workflow ${workflow.workflowId} must include transitions`);
   }
 
-  // TODO-FINAL-027: keep workflowScope coherent with moduleRefs so impact analysis is reliable.
+  // keep workflowScope coherent with moduleRefs so impact analysis is reliable.
   if (output.status === 'ok') {
     const moduleCount = new Set(workflow.moduleRefs).size;
     if (workflow.workflowScope === 'singleModule' && moduleCount > 1) {
@@ -676,7 +676,7 @@ function buildHumanPrompt(
   tableDefinitions: PlanTableDefinitionOutput[],
   metricTableDefinitions: PlanMetricTableDefinitionOutput[],
 ): string {
-  // TODO-FINAL-007: send only what THIS workflow references, not all workflows/tables/metrics.
+  // send only what THIS workflow references, not all workflows/tables/metrics.
   void workflowIndex; // the selected index item below is enough
   const fp = finalPlan.result;
 
@@ -750,13 +750,14 @@ Do not return prose.
 - persistenceRefs must use the canonical camelCase tableId (or metricTableId) exactly as defined in the persistence/metrics indices — NEVER the physical snake_case table name (e.g. use "propertyTable" style ids, not "property_table").
 - Include usecaseRefs when transitions mutate module-owned data through layer_3_usecases.
 - Include metricRefs when transitions feed operational metrics; metric updates happen in backend use cases, not pages.
+- relatedPages is a DERIVED field filled later by code (pages do not exist yet at this point): always return relatedPages as an empty array []. Never invent page ids.
 - Do not reference MDM, horizontal, or plugin-owned entities as new module tables.
 - defsPlan.fileName should be stable and workflow-specific, such as workflows/{workflowId}.defs.ts.
 - defsPlan.exportName should be a stable camelCase export name, such as {workflowId}Def.
 - defsPlan.saveAsDefs must be true.
 - Use rule ids; do not write loose rule text.
 
-## Module-impact metadata (TODO-FINAL-027)
+## Module-impact metadata
 The workflow is saved as a GLOBAL artifact in l4/workflows. Declare its module impact explicitly so a maintenance agent can compute the blast radius without reading free text:
 - workflowScope: "singleModule" when every page/entity/artifact belongs to the current module; "multiModule" when more than one module participates; "multiModuleExternal" when more than one module participates AND an external integration (plugin) is dominant.
 - moduleRefs: every module id the workflow touches (include the current module). singleModule => exactly one; multiModule/multiModuleExternal => two or more.

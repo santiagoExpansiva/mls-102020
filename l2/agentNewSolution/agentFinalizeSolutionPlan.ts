@@ -135,7 +135,7 @@ async function afterPromptStep(
     console.error(`[${agent.agentName}](afterPromptStep) ${traceMsg}`);
   }
 
-  // TODO-FINAL-019: advisory actor-contract check at the source. Every actor reference in the
+  // advisory actor-contract check at the source. Every actor reference in the
   // final plan must be one of actors[].actorId (no hard-coded/translated names). Non-fatal here
   // (downstream index validators are the hard gates); surfaces drift early via console.warn.
   if (status === 'completed' && output && output.status === 'ok') warnFinalizeActorConsistency(output);
@@ -217,7 +217,7 @@ function validateFinalizeSolutionPlanOutput(output: FinalSolutionPlanOutput, con
   if (output.status === 'needs_input' && output.questions.length === 0) throw new Error('needs_input final plan must include questions');
 }
 
-// TODO-FINAL-019: warn (non-fatal) about actor references that are not declared in actors[].actorId.
+// warn (non-fatal) about actor references that are not declared in actors[].actorId.
 function warnFinalizeActorConsistency(output: FinalSolutionPlanOutput): void {
   const actorIds = getActorIdSet(output.result.actors);
   if (actorIds.size === 0) return;
@@ -237,7 +237,7 @@ function warnFinalizeActorConsistency(output: FinalSolutionPlanOutput): void {
   }
 
   if (unknown.size > 0) {
-    console.warn(`[agentFinalizeSolutionPlan] actor refs not in actors[].actorId (TODO-FINAL-019): ${[...unknown].join(', ')}. Downstream index validators will reject these.`);
+    console.warn(`[agentFinalizeSolutionPlan] actor refs not in actors[].actorId: ${[...unknown].join(', ')}. Downstream index validators will reject these.`);
   }
 }
 

@@ -135,7 +135,7 @@ async function afterPromptStep(
   }
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
-  // TODO-FINAL-015: persist horizontal modules (draft l5/{id}/module.defs.ts or manifest reference).
+  // persist horizontal modules (draft l5/{id}/module.defs.ts or manifest reference).
   if (status === 'completed' && output) {
     applyHorizontalsPostProcessing(output, context); // T-012
     await saveNewSolutionPlanArtifacts(context, agent.agentName, step, output);
@@ -184,11 +184,11 @@ function validatePlanHorizontalsOutput(output: PlanHorizontalsOutput, context: m
     if (!allowedIds.has(module.horizontalModuleId)) throw new Error(`unknown horizontalModuleId: ${module.horizontalModuleId}`);
   }
   const snapshot = getPlanningContextSnapshot(context);
-  // Non-fatal (advisory) per the non-blocking direction (TODO-FINAL-023/024): an accepted
+  // Non-fatal (advisory) per the non-blocking direction: an accepted
   // horizontalModule with an empty plan must NOT fail the whole task. This can legitimately
   // happen when the accepted decision maps to a horizontal that is not in the catalog
   // (finance/notifications/documents) — in that case the model cannot plan it and would fail
-  // every run. Horizontals are deferred to their own creation task anyway (TODO-FINAL-015).
+  // every run. Horizontals are deferred to their own creation task anyway.
   if (output.status === 'ok' && hasAcceptedArtifact(snapshot.implementationDecisions, 'horizontalModule') && output.result.horizontalModules.length === 0) {
     console.warn('[agentPlanHorizontals] a horizontalModule was accepted, but the plan returned no horizontal modules (advisory, not blocking)');
   }
@@ -253,16 +253,38 @@ const horizontalCatalog = {
   ],
 };
 
-// T-012: accepted decisions may use aliased ids ('horizontalAuthRoles', 'horizontalI18n', ...).
-// Normalize them to catalog ids; returns '' when the id does not map to any catalog horizontal.
+// T-012/E2-002: accepted decisions may use aliased ids ('horizontalAuthRoles', 'i18nModule',
+// 'authorizationModule', 'notificationModule', ...). Normalize prefix 'horizontal', suffix
+// 'Module' and known synonyms to catalog ids; returns '' when nothing maps.
+const HORIZONTAL_ID_ALIASES: Record<string, string> = {
+  auth: 'authRoles',
+  authorization: 'authRoles',
+  authentication: 'authRoles',
+  roles: 'authRoles',
+  notification: 'notifications',
+  internationalization: 'i18n',
+  document: 'documents',
+};
+
 export function normalizeHorizontalModuleId(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return '';
-  const raw = value.trim();
   const allowed = new Set(horizontalCatalog.horizontals.map(item => item.horizontalModuleId));
-  if (allowed.has(raw)) return raw;
-  const stripped = raw.replace(/^horizontal/i, '');
-  const candidate = stripped ? stripped.charAt(0).toLowerCase() + stripped.slice(1) : '';
-  return candidate && allowed.has(candidate) ? candidate : '';
+
+  const candidates: string[] = [];
+  const push = (item: string) => {
+    if (item && !candidates.includes(item)) candidates.push(item);
+  };
+  const base = value.trim();
+  push(base);
+  const noPrefix = base.replace(/^horizontal/i, '');
+  push(noPrefix ? noPrefix.charAt(0).toLowerCase() + noPrefix.slice(1) : '');
+  for (const item of [...candidates]) push(item.replace(/Module$/i, ''));
+  for (const item of [...candidates]) {
+    const alias = HORIZONTAL_ID_ALIASES[item.toLowerCase()];
+    if (alias) push(alias);
+  }
+
+  return candidates.find(item => allowed.has(item)) || '';
 }
 
 /**

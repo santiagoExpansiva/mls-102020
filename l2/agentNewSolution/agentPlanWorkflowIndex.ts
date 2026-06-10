@@ -201,7 +201,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-023/024: hold the step open and run critic/repair before workflow definitions.
+  // /024: hold the step open and run critic/repair before workflow definitions.
   if (status === 'completed' && output && output.status === 'ok') {
     return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'workflowIndex');
   }
@@ -215,7 +215,7 @@ async function afterPromptStep(
 }
 
 export function getPlanWorkflowIndexOutput(context: mls.msg.ExecutionContext): PlanWorkflowIndexOutput {
-  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  // prefer the latest repaired index when a repair step exists.
   return getPlannerOutputWithRepair(context, 'agentPlanWorkflowIndex', 'workflowIndex', planWorkflowIndexConfig, validatePlanWorkflowIndexOutput);
 }
 
@@ -315,7 +315,7 @@ function buildHumanPrompt(
   metricTableDefinitions: PlanMetricTableDefinitionOutput[],
   usecasePlan: PlanUsecaseEntitiesOutput,
 ): string {
-  // TODO-FINAL-030 (R1): compact context. The workflow index needs capabilities, actors, approved
+  // compact context. The workflow index needs capabilities, actors, approved
   // workflows and the ids of module tables / usecases / metrics it can reference — not the full
   // final plan, full table/metric definitions or the full usecase plan.
   const reduced = {

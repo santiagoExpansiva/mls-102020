@@ -181,7 +181,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-023/024: hold the step open and run critic/repair before approving the plugin plan.
+  // /024: hold the step open and run critic/repair before approving the plugin plan.
   // The incremental artifact save moves to the critic approval path (possibly with a repaired plan).
   if (status === 'completed' && output && output.status === 'ok') {
     return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'pluginPlan');
@@ -193,7 +193,7 @@ async function afterPromptStep(
 }
 
 export function getPlanPluginsOutput(context: mls.msg.ExecutionContext): PlanPluginsOutput {
-  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  // prefer the latest repaired index when a repair step exists.
   return getPlannerOutputWithRepair(context, 'agentPlanPlugins', 'pluginPlan', planPluginsConfig, output => validatePlanPluginsOutput(output, context));
 }
 
@@ -304,7 +304,7 @@ interface PluginInventoryItem {
   sourceProject?: number;
   pluginDefsFileRef: string;
   moduleConnectionDefsFileRef: string;
-  // TODO-FINAL-025: set when this plugin reuses an existing plugin found by integration brand
+  // set when this plugin reuses an existing plugin found by integration brand
   // (e.g. plan asked for "stripePayments" but "stripe" already exists). Recorded for trace.
   reusedFromPluginId?: string;
 }
@@ -313,7 +313,7 @@ interface PluginInventory {
   actualProject: number;
   moduleName: string;
   searchProjects: number[];
-  // TODO-FINAL-025: brand-reuse ambiguities (more than one existing plugin for the same brand);
+  // brand-reuse ambiguities (more than one existing plugin for the same brand);
   // surfaced to the LLM and persisted by the critic checkpoint healthReport.
   reuseWarnings: string[];
   plugins: PluginInventoryItem[];
@@ -425,7 +425,7 @@ function buildPluginInventorySync(moduleName: string, catalog: PluginCatalogDefi
     let reuse: ExistingPluginRef | null = existingPlugins.find(ref => ref.pluginId === plugin.pluginId) || null;
     let reusedFromPluginId: string | undefined;
 
-    // TODO-FINAL-025: no exact plugin file — try to reuse an existing plugin from the same
+    // no exact plugin file — try to reuse an existing plugin from the same
     // integration brand (e.g. plan asks for "stripePayments" but "stripe" already exists),
     // instead of creating a duplicate global draft in l2/plugins.
     if (!reuse) {
@@ -491,7 +491,7 @@ function isReusableExistingPlugin(ref: ExistingPluginRef, actualProject: number)
   return !(ref.project === actualProject && ref.inLocalStorage && ref.status !== 'nochange');
 }
 
-// TODO-FINAL-025: brand reuse is intentionally conservative. Two plugins are "the same
+// brand reuse is intentionally conservative. Two plugins are "the same
 // integration" only when they share the first brand token AND at least one side is the
 // brand-only plugin (its normalized id equals the brand). This matches stripe<->stripePayments
 // but avoids false positives like mailChimp<->mailGun (both share token "mail" but neither is

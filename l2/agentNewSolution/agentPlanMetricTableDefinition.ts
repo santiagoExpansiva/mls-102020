@@ -282,7 +282,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-010/023: clear the full payload only when the .defs.ts was saved; getters and
+  // /023: clear the full payload only when the .defs.ts was saved; getters and
   // the covered-set computation now read metric table definitions back from the saved files.
   let cleaner: 'input' | 'input_output' | undefined;
   if (status === 'completed' && output) {
@@ -322,7 +322,7 @@ async function buildMetricTableFanOutReconcileIntents(
   }
 }
 
-// TODO-FINAL-010/023: also reads metric table definitions back from saved .defs.ts when the
+// /023: also reads metric table definitions back from saved .defs.ts when the
 // task payload was cleared with cleaner="input_output".
 export function getPlanMetricTableDefinitionOutputs(context: mls.msg.ExecutionContext): Promise<PlanMetricTableDefinitionOutput[]> {
   return getPlannerOutputsWithFileFallback(

@@ -273,7 +273,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-023/024: hold the step open and run critic/repair before page definitions.
+  // /024: hold the step open and run critic/repair before page definitions.
   if (status === 'completed' && output && output.status === 'ok') {
     return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'pageIndex');
   }
@@ -287,7 +287,7 @@ async function afterPromptStep(
 }
 
 export function getPlanPageIndexOutput(context: mls.msg.ExecutionContext): PlanPageIndexOutput {
-  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  // prefer the latest repaired index when a repair step exists.
   return getPlannerOutputWithRepair(context, 'agentPlanPageIndex', 'pageIndex', planPageIndexConfig, output =>
     validatePlanPageIndexOutput(
       output,
@@ -423,7 +423,7 @@ function getFlowRefBucketForExecutionMode(executionMode: string): PageFlowRefBuc
 }
 
 function getFinalPlanActorIds(finalPlan: FinalSolutionPlanOutput): Set<string> {
-  // TODO-FINAL-019: single source of the actor contract (shared getActorIdSet).
+  // single source of the actor contract (shared getActorIdSet).
   return getActorIdSet(finalPlan.result.actors);
 }
 
@@ -479,7 +479,7 @@ function buildHumanPrompt(
   workflowDefinitions: PlanWorkflowDefinitionOutput[],
   agentsPlan: PlanAgentsOutput,
 ): string {
-  // TODO-FINAL-009: the page index only needs summaries (ids + reason/title), not full
+  // the page index only needs summaries (ids + reason/title), not full
   // table/usecase/page-definition/materialization detail. Send a compact planning snapshot.
   void tableDefinitions; void metricTableDefinitions; void workflowDefinitions; // detail not needed to plan pages
   const fp = finalPlan.result;

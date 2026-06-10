@@ -220,7 +220,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-023/024: when the index is valid, hold this step open and run the
+  // /024: when the index is valid, hold this step open and run the
   // critic/repair checkpoint before releasing table definitions and downstream steps.
   if (status === 'completed' && output && output.status === 'ok') {
     return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'persistenceIndex');
@@ -235,7 +235,7 @@ async function afterPromptStep(
 }
 
 export function getPlanPersistenceIndexOutput(context: mls.msg.ExecutionContext): PlanPersistenceIndexOutput {
-  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  // prefer the latest repaired index when a repair step exists.
   return getPlannerOutputWithRepair(context, 'agentPlanPersistenceIndex', 'persistenceIndex', planPersistenceIndexConfig, output => validatePlanPersistenceIndexOutput(output, getPlanningContextSnapshot(context).initialMetricsRequested));
 }
 
@@ -369,7 +369,7 @@ function buildHumanPrompt(
   pluginPlan: PlanPluginsOutput,
   initialMetricsRequested: boolean,
 ): string {
-  // TODO-FINAL-030 (R1): compact context. The persistence index only needs entity ownership and
+  // compact context. The persistence index only needs entity ownership and
   // who reads/writes what — not the full final plan, ontology fields or full mdm/horizontal/plugin
   // bodies. Ontology fields are added later in the table definitions.
   const reduced = {
