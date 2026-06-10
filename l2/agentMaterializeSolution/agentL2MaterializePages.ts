@@ -42,7 +42,7 @@ function scanDefsFiles(moduleName: string): string[] {
   const paths: string[] = [];
   for (const key of Object.keys(files)) {
     const file = files[key];
-    if (file.level === 2 && file.extension === '.defs.ts' && file.folder === moduleName && file.project === mls.actualProject) {
+    if (file.level === 2 && file.extension === '.defs.ts' && file.folder === moduleName && file.project === mls.actualProject && !['module', 'index'].includes(file.shortName)) {
       paths.push(`_${file.project}_/l2/${file.folder}/${file.shortName}${file.extension}`);
     }
   }

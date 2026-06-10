@@ -41,14 +41,21 @@ async function beforePromptImplicit(
   userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
 
-  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id: string };
+  const info = JSON.parse(userPrompt) as { pathDefs?: string, path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id: string };
   const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
   const device = info.device || context.task?.iaCompressed?.longMemory['device'] as string || 'web';
   const type = info.type || context.task?.iaCompressed?.longMemory['type'] as string || 'page11';
 
   info.project = mls.actualProject || 0;
-  const orch = getMaterializeOrchestrator(info.path);
-  info.item = await orch.getToExecuteOnlyMaterialize(info.id) as mls.defs.MaterializeEntry;
+
+  if (info.pathDefs) {
+    const pageId = info.pathDefs.replace(/^\/+/, '').split('/').pop()?.replace(/\.defs\.ts$|\.ts$/, '') || '';
+    info.path = info.pathDefs;
+    info.item = { id: 'page', agent: agent.agentName, defsPath: info.pathDefs, outputPath: `${pageId}.ts`, dependsOn: [], moduleName } as unknown as mls.defs.MaterializeEntry;
+  } else {
+    const orch = getMaterializeOrchestrator(info.path);
+    info.item = await orch.getToExecuteOnlyMaterialize(info.id) as mls.defs.MaterializeEntry;
+  }
 
   const prompt = await getSkill(info, moduleName, device, type);
 
