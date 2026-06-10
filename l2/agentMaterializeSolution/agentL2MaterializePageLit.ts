@@ -169,39 +169,42 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
 
   const stepOri = context.task ? (findPreviousAgentStep(context.task, parentStep.stepId))?.stepId : parentStep.stepId;
 
-  const group = await orch.processGroup(output.id);
+
   const newSteps: mls.msg.AgentIntentAddStep[] = [];
+  
+  if (!onlyThisStep) {
+    const group = await orch.processGroup(output.id);
+    Object.keys(group).forEach((g) => {
 
-  Object.keys(group).forEach((g) => {
+      const info = group[g];
 
-    const info = group[g];
+      info.forEach((i: any) => {
 
-    info.forEach((i: any) => {
+        const newStep: mls.msg.AgentIntentAddStep = {
+          type: "add-step",
+          messageId: context.message.orderAt,
+          threadId: context.message.threadId,
+          taskId: context.task?.PK || '',
+          parentStepId: stepOri || parentStep.stepId,
+          step:
+          {
+            type: 'agent',
+            stepId: 0,
+            interaction: null,
+            status: 'waiting_human_input',
+            nextSteps: [],
+            agentName: g,
+            prompt: JSON.stringify({ path: output.path, item: i }),
+            rags: [],
+          }
+        };
 
-      const newStep: mls.msg.AgentIntentAddStep = {
-        type: "add-step",
-        messageId: context.message.orderAt,
-        threadId: context.message.threadId,
-        taskId: context.task?.PK || '',
-        parentStepId: stepOri || parentStep.stepId,
-        step:
-        {
-          type: 'agent',
-          stepId: 0,
-          interaction: null,
-          status: 'waiting_human_input',
-          nextSteps: [],
-          agentName: g,
-          prompt: JSON.stringify({ path: output.path, item: i }),
-          rags: [],
-        }
-      };
+        newSteps.push(newStep);
 
-      if (!onlyThisStep) newSteps.push(newStep);
+      })
 
-    })
-
-  });
+    });
+  }
 
   return newSteps;
 }
@@ -316,7 +319,7 @@ async function getSkill(info: { path: string, item: any, project?: number }, mod
   if (!prj || !prj.projectConfig) throw new Error('[agentL2MaterializePageLit] Not found projectConfig');*/
 
   const prj = await getConfigProject(mls.actualProject || 0) as any;
-  if (!prj ) throw new Error('[agentL2MaterializePageLit] Not found projectConfig');
+  if (!prj) throw new Error('[agentL2MaterializePageLit] Not found projectConfig');
 
   if (!prj.layouts) throw new Error('[agentL2MaterializePageLit] Not found projectConfig layout dont config');
 

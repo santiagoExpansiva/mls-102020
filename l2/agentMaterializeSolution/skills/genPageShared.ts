@@ -313,7 +313,7 @@ export class {Prefix}{PageNamePascal}Base extends CollabLitElement {
   async loadInitialData(params?: unknown, options?: BffClientOptions): Promise<void> {
     // Call EVERY query load method for this page in sequence (await each one).
     // Do NOT call only the first — every query that populates the page must run here.
-    // Propagate `options` to each call so silent/blocking mode is respected.
+    // Propagate \`options\` to each call so silent/blocking mode is respected.
     // Example for a page with two queries:
     //   await this.loadGetOrderHistory(params as any, options);
     //   await this.loadGetCustomerServiceBookings(undefined, options);
