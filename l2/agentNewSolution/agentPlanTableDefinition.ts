@@ -12,10 +12,11 @@ import {
   extractPlannerOutput,
   getPlannerOutputsWithFileFallback,
   optionalString,
+  reconcileParallelDynamicFanOut,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
-import { saveNewSolutionAgentTracePayload, saveNewSolutionPlanArtifacts } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { readSavedPlanArtifactDataList, saveNewSolutionAgentTracePayload, saveNewSolutionPlanArtifacts } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import { getPlanPersistenceIndexOutput } from '/_102020_/l2/agentNewSolution/agentPlanPersistenceIndex.js';
 import type { PlanPersistenceIndexOutput } from '/_102020_/l2/agentNewSolution/agentPlanPersistenceIndex.js';
 
@@ -236,9 +237,36 @@ async function afterPromptStep(
     cleaner = saved.length > 0 ? 'input_output' : 'input';
   }
 
+  // T-006: when this child is the last live one, reconcile the approved index selectors vs the
+  // saved artifacts; re-spawn missing children (limited rounds) before the fan-out is finalized.
+  const reconcileIntents = await buildTableFanOutReconcileIntents(context, parentStep, step, hookSequential);
+
   // Parallel fan-out: the persistence index opened all table children at once, so this step
   // only validates/saves its own table and reports status — it does NOT chain the next one.
-  return [createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, cleaner)];
+  return [...reconcileIntents, createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, cleaner)];
+}
+
+// T-006: expected selectors come from the approved persistence index; saved selectors from the
+// plan artifacts manifest ('table' artifacts). Best-effort: never throws.
+async function buildTableFanOutReconcileIntents(
+  context: mls.msg.ExecutionContext,
+  parentStep: mls.msg.AIAgentStep,
+  step: mls.msg.AIAgentStep,
+  hookSequential: number,
+): Promise<mls.msg.AgentIntent[]> {
+  try {
+    const expectedSelectors = getPlanPersistenceIndexOutput(context).result.tables.map(table => table.tableId);
+    const savedSelectors = new Set<string>();
+    for (const data of await readSavedPlanArtifactDataList(context, 'table')) {
+      const table = data.tableDefinition;
+      const id = table && typeof table === 'object' ? (table as Record<string, unknown>).tableId : undefined;
+      if (typeof id === 'string' && id) savedSelectors.add(id);
+    }
+    return reconcileParallelDynamicFanOut(context, parentStep, step, hookSequential, { expectedSelectors, savedSelectors });
+  } catch (error) {
+    console.warn('[agentPlanTableDefinition] fan-out reconcile skipped:', error);
+    return [];
+  }
 }
 
 // TODO-FINAL-010/023: also reads table definitions back from saved .defs.ts when the task

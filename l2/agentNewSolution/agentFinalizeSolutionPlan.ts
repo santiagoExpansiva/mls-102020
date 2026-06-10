@@ -4,6 +4,7 @@ import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import {
   PlannerOutput,
   assertArray,
+  assertOntologyEntityFields,
   assertRecord,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
@@ -205,6 +206,7 @@ function normalizeFinalSolutionPlanResult(value: unknown): FinalSolutionPlanResu
 function validateFinalizeSolutionPlanOutput(output: FinalSolutionPlanOutput, context: mls.msg.ExecutionContext): void {
   const snapshot = getPlanningContextSnapshot(context);
   if (output.status === 'ok' && output.result.approvedArtifacts.mdm.length === 0) throw new Error('final solution plan must keep MDM');
+  if (output.status === 'ok') assertOntologyEntityFields(output.result.ontology.entities, 'final solution plan'); // T-001
   if (output.status === 'ok' && snapshot.initialMetricsRequested) {
     if (output.result.approvedArtifacts.metricTables.length === 0) throw new Error('initial metrics requested, but final plan has no metricTables');
     if (output.result.approvedArtifacts.metricDashboards.length === 0) throw new Error('initial metrics requested, but final plan has no metricDashboards');
@@ -284,5 +286,6 @@ Do not return prose.
 - Keep rules centralized in rules with stable ruleId values.
 - Page definitions and BFF commands must reference rules by ruleId.
 - Keep ontology.entities as an object map keyed by PascalCase entity id. Do not require duplicating entityId inside each entity value.
+- Every entity must keep a populated fields list (each field with fieldId, type, required, and description). Never drop or empty fields during finalization; entities owned by the solution (moduleOwned/mdmOwned) without fields are invalid.
 - Do not continue if an error cannot be fixed from available context; return status "needs_input" with questions.
 `;

@@ -1,6 +1,6 @@
 {
   "flowId": "agentNewSolution",
-  "schemaVersion": "2026-06-08",
+  "schemaVersion": "2026-06-10",
   "description": "Fluxo REAL de planejamento do agentNewSolution (plan-only), gerado a partir de agentNewSolution.buildPlannedTree, do writer agentNewSolutionArtifacts e do loop critic/repair de agentPlanIndexReview. Substitui o harness hard-coded run01 (fixture de locadora). Serve como referencia para manutencao: mostra in/out de cada step, dependencias, modo de execucao e onde cada artefato e salvo.",
   "source": {
     "tree": "_102020_/l2/agentNewSolution/agentNewSolution.ts (buildPlannedTree)",
@@ -12,8 +12,8 @@
     "executionModes": "sequential | parallel_static | parallel_dynamic | manual_later",
     "inputSource": "Os agentes NAO releem arquivos durante o fluxo: leem o payload da task via getters (getInitialNewSolutionPlan, getFinalizeSolutionPlanOutput, getPlan*Output). Getters de definitions/indices tem fallback por arquivo/checkpoint (TODO-FINAL-023). 'input' abaixo lista as FONTES LOGICAS ja reduzidas por agente (TODO-FINAL-006/007/008/009), nao caminhos de arquivo.",
     "outputArtifact": "Saidas validadas (status=ok) viram .defs.ts/.json via resolvePlanArtifactFileInfo (TODO-FINAL-011/012/014). 'savedArtifact' usa {module}.",
-    "criticRepair": "Os 6 indices (persistenceIndex, metricsIndex, workflowIndex, pageIndex, pluginPlan, usecasePlan) NAO completam direto: ao status=ok adicionam agentCriticPlanIndex como filho; com erros, agentRepairPlanIndex; loop ate MAX_PLAN_INDEX_CRITIC_ATTEMPTS=3; ao aprovar congela checkpoint-{index}.json e so entao libera os filhos (TODO-FINAL-024).",
-    "parallelDynamic": "Steps parallel_dynamic criam um child por selector (tableId/metricTableId/workflowId/pageId) com maxParallel=5; cada child recebe so o selector + contexto reduzido daquele item (TODO-FINAL-021).",
+    "criticRepair": "Os 6 indices (persistenceIndex, metricsIndex, workflowIndex, pageIndex, pluginPlan, usecasePlan) NAO completam direto: ao status=ok adicionam agentCriticPlanIndex como filho; com erros, agentRepairPlanIndex; loop ate MAX_PLAN_INDEX_CRITIC_ATTEMPTS=3; ao aprovar congela checkpoint-{index}.json e so entao libera os filhos (TODO-FINAL-024). T-017: erros locais determinissticos com repair mecanico (MECHANICAL_FINDING_CODES: integridade referencial/normalizacao de IDs) ganham +2 attempts e nao consomem o budget semantico.",
+    "parallelDynamic": "Steps parallel_dynamic criam um child por selector (tableId/metricTableId/workflowId/pageId) com maxParallel=5; cada child recebe so o selector + contexto reduzido daquele item (TODO-FINAL-021). T-006: ao terminar o ultimo child vivo, reconcileParallelDynamicFanOut compara selectors do indice aprovado vs artefatos no manifest e re-spawna um fan-out menor so com os faltantes ({planId}:reconcile:N, max 2 rounds) como filho do fan-out original; rounds esgotados com faltantes => fan-out failed listando os selectors.",
     "trace": "Payloads/checkpoints de trace vao para l2/{module}/trace/ (politica via flag _saveTrace, TODO-FINAL-018)."
   },
   "treeOverview": [
@@ -126,11 +126,15 @@
       "type": "agent",
       "executionMode": "parallel_static",
       "dependsOn": ["plan-finalize-solution-plan"],
-      "goal": "Planejar dominios MDM (obrigatorio: mdm nao-vazio). Referencia modulo existente ou cria draft.",
-      "input": ["finalize plan (ontology.entities, approvedArtifacts.mdm)"],
+      "goal": "Planejar dominios MDM (obrigatorio: mdm nao-vazio). T-003: quando a infra MDM compartilhada existe (projeto 102034, l1/mdm), todo dominio vira referencia a ela (moduleRef '102034'), nunca draft de modulo novo. T-002: step falha se algum masterEntity resolver para fields vazio na ontologia.",
+      "input": ["finalize plan (ontology.entities, approvedArtifacts.mdm)", "mdmInventory (buildMdmInventory: disponibilidade da infra 102034 + tabelas compartilhadas mdm_*)"],
       "output": {
         "result": "mdmDomains[]",
-        "savedArtifact": "l5/{domainId}/module.defs.ts  (status reference se ja existe; draft se nao - TODO-FINAL-015)"
+        "savedArtifact": [
+          "l5/{domainId}/module.defs.ts  (reference com moduleRef '102034' quando a infra existe; draft apenas sem infra - T-003/TODO-FINAL-015)",
+          "l1/{module}/layer_1_external/{Entity}.defs.ts  (mdmEntity, generateTable:false, com fields da ontologia + infrastructureModuleRef)",
+          "l5/project.json  (merge de dependencies: [{ projectId: '102034', kind: 'mdm-infrastructure' }] - T-004)"
+        ]
       }
     },
     {
@@ -139,7 +143,7 @@
       "type": "agent",
       "executionMode": "parallel_static",
       "dependsOn": ["plan-finalize-solution-plan"],
-      "goal": "Planejar modulos horizontais (finance, notifications, ...). Referencia se existe; senao draft.",
+      "goal": "Planejar modulos horizontais (finance, notifications, documents, authRoles, i18n). Referencia se existe; senao draft. T-012: pos-processamento deterministico garante que todo horizontal aprovado vira plan item (gap-fill) e injeta config concreta (authRoles: roles = actorIds do plano final; i18n: languages do module).",
       "input": ["finalize plan (approvedArtifacts.horizontalModules)"],
       "output": {
         "result": "horizontalModules[]",
@@ -245,7 +249,7 @@
       "executionMode": "parallel_dynamic",
       "dynamicSource": { "sourcePlanId": "plan-workflow-index", "selectorField": "workflowId" },
       "dependsOn": ["plan-workflow-index"],
-      "goal": "Para cada workflowId: gerar a definicao + metadata de impacto por modulo (workflowScope, moduleRefs, writesArtifacts - TODO-FINAL-027).",
+      "goal": "Para cada workflowId: gerar a definicao + metadata de impacto por modulo (workflowScope, moduleRefs, writesArtifacts - TODO-FINAL-027). T-008/T-009: pos-processamento deterministico deriva persistenceRefs de metricRefs/writesArtifacts e normaliza tableName->tableId (camelCase canonico); ref nao resolvivel falha o child. T-010: relatedPages e derivado depois (backfill no validate), nao na geracao.",
       "input": ["workflow index item (workflowId)", "tabelas/usecases/metricas referenciados", "ontology"],
       "output": {
         "result": "PlanWorkflowDefinitionResult { workflowDefinition, defsPlan }",
@@ -297,7 +301,7 @@
         "plan-table-definition", "plan-metrics-index", "plan-metric-table-definition",
         "plan-usecase-entities", "plan-workflow-definition", "plan-agents", "plan-page-definition"
       ],
-      "goal": "Relatorio tecnico NAO-bloqueante de cobertura/integracao (TODO-FINAL-023/024). Com status=ok completa e grava o run em process.defs.ts. NAO fecha mais o root: o fluxo segue para 'Revendo plano' (sequential) e o root e fechado no 'Encerrar' da tela final.",
+      "goal": "Relatorio tecnico NAO-bloqueante de cobertura/integracao (TODO-FINAL-023/024). Com status=ok completa e grava o run em process.defs.ts (T-011: decisoes refinadas por agentes especializados ganham revisedBy/revisedScope, ex.: escopo MDM do agentPlanMDM). NAO fecha mais o root: o fluxo segue para 'Revendo plano' (sequential) e o root e fechado no 'Encerrar' da tela final. T-010: antes do prompt, backfill deterministico de relatedPages nos l4/workflows/*.defs.ts (pageDefinition.flowRefs + bffCommands.usecaseRefs x workflow.usecaseRefs). T-012/T-015: deterministicIssues incluem horizontal.artifact.missing e usecase.consumer.missing.",
       "input": ["coverageSnapshot compacto (counts/ids/matriz)", "deterministicIssues pre-computadas no cliente"],
       "output": {
         "result": "ValidationReport { summary{passed,errorCount,warningCount}, issues[{severity,code,message,path}], readyToSaveDefs }",
@@ -311,7 +315,7 @@
       "type": "agent",
       "executionMode": "sequential",
       "dependsOn": ["plan-validate-solution-coverage"],
-      "goal": "Step 'Revendo plano'. Wrapper sem LLM (igual agentNewSolutionPlanner). Ao completar, libera o filho clarification 'final-resume' que renderiza a tela 'Resumo final do planejamento' (widget-new-solution-resume-102020).",
+      "goal": "Step 'Revendo plano'. Wrapper sem LLM (igual agentNewSolutionPlanner). T-016: antes de completar, refreshSolutionHealthReport recalcula as issues deterministicas sobre os artefatos FINAIS e regrava plan-health-report.json + readyToSaveDefs (corrige report obsoleto quando o validate rodou antes dos fan-outs terminarem). Ao completar, libera o filho clarification 'final-resume' que renderiza a tela 'Resumo final do planejamento' (widget-new-solution-resume-102020).",
       "input": ["l5/{module}/process.defs.ts (run newSolution)", "l2/{module}/trace/plan-health-report.json (fallback)"],
       "output": { "result": "tela de resumo + acoes (Encerrar)", "savedArtifact": "atualiza l5/{module}/process.defs.ts (finishedAt + status dos proximos passos)" },
       "notes": "A tela mostra prompt inicial, decisions, pontos em aberto, health report (erros/warnings) e proximos passos (horizontais a criar + plugins draft) com checkbox. 'Encerrar': abre uma task por proximo passo marcado (mention @@agente por tipo, default em branco), limpa traces (l2/{module}/trace/*), completa o step e limpa inputs/outputs restantes. Materializacao real e apenas um item futuro de proximos passos."

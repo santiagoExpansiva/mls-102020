@@ -4,6 +4,7 @@ import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import {
   PlannerOutput,
   assertArray,
+  assertOntologyEntityFields,
   assertRecord,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
@@ -169,6 +170,7 @@ function normalizeSolutionBlueprintResult(value: unknown): SolutionBlueprintResu
 
 function validateSolutionBlueprintOutput(output: SolutionBlueprintOutput, context: mls.msg.ExecutionContext): void {
   if (output.status === 'ok' && output.result.artifactPlan.mdm.length === 0) throw new Error('solution blueprint must include MDM artifact plan');
+  if (output.status === 'ok') assertOntologyEntityFields(output.result.ontology.entities, 'solution blueprint'); // T-001
   const snapshot = getPlanningContextSnapshot(context);
   if (output.status === 'ok' && snapshot.initialMetricsRequested) {
     if (output.result.artifactPlan.metricTables.length === 0) throw new Error('initial metrics requested, but blueprint has no metricTables');
@@ -223,7 +225,7 @@ In result, return:
 - module with moduleName, purpose, businessDomain, languages, and visualStyle.
 - actors.
 - capabilities.
-- ontology.entities as an object map keyed by PascalCase entity id. Each value must include title and description. Include entityId, kind, ownership, fields, statusEnum, lifecycleStates, and rulesApplied only when they are known.
+- ontology.entities as an object map keyed by PascalCase entity id. Each value must include title, description, and fields. fields must list every known attribute of the entity, each with fieldId (camelCase), type, required, and description — never return an empty fields array. Include entityId, kind, ownership, statusEnum, lifecycleStates, and rulesApplied only when they are known.
 - centralized rules.
 - relationships.
 - userActions.
@@ -236,6 +238,7 @@ In result, return:
 - Every core commitment must reference the selected subject, resource, service, product, or person that makes the commitment meaningful. Derive names from the prompt and ontology.
 - Include explicit user actions for all required selections, confirmations, and lifecycle changes implied by the domain.
 - Include MDM domains for stable master data such as customers, accounts, products, assets, suppliers, staff, locations, or reusable records.
+- Every entity owned by the solution (ownership moduleOwned or mdmOwned) must declare its full field list: fieldId, type, required, and description for each field. An entity without fields cannot be materialized and is invalid.
 - Include operational metric tables and an admin dashboard when initial metrics/dashboard was accepted.
 - Include layer_3 usecase entities when the solution has BFF commands, writes, lifecycle changes, or metric updates.
 - Backend layer rules must be respected: BFF is layer_2, use cases are layer_3, real tables are layer_1.

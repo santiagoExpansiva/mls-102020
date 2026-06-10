@@ -466,6 +466,7 @@ Do not return prose.
 - Metric tables must use storageEngine "postgresTimescaleDB" for time-series operational metrics.
 - metricsPlan.storageEngine is required and must be "postgresTimescaleDB".
 - Metric table index items must use string timeColumn, string[] sourceWriteEvents, string[] sourceBaseTables, dimensions[], measures[], aggregationWindows[], and retentionPolicy.
+- dimensions must include the FK of every direct ontology relationship of the source entities (e.g. Deal related to Lead means the deal metric table needs a lead_id dimension).
 - Derive metrics from base table updates, lifecycle transitions, and operational risks.
 - Do not update metrics from pages.
 - Metrics must be updated by backend use cases in layer_3_usecases.

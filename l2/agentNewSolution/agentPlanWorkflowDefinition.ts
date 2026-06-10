@@ -16,12 +16,15 @@ import {
   getPlannerOutputsWithFileFallback,
   isRecord,
   pickRecordsByIds,
+  reconcileParallelDynamicFanOut,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
-import { saveNewSolutionAgentTracePayload, saveNewSolutionPlanArtifacts } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { readSavedPlanArtifactDataList, saveNewSolutionAgentTracePayload, saveNewSolutionPlanArtifacts } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import { getPlanMetricTableDefinitionOutputs } from '/_102020_/l2/agentNewSolution/agentPlanMetricTableDefinition.js';
 import type { PlanMetricTableDefinitionOutput } from '/_102020_/l2/agentNewSolution/agentPlanMetricTableDefinition.js';
+import { getPlanMetricsIndexOutput } from '/_102020_/l2/agentNewSolution/agentPlanMetricsIndex.js';
+import { getPlanPersistenceIndexOutput } from '/_102020_/l2/agentNewSolution/agentPlanPersistenceIndex.js';
 import { getPlanTableDefinitionOutputs } from '/_102020_/l2/agentNewSolution/agentPlanTableDefinition.js';
 import type { PlanTableDefinitionOutput } from '/_102020_/l2/agentNewSolution/agentPlanTableDefinition.js';
 import { getPlanUsecaseEntitiesOutput } from '/_102020_/l2/agentNewSolution/agentPlanUsecaseEntities.js';
@@ -171,7 +174,12 @@ const planWorkflowDefinitionToolSchema = createPlannerVariableToolSchema(
           },
           transitions: { type: 'array', items: transitionSchema },
           requiredEntities: { type: 'array', items: { type: 'string' } },
-          persistenceRefs: { type: 'array', items: { type: 'string' } },
+          // T-008: canonical camelCase ids (tableId/metricTableId), never physical snake_case names.
+          persistenceRefs: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Canonical camelCase tableId/metricTableId refs from the persistence/metrics indices (never physical snake_case table names)',
+          },
           usecaseRefs: { type: 'array', items: { type: 'string' } },
           metricRefs: { type: 'array', items: { type: 'string' } },
           userActions: { type: 'array', items: { type: 'string' } },
@@ -310,6 +318,9 @@ async function afterPromptStep(
       console.warn(`[${agent.agentName}](afterPromptStep) coercing workflowId '${output.result.workflowDefinition.workflowId}' to selector '${workflowSelector}'`);
       output.result.workflowDefinition.workflowId = workflowSelector;
     }
+    const persistenceIdMaps = buildWorkflowPersistenceIdMaps(context);
+    deriveWorkflowPersistenceRefs(output, persistenceIdMaps); // T-009
+    normalizeWorkflowPersistenceRefs(output, persistenceIdMaps); // T-008
     validatePlanWorkflowDefinitionOutput(output, workflowSelector);
     if (output.status === 'failed') {
       status = 'failed';
@@ -333,8 +344,121 @@ async function afterPromptStep(
     cleaner = saved.length > 0 ? 'input_output' : 'input';
   }
 
+  // T-006: when this child is the last live one, reconcile the approved index selectors vs the
+  // saved artifacts; re-spawn missing children (limited rounds) before the fan-out is finalized.
+  const reconcileIntents = await buildWorkflowFanOutReconcileIntents(context, parentStep, step, hookSequential);
+
   const updateIntent = createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, cleaner);
-  return [updateIntent];
+  return [...reconcileIntents, updateIntent];
+}
+
+// T-008/T-009: canonical id maps from the persistence and metrics indices.
+interface WorkflowPersistenceIdMaps {
+  knownIds: Set<string>; // tableIds + metricTableIds (canonical camelCase)
+  idByName: Map<string, string>; // physical snake_case tableName -> canonical id
+}
+
+function buildWorkflowPersistenceIdMaps(context: mls.msg.ExecutionContext): WorkflowPersistenceIdMaps {
+  const knownIds = new Set<string>();
+  const idByName = new Map<string, string>();
+  try {
+    for (const table of getPlanPersistenceIndexOutput(context).result.tables) {
+      knownIds.add(table.tableId);
+      if (table.tableName) idByName.set(table.tableName, table.tableId);
+    }
+  } catch { /* persistence index unavailable: skip table resolution */ }
+  try {
+    for (const metricTable of getPlanMetricsIndexOutput(context).result.metricTables) {
+      knownIds.add(metricTable.metricTableId);
+      if (metricTable.tableName) idByName.set(metricTable.tableName, metricTable.metricTableId);
+    }
+  } catch { /* metrics index unavailable: skip metric resolution */ }
+  return { knownIds, idByName };
+}
+
+/**
+ * T-009: persistenceRefs must be the superset implied by what the workflow writes (E-011/E-012).
+ * Deterministically union the current refs with metricRefs that resolve to metric tables and
+ * writesArtifacts of type table/metricTable, instead of accepting an empty list.
+ */
+function deriveWorkflowPersistenceRefs(output: PlanWorkflowDefinitionOutput, maps: WorkflowPersistenceIdMaps): void {
+  if (output.status !== 'ok') return;
+  const workflow = output.result.workflowDefinition;
+  const refs = new Set<string>();
+  const addKnown = (ref: unknown) => {
+    if (typeof ref !== 'string' || !ref.trim()) return;
+    const value = ref.trim();
+    if (maps.knownIds.has(value)) refs.add(value);
+    else if (maps.idByName.has(value)) refs.add(maps.idByName.get(value)!);
+  };
+
+  for (const ref of Array.isArray(workflow.persistenceRefs) ? workflow.persistenceRefs : []) {
+    if (typeof ref === 'string' && ref.trim()) refs.add(ref.trim());
+  }
+  // metricRefs that resolve to metric tables (dashboard refs do not resolve and stay out).
+  for (const ref of Array.isArray(workflow.metricRefs) ? workflow.metricRefs : []) addKnown(ref);
+  for (const artifact of workflow.writesArtifacts || []) {
+    if (artifact && (artifact.artifactType === 'table' || artifact.artifactType === 'metricTable')) addKnown(artifact.artifactId);
+  }
+
+  workflow.persistenceRefs = [...refs];
+}
+
+/**
+ * T-008: persistenceRefs must use the canonical camelCase id (tableId/metricTableId), never the
+ * physical snake_case table name (E-010). Resolves each ref against the persistence and metrics
+ * indices (tableName -> tableId map), normalizes the refs in place, and throws (failing the
+ * child step) when a ref cannot be resolved to any known id.
+ */
+function normalizeWorkflowPersistenceRefs(output: PlanWorkflowDefinitionOutput, maps: WorkflowPersistenceIdMaps): void {
+  if (output.status !== 'ok') return;
+  const workflow = output.result.workflowDefinition;
+  const refs = Array.isArray(workflow.persistenceRefs) ? workflow.persistenceRefs : [];
+  if (refs.length === 0) return;
+  if (maps.knownIds.size === 0 && maps.idByName.size === 0) return;
+
+  const unresolved: string[] = [];
+  const normalized: string[] = [];
+  for (const ref of refs) {
+    if (typeof ref !== 'string' || !ref.trim()) continue;
+    const value = ref.trim();
+    if (maps.knownIds.has(value)) {
+      normalized.push(value);
+    } else if (maps.idByName.has(value)) {
+      console.warn(`[agentPlanWorkflowDefinition] normalizing persistenceRef '${value}' to canonical id '${maps.idByName.get(value)}' (T-008)`);
+      normalized.push(maps.idByName.get(value)!);
+    } else {
+      unresolved.push(value);
+    }
+  }
+
+  if (unresolved.length > 0) {
+    throw new Error(`workflow ${workflow.workflowId} persistenceRefs do not resolve to any tableId/metricTableId: ${unresolved.join(', ')}`);
+  }
+  workflow.persistenceRefs = [...new Set(normalized)];
+}
+
+// T-006: expected selectors come from the approved workflow index; saved selectors from the
+// plan artifacts manifest ('workflow' artifacts). Best-effort: never throws.
+async function buildWorkflowFanOutReconcileIntents(
+  context: mls.msg.ExecutionContext,
+  parentStep: mls.msg.AIAgentStep,
+  step: mls.msg.AIAgentStep,
+  hookSequential: number,
+): Promise<mls.msg.AgentIntent[]> {
+  try {
+    const expectedSelectors = getPlanWorkflowIndexOutput(context).result.workflows.map(workflow => workflow.workflowId);
+    const savedSelectors = new Set<string>();
+    for (const data of await readSavedPlanArtifactDataList(context, 'workflow')) {
+      const workflow = data.workflowDefinition;
+      const id = workflow && typeof workflow === 'object' ? (workflow as Record<string, unknown>).workflowId : undefined;
+      if (typeof id === 'string' && id) savedSelectors.add(id);
+    }
+    return reconcileParallelDynamicFanOut(context, parentStep, step, hookSequential, { expectedSelectors, savedSelectors });
+  } catch (error) {
+    console.warn('[agentPlanWorkflowDefinition] fan-out reconcile skipped:', error);
+    return [];
+  }
 }
 
 // TODO-FINAL-010/023: also reads workflow definitions back from saved .defs.ts when the task
@@ -623,6 +747,7 @@ Do not return prose.
 - Put persistenceRefs, usecaseRefs, and metricRefs only at workflowDefinition top level, never inside transitions.
 - Transition actions must only write entity fields and enum values declared in the final solution plan.
 - Include persistenceRefs with module-owned table ids when transitions read or write local persisted state.
+- persistenceRefs must use the canonical camelCase tableId (or metricTableId) exactly as defined in the persistence/metrics indices — NEVER the physical snake_case table name (e.g. use "propertyTable" style ids, not "property_table").
 - Include usecaseRefs when transitions mutate module-owned data through layer_3_usecases.
 - Include metricRefs when transitions feed operational metrics; metric updates happen in backend use cases, not pages.
 - Do not reference MDM, horizontal, or plugin-owned entities as new module tables.

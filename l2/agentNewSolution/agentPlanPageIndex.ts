@@ -541,6 +541,7 @@ Do not return prose.
 - Add navigationRefs only as lightweight references to related source or destination pages; do not include input mappings.
 - Add persistenceHints only when they help the later single-page step connect BFF commands to module-owned table definitions.
 - Add usecaseHints when they help the later single-page step connect BFF commands to layer_3_usecases.
+- usecaseHints and bffCommandHints[].name must reference usecaseIds that EXIST in the provided usecase plan. Never invent a usecase id (such as get{Entity}) that is not in the plan; if a page needs a read usecase that does not exist, reuse the closest existing usecase instead.
 - Add metricRefs for pages that display metric tables.
 - If a page needs data from the backend, add command hints with name, purpose, and expected input or output summary.
 - flowRefs must reference only workflow ids from the workflow index.

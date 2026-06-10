@@ -307,6 +307,75 @@ export function createParallelDynamicAgentStepIntent(
   };
 }
 
+//#region T-006: parallel_dynamic fan-out reconciliation (E-007/E-008)
+
+export const MAX_FAN_OUT_RECONCILE_ROUNDS = 2;
+const FAN_OUT_TERMINAL_STATUSES: mls.msg.AIStepStatus[] = ['completed', 'failed'];
+
+export interface FanOutReconcileOptions {
+  /** Selectors frozen in the approved index (one definition artifact expected per selector). */
+  expectedSelectors: string[];
+  /** Selector ids already materialized as saved artifacts (from the plan artifacts manifest). */
+  savedSelectors: Set<string>;
+}
+
+/**
+ * T-006: reconcile a parallel_dynamic fan-out against the approved index selectors.
+ * Called from a definition child's afterPromptStep AFTER its own artifact save. When this child
+ * is the last live one and selectors are missing from the manifest, re-spawn a smaller fan-out
+ * with only the missing selectors (max MAX_FAN_OUT_RECONCILE_ROUNDS rounds). When rounds are
+ * exhausted and selectors are still missing, fail the fan-out step listing them instead of
+ * letting the orchestrator complete it silently with partial coverage.
+ * The returned intents MUST be placed BEFORE the child's own update-status intent, so the
+ * fan-out step always keeps a non-terminal child and is not auto-finalized by the orchestrator.
+ */
+export function reconcileParallelDynamicFanOut(
+  context: mls.msg.ExecutionContext,
+  fanOutStep: mls.msg.AIAgentStep,
+  currentStep: mls.msg.AIAgentStep,
+  hookSequential: number,
+  options: FanOutReconcileOptions,
+): mls.msg.AgentIntent[] {
+  const planning = (fanOutStep as any)?.planning;
+  if (planning?.executionMode !== 'parallel_dynamic') return [];
+
+  // Finished children are deleted by the backend; queued/pre-allocated ones are non-terminal.
+  // Only the last live child (every visible sibling terminal) runs the reconciliation.
+  const siblings = (fanOutStep.nextSteps || []).filter(child => child.stepId !== currentStep.stepId);
+  if (siblings.some(child => !FAN_OUT_TERMINAL_STATUSES.includes(child.status))) return [];
+
+  const missing = options.expectedSelectors.filter(selector => selector && !options.savedSelectors.has(selector));
+  if (missing.length === 0) return [];
+
+  const planId = String(planning?.planId || '');
+  const planIdBase = planId.split(':reconcile:')[0];
+  const roundMatch = /:reconcile:(\d+)$/.exec(planId);
+  const round = roundMatch ? Number(roundMatch[1]) : 0;
+
+  if (round >= MAX_FAN_OUT_RECONCILE_ROUNDS) {
+    const traceMsg = `fan-out ${planIdBase} incomplete after ${round} reconcile round(s); missing selectors: ${missing.join(', ')}`;
+    console.error(`[reconcileParallelDynamicFanOut] ${traceMsg}`);
+    const fanOutParent = findParentStepOfStep(context, fanOutStep.stepId);
+    const parentForUpdate = (fanOutParent && fanOutParent.type === 'agent' ? fanOutParent : fanOutStep) as mls.msg.AIAgentStep;
+    return [createPlannerUpdateStatusIntent(context, parentForUpdate, fanOutStep, hookSequential, 'failed', traceMsg)];
+  }
+
+  console.warn(`[reconcileParallelDynamicFanOut] ${planIdBase}: re-spawning ${missing.length} missing selector(s), round ${round + 1}: ${missing.join(', ')}`);
+  return [
+    createParallelDynamicAgentStepIntent(
+      context,
+      fanOutStep,
+      currentStep.agentName,
+      `${planIdBase}:reconcile:${round + 1}`,
+      `${fanOutStep.stepTitle || planIdBase} (retry ${round + 1})`,
+      missing,
+      5,
+    ),
+  ];
+}
+
+//#endregion
+
 // TODO-FINAL-023 / TODO-FINAL-024: critic/repair checkpoint support for plan indices.
 export const CRITIC_PLAN_INDEX_AGENT_NAME = 'agentCriticPlanIndex';
 export const REPAIR_PLAN_INDEX_AGENT_NAME = 'agentRepairPlanIndex';
@@ -537,6 +606,26 @@ export function getActorIdSet(actors: unknown): Set<string> {
     if (isRecordValue(actor) && typeof actor.actorId === 'string' && actor.actorId.trim()) ids.add(actor.actorId);
   }
   return ids;
+}
+
+/**
+ * T-001: data-owning ontology entities (mdmOwned/moduleOwned, or no ownership declared)
+ * must declare at least one field — empty shapes break .defs.ts materialization (E-001).
+ * Throws listing the offending entity ids.
+ */
+export function assertOntologyEntityFields(entities: Record<string, unknown>, source: string): void {
+  const missing: string[] = [];
+  for (const [entityId, value] of Object.entries(entities)) {
+    if (!isRecordValue(value)) continue;
+    const ownership = typeof value.ownership === 'string' ? value.ownership : '';
+    const ownsData = !ownership || ownership === 'mdmOwned' || ownership === 'moduleOwned';
+    if (!ownsData) continue;
+    const fields = Array.isArray(value.fields) ? value.fields : [];
+    if (fields.length === 0) missing.push(entityId);
+  }
+  if (missing.length > 0) {
+    throw new Error(`${source}: ontology entities missing fields (mdmOwned/moduleOwned entities must declare at least one field): ${missing.join(', ')}`);
+  }
 }
 
 /** Collect non-empty string values from the given fields of a record into a target set. */

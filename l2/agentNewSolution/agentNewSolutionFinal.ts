@@ -3,6 +3,7 @@
 import { IAgentAsync, IAgentMeta } from '/_102027_/l2/aiAgentBase.js';
 import { getAgentStepByAgentName } from '/_102027_/l2/aiAgentHelper.js';
 import { normalizeModuleFolderName } from '/_102020_/l2/agentNewSolution/agentNewSolutionPlan.js';
+import { refreshSolutionHealthReport } from '/_102020_/l2/agentNewSolution/agentValidateSolutionCoverage.js';
 
 export function createAgent(): IAgentAsync {
   return {
@@ -62,6 +63,11 @@ async function beforePromptStep(
 ): Promise<mls.msg.AgentIntent[]> {
   if (!agent || !context || !parentStep || !step) throw new Error('[agentNewSolutionFinal](beforePromptStep) invalid params');
   if (!context.task) throw new Error('[agentNewSolutionFinal](beforePromptStep) task invalid');
+
+  // T-016: the coverage step may have produced a stale health report when it ran before all
+  // fan-outs finished (E-017). Refresh it deterministically (no LLM) so the final resume screen
+  // shows the real state of the artifacts. Best-effort: never blocks the resume.
+  await refreshSolutionHealthReport(context, step);
 
   const updateStatus: mls.msg.AgentIntentUpdateStatus = {
     type: 'update-status',

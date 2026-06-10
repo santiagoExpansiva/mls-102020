@@ -14,6 +14,7 @@ import {
   extractPlannerOutput,
   getPlannerOutputs,
   pickRecordsByIds,
+  reconcileParallelDynamicFanOut,
   summarizeRecords,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
@@ -401,6 +402,7 @@ async function afterPromptStep(
       output.result.pageDefinition.pageId = pageSelector;
     }
     validatePlanPageDefinitionOutput(output, pageSelector, getPlanWorkflowIndexOutput(context));
+    validateBffCommandUsecaseRefs(output, pageSelector, context); // T-007
     if (output.status === 'failed') {
       status = 'failed';
       traceMsg = 'agentPlanPageDefinition returned status failed';
@@ -425,8 +427,58 @@ async function afterPromptStep(
     cleaner = saved.length > 0 ? 'input_output' : 'input';
   }
 
+  // T-006: when this child is the last live one, reconcile the approved index selectors vs the
+  // saved artifacts; re-spawn missing children (limited rounds) before the fan-out is finalized.
+  const reconcileIntents = await buildPageFanOutReconcileIntents(context, parentStep, step, hookSequential);
+
   const updateIntent = createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, cleaner);
-  return [updateIntent];
+  return [...reconcileIntents, updateIntent];
+}
+
+// T-007: every bffCommand usecaseRef must exist in the approved usecase plan (E-005/E-006).
+// A page child that references a missing usecase fails instead of saving a broken definition.
+function validateBffCommandUsecaseRefs(output: PlanPageDefinitionOutput, pageSelector: string, context: mls.msg.ExecutionContext): void {
+  if (output.status !== 'ok') return;
+  const usecaseIds = new Set<string>();
+  for (const usecase of getPlanUsecaseEntitiesOutput(context).result.usecases) {
+    if (!usecase || typeof usecase !== 'object') continue;
+    const id = (usecase as Record<string, unknown>).usecaseId;
+    if (typeof id === 'string' && id) usecaseIds.add(id);
+  }
+  if (usecaseIds.size === 0) return;
+
+  const unknown: string[] = [];
+  for (const command of output.result.bffCommands) {
+    for (const ref of command.usecaseRefs) {
+      if (!usecaseIds.has(ref)) unknown.push(`${command.commandName}:${ref}`);
+    }
+  }
+  if (unknown.length > 0) {
+    throw new Error(`page ${pageSelector} references usecases missing from the usecase plan: ${unknown.join(', ')}`);
+  }
+}
+
+// T-006: expected selectors come from the approved page index; saved selectors from the
+// plan artifacts manifest ('page' artifacts). Best-effort: never throws.
+async function buildPageFanOutReconcileIntents(
+  context: mls.msg.ExecutionContext,
+  parentStep: mls.msg.AIAgentStep,
+  step: mls.msg.AIAgentStep,
+  hookSequential: number,
+): Promise<mls.msg.AgentIntent[]> {
+  try {
+    const expectedSelectors = getPlanPageIndexOutput(context).result.pages.map(page => page.pageId);
+    const savedSelectors = new Set<string>();
+    for (const data of await readSavedPlanArtifactDataList(context, 'page')) {
+      const page = data.pageDefinition;
+      const id = page && typeof page === 'object' ? (page as Record<string, unknown>).pageId : undefined;
+      if (typeof id === 'string' && id) savedSelectors.add(id);
+    }
+    return reconcileParallelDynamicFanOut(context, parentStep, step, hookSequential, { expectedSelectors, savedSelectors });
+  } catch (error) {
+    console.warn('[agentPlanPageDefinition] fan-out reconcile skipped:', error);
+    return [];
+  }
 }
 
 // TODO-FINAL-010/023: page definition payloads are cleared from the task with
@@ -770,6 +822,7 @@ Do not return prose.
 - Derive sections/organisms from capabilities, primary user actions, and required selections for commitment pages.
 - Every organism that needs backend data must have at least one corresponding BFF command.
 - BFF commands must declare kind (query/command/mutation), readsEntities/writesEntities, readsTables/writesTables for module-owned tables, and usecaseRefs.
+- Expose AI/operational usecases hinted for this page as explicit actions (BFF commands) on the relevant detail page — e.g. a content-generation usecase as an action on the entity's detail page, an AI qualification usecase on the corresponding detail page. A usecase exposed to users must have a page consumer (T-015).
 - BFF command input/output are arrays of typed fields, not free-form objects: input items are { name, type, required }, output items are { name, type }. Use empty arrays when there are none. Use concise primitive/domain types (string, number, boolean, date, or an entity/enum id).
 - layerContract must be { controllerLayer: "layer_2_controllers", mustCallLayer: "layer_3_usecases", directTableAccessForbidden: true }.
 - Do not put MDM/horizontal/plugin-owned tables in readsTables/writesTables; use mdmRefs/pluginRefs and entity refs instead.

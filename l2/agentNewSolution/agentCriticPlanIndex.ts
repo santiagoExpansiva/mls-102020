@@ -34,6 +34,7 @@ import {
   buildEmptyHealthReport,
   critiqueFindingsToHealth,
   getPlanIndexReviewConfig,
+  maxAttemptsForLocalErrors,
   planIndexCritiqueExtractConfig,
   planIndexCritiqueToolSchema,
 } from '/_102020_/l2/agentNewSolution/agentPlanIndexReview.js';
@@ -91,7 +92,10 @@ async function beforePromptStep(
 
   // TODO-FINAL-023: deterministic local errors go straight to repair, no critic LLM needed.
   if (localFindings.errors.length > 0) {
-    if (reviewArgs.attempt >= MAX_PLAN_INDEX_CRITIC_ATTEMPTS) {
+    // T-017: when every local error has a mechanical repair (id normalization / referential
+    // integrity), grant extra attempts — they do not consume the semantic critic budget.
+    const maxAttempts = maxAttemptsForLocalErrors(localFindings.errors, MAX_PLAN_INDEX_CRITIC_ATTEMPTS);
+    if (reviewArgs.attempt >= maxAttempts) {
       const summary = localFindings.errors.map(item => item.message).join('; ');
       return failIndexIntents(context, indexStep, step, hookSequential, `local checkpoint still failing after ${reviewArgs.attempt} attempts: ${summary}`);
     }

@@ -12,6 +12,7 @@ import {
   createPlannerVariableToolSchema,
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
+  getActorIdSet,
   getPlannerOutput,
   getPlanningContextSnapshot,
   hasAcceptedArtifact,
@@ -135,12 +136,17 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
   // TODO-FINAL-015: persist horizontal modules (draft l5/{id}/module.defs.ts or manifest reference).
-  if (status === 'completed' && output) await saveNewSolutionPlanArtifacts(context, agent.agentName, step, output);
+  if (status === 'completed' && output) {
+    applyHorizontalsPostProcessing(output, context); // T-012
+    await saveNewSolutionPlanArtifacts(context, agent.agentName, step, output);
+  }
   return [createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined)];
 }
 
 export function getPlanHorizontalsOutput(context: mls.msg.ExecutionContext): PlanHorizontalsOutput {
-  return getPlannerOutput(context, 'agentPlanHorizontals', planHorizontalsConfig, output => validatePlanHorizontalsOutput(output, context));
+  const output = getPlannerOutput(context, 'agentPlanHorizontals', planHorizontalsConfig, item => validatePlanHorizontalsOutput(item, context));
+  applyHorizontalsPostProcessing(output, context); // T-012: readers see the same gap-filled plan that was saved
+  return output;
 }
 
 function extractPlanHorizontalsOutput(payload: unknown): PlanHorizontalsOutput {
@@ -228,8 +234,81 @@ const horizontalCatalog = {
       knownOntologyRefs: ['Document', 'SignatureRequest', 'Attachment'],
       capabilities: ['contracts', 'attachments', 'digitalSignature'],
     },
+    // T-012: platform horizontals — accepted decisions like horizontalAuthRoles/horizontalI18n
+    // must produce an artifact (draft or reference), never disappear silently (E-009).
+    {
+      horizontalModuleId: 'authRoles',
+      title: 'Autenticacao e papeis',
+      priorityDefault: 'now',
+      knownOntologyRefs: ['UserAccount', 'Role', 'Permission'],
+      capabilities: ['authentication', 'authorization', 'roles'],
+    },
+    {
+      horizontalModuleId: 'i18n',
+      title: 'Internacionalizacao',
+      priorityDefault: 'now',
+      knownOntologyRefs: [],
+      capabilities: ['translations', 'locales'],
+    },
   ],
 };
+
+// T-012: accepted decisions may use aliased ids ('horizontalAuthRoles', 'horizontalI18n', ...).
+// Normalize them to catalog ids; returns '' when the id does not map to any catalog horizontal.
+export function normalizeHorizontalModuleId(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  const raw = value.trim();
+  const allowed = new Set(horizontalCatalog.horizontals.map(item => item.horizontalModuleId));
+  if (allowed.has(raw)) return raw;
+  const stripped = raw.replace(/^horizontal/i, '');
+  const candidate = stripped ? stripped.charAt(0).toLowerCase() + stripped.slice(1) : '';
+  return candidate && allowed.has(candidate) ? candidate : '';
+}
+
+/**
+ * T-012: deterministic post-processing (idempotent, applied after generation and on read):
+ * 1. gap-fill — every approved horizontal artifact must produce a plan item (and therefore an
+ *    artifact candidate), even when the LLM omitted it (E-009: authRoles/i18n);
+ * 2. platform config — authRoles carries the final plan actor ids as roles; i18n carries the
+ *    module languages, so the saved artifact declares concrete roles/locales.
+ */
+function applyHorizontalsPostProcessing(output: PlanHorizontalsOutput, context: mls.msg.ExecutionContext): void {
+  if (output.status !== 'ok') return;
+  try {
+    const finalPlan = getFinalizeSolutionPlanOutput(context);
+
+    const planned = new Set(output.result.horizontalModules.map(module => module.horizontalModuleId));
+    finalPlan.result.approvedArtifacts.horizontalModules.forEach(approved => {
+      if (!approved || typeof approved !== 'object') return;
+      const record = approved as Record<string, unknown>;
+      if (record.priority === 'never') return;
+      const id = normalizeHorizontalModuleId(record.horizontalModuleId ?? record.artifactId ?? record.signal);
+      if (!id || planned.has(id)) return;
+      const priority: Priority = record.priority === 'soon' || record.priority === 'later' ? record.priority : 'now';
+      output.result.horizontalModules.push({
+        horizontalModuleId: id,
+        priority,
+        reason: `approved horizontal '${id}' added deterministically (missing from the LLM plan) — T-012`,
+        reusedOntologyRefs: [],
+        consumedByArtifacts: [],
+      });
+      planned.add(id);
+    });
+
+    for (const module of output.result.horizontalModules) {
+      const extra = module as HorizontalModulePlan & { roles?: string[]; languages?: string[] };
+      if (module.horizontalModuleId === 'authRoles' && !Array.isArray(extra.roles)) {
+        extra.roles = [...getActorIdSet(finalPlan.result.actors)];
+      }
+      if (module.horizontalModuleId === 'i18n' && !Array.isArray(extra.languages)) {
+        const languages = (finalPlan.result.module as Record<string, unknown>).languages;
+        extra.languages = Array.isArray(languages) ? languages.filter((item): item is string => typeof item === 'string') : [];
+      }
+    }
+  } catch (error) {
+    console.warn('[agentPlanHorizontals] post-processing skipped (T-012):', error);
+  }
+}
 
 const systemPrompt = `
 <!-- modelType: codeinstruct -->
@@ -249,6 +328,8 @@ Do not return prose.
 - Finance should be planned only when the approved scope includes billing, payments, pricing, receivables, payables, accounting, invoices, refunds, or reconciliation.
 - Notifications should be planned when approved workflows, agents, or rules require reminders, alerts, approvals, follow-ups, or external communication.
 - Documents should be planned when the domain needs contracts, signatures, files, certificates, receipts, policies, or generated documents.
+- AuthRoles must be planned when an accepted decision covers authentication/roles or when the solution declares actors that require role-based authorization (platform horizontal; usually a reference to existing infrastructure).
+- I18n must be planned when an accepted decision covers internationalization or when the module declares more than one language.
 - The priority must follow implementation decisions. If not explicitly decided, use the most conservative priority that keeps the MVP coherent.
 - Return an empty array when no horizontal module is justified.
 `;

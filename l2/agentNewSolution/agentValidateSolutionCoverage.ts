@@ -18,6 +18,7 @@ import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/age
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import {
   saveNewSolutionAgentTracePayload,
+  saveNewSolutionPlanArtifacts,
   saveNewSolutionPlanHealthReport,
   saveNewSolutionProcessRun,
   getExistingModuleFolders,
@@ -26,7 +27,7 @@ import type { NewSolutionProcessNextStep, NewSolutionProcessRun } from '/_102020
 import { normalizeModuleFolderName } from '/_102020_/l2/agentNewSolution/agentNewSolutionPlan.js';
 import { getPlanAgentsOutput } from '/_102020_/l2/agentNewSolution/agentPlanAgents.js';
 import type { PlanAgentsOutput } from '/_102020_/l2/agentNewSolution/agentPlanAgents.js';
-import { getPlanHorizontalsOutput } from '/_102020_/l2/agentNewSolution/agentPlanHorizontals.js';
+import { getPlanHorizontalsOutput, normalizeHorizontalModuleId } from '/_102020_/l2/agentNewSolution/agentPlanHorizontals.js';
 import type { PlanHorizontalsOutput } from '/_102020_/l2/agentNewSolution/agentPlanHorizontals.js';
 import { getPlanMDMOutput } from '/_102020_/l2/agentNewSolution/agentPlanMDM.js';
 import type { PlanMDMOutput } from '/_102020_/l2/agentNewSolution/agentPlanMDM.js';
@@ -175,6 +176,11 @@ async function beforePromptStep(
   const pageIndex = getPlanPageIndexOutput(context);
   const pageDefinitions = await getPlanPageDefinitionOutputs(context);
 
+  // T-010: workflows are defined BEFORE pages, so relatedPages cannot be filled at generation
+  // time (E-013). Deterministic backfill (no LLM) now that all page definitions exist; the
+  // updated workflows are re-saved to l4/workflows/*.defs.ts and feed the coverage snapshot below.
+  await backfillWorkflowRelatedPages(context, step, workflowDefinitions, pageDefinitions);
+
   // The acceptance checklist is fixture-specific (run01/expected/...). For real runs it may be absent.
   // We include prior artifacts; the system prompt + skills instruct generic + fixture rules.
   const checklistNote = 'Acceptance checklist (fixture-specific) may be provided by harness as final inputFile. Apply hard criteria from it only when domain matches the checklist case; otherwise rely on skills/validation-rules.md, backend-layer-design.md, persistence-table-design.md and output-contracts.md.';
@@ -271,6 +277,58 @@ async function afterPromptStep(
   return updateIntents;
 }
 
+/**
+ * T-016: deterministic re-validation at the end of the flow (no LLM call). The original coverage
+ * step may have run before all fan-outs landed their definitions (E-017: health report frozen at
+ * an early step while workflow/page definitions arrived later), leaving a stale report on the
+ * final screen. Called by agentNewSolutionFinal (org-materialization) to recompute the
+ * deterministic issues over the FINAL artifacts and re-save plan-health-report.json with an
+ * up-to-date readyToSaveDefs flag.
+ */
+export async function refreshSolutionHealthReport(
+  context: mls.msg.ExecutionContext,
+  step: mls.msg.AIAgentStep,
+): Promise<void> {
+  try {
+    const finalPlan = getFinalizeSolutionPlanOutput(context);
+    const mdm = getPlanMDMOutput(context);
+    const horizontals = getPlanHorizontalsOutput(context);
+    const plugins = getPlanPluginsOutput(context);
+    const persistenceIndex = getPlanPersistenceIndexOutput(context);
+    const tableDefinitions = await getPlanTableDefinitionOutputs(context);
+    const metricsIndex = getPlanMetricsIndexOutput(context);
+    const metricTableDefinitions = await getPlanMetricTableDefinitionOutputs(context);
+    const usecasePlan = getPlanUsecaseEntitiesOutput(context);
+    const workflowIndex = getPlanWorkflowIndexOutput(context);
+    const workflowDefinitions = await getPlanWorkflowDefinitionOutputs(context);
+    const agentsPlan = getPlanAgentsOutput(context);
+    const pageIndex = getPlanPageIndexOutput(context);
+    const pageDefinitions = await getPlanPageDefinitionOutputs(context);
+
+    const snapshot = buildCoverageSnapshot(
+      finalPlan, mdm, horizontals, plugins, persistenceIndex, tableDefinitions, metricsIndex,
+      metricTableDefinitions, usecasePlan, workflowIndex, workflowDefinitions, agentsPlan, pageIndex, pageDefinitions,
+    );
+    const issues = snapshot.deterministicIssues;
+    const errorCount = issues.filter(issue => issue.severity === 'error').length;
+    const warningCount = issues.filter(issue => issue.severity === 'warning').length;
+
+    const healthReport = {
+      summary: { passed: errorCount === 0, errorCount, warningCount },
+      issues,
+      checklistResults: null,
+      readyToSaveDefs: errorCount === 0,
+      deterministicOnly: true,
+      refreshedAt: new Date().toISOString(),
+      refreshedBy: 'agentNewSolutionFinal (T-016 deterministic re-validation)',
+    };
+    await saveNewSolutionPlanHealthReport(context, 'agentValidateSolutionCoverage', step, healthReport);
+    console.warn(`[refreshSolutionHealthReport] plan-health-report refreshed: ${errorCount} error(s), ${warningCount} warning(s) (T-016)`);
+  } catch (error) {
+    console.warn('[refreshSolutionHealthReport] skipped:', error);
+  }
+}
+
 interface RootInitialPlan {
   userPrompt: string;
   userLanguage: string;
@@ -342,6 +400,41 @@ function buildNextSteps(context: mls.msg.ExecutionContext): NewSolutionProcessNe
   return steps;
 }
 
+/**
+ * T-011: when a specialized agent refined the scope of an accepted decision, record the revision
+ * on the decision itself (revisedBy/revisedAt/revisedScope) instead of persisting the stale text
+ * (E-004 — the finalize decision included transactional entities in MDM, agentPlanMDM refined it).
+ * Today the only deterministic refinement source is agentPlanMDM (authoritative MDM scope).
+ */
+function applyDecisionRevisions(context: mls.msg.ExecutionContext, decisions: unknown[]): unknown[] {
+  try {
+    const mdm = getPlanMDMOutput(context);
+    if (mdm.status !== 'ok' || mdm.result.mdmDomains.length === 0) return decisions;
+    const revisedScope = {
+      mdmDomains: mdm.result.mdmDomains.map(domain => ({
+        domainId: domain.domainId,
+        masterEntities: domain.masterEntities,
+      })),
+    };
+    return decisions.map(decision => {
+      if (!decision || typeof decision !== 'object') return decision;
+      const record = decision as Record<string, unknown>;
+      const affected = Array.isArray(record.affectedArtifacts) ? record.affectedArtifacts.join(' ') : '';
+      const text = `${record.decisionId || ''} ${record.title || ''} ${record.decision || ''} ${affected}`.toLowerCase();
+      if (!text.includes('mdm')) return decision;
+      return {
+        ...record,
+        revisedBy: 'agentPlanMDM',
+        revisedAt: new Date().toISOString(),
+        revisedScope,
+      };
+    });
+  } catch (error) {
+    console.warn('[agentValidateSolutionCoverage](applyDecisionRevisions) skipped', error);
+    return decisions;
+  }
+}
+
 async function saveProcessRun(context: mls.msg.ExecutionContext, healthReport: unknown): Promise<void> {
   try {
     const initial = readRootInitialPlan(context);
@@ -349,7 +442,8 @@ async function saveProcessRun(context: mls.msg.ExecutionContext, healthReport: u
     let deferredItems: unknown[] = [];
     try {
       const finalize = getFinalizeSolutionPlanOutput(context);
-      decisions = finalize.result.decisions || [];
+      // T-011: annotate decisions whose scope was refined by specialized agents (E-004).
+      decisions = applyDecisionRevisions(context, finalize.result.decisions || []);
       deferredItems = finalize.result.deferredItems || [];
     } catch (error) {
       console.warn('[agentValidateSolutionCoverage](saveProcessRun) finalize output unavailable', error);
@@ -555,6 +649,52 @@ function buildCoverageSnapshot(
     }
   }
 
+  // T-015: every exposed usecase must have a consumer — a page BFF command, a workflow or an
+  // agent (E-008/E-016). Usecases that declare BFF commands but no page consumer are errors;
+  // the rest are warnings (they may be internal workflow/agent helpers).
+  const usecaseConsumers = new Map<string, string[]>();
+  const addUsecaseConsumer = (usecaseId: unknown, consumer: string) => {
+    if (typeof usecaseId !== 'string' || !usecaseId) return;
+    const list = usecaseConsumers.get(usecaseId) || [];
+    list.push(consumer);
+    usecaseConsumers.set(usecaseId, list);
+  };
+  for (const pd of pageDefinitions) {
+    for (const cmd of pd.result.bffCommands) {
+      for (const ref of cmd.usecaseRefs) addUsecaseConsumer(ref, `page:${pd.result.pageDefinition.pageId}`);
+    }
+  }
+  for (const wf of workflows) {
+    for (const ref of asStrings(wf.usecaseRefs)) addUsecaseConsumer(ref, `workflow:${wf.workflowId}`);
+  }
+  for (const agentPlan of agentsPlan.result.agents) {
+    for (const ref of agentPlan.usecaseRefs) addUsecaseConsumer(ref, `agent:${agentPlan.agentId}`);
+  }
+  for (const usecase of usecases) {
+    const uid = usecase.usecaseId as string;
+    if (!uid || usecaseConsumers.has(uid)) continue;
+    const declaresBffCommands = Array.isArray(usecase.commands) && usecase.commands.length > 0;
+    addIssue(
+      declaresBffCommands ? 'error' : 'warning',
+      'usecase.consumer.missing',
+      `usecase ${uid} has no consumer (no page BFF command, workflow or agent references it)${declaresBffCommands ? '; it declares BFF commands, so a page should expose it as an action' : ''}`,
+      `usecase.${uid}`,
+    );
+  }
+
+  // T-012: every approved horizontal artifact must have produced a plan item (draft or reference).
+  const plannedHorizontalIds = new Set(horizontals.result.horizontalModules.map(m => m.horizontalModuleId));
+  fp.approvedArtifacts.horizontalModules.forEach((approved, i) => {
+    if (!approved || typeof approved !== 'object') return;
+    const record = approved as Record<string, unknown>;
+    if (record.priority === 'never') return;
+    const rawId = record.horizontalModuleId ?? record.artifactId ?? record.signal;
+    const id = normalizeHorizontalModuleId(rawId);
+    if (!id || !plannedHorizontalIds.has(id)) {
+      addIssue('error', 'horizontal.artifact.missing', `approved horizontal module ${String(rawId || `#${i}`)} produced no plan item/artifact`, `approvedArtifacts.horizontalModules[${i}]`);
+    }
+  });
+
   // Dashboard actors.
   metricsIndex.result.dashboardPages.forEach((d, i) => {
     const rec = d as Record<string, unknown>;
@@ -605,6 +745,55 @@ function buildCoverageSnapshot(
 
 function asStrings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+/**
+ * T-010: deterministic backfill of workflow.relatedPages (no LLM call). Derives page → workflow
+ * relations from pageDefinition.flowRefs (direct workflow refs) and from bffCommands.usecaseRefs
+ * intersecting workflow.usecaseRefs, updates the in-memory outputs and re-saves only the changed
+ * l4/workflows/*.defs.ts artifacts. Best-effort: never throws.
+ */
+async function backfillWorkflowRelatedPages(
+  context: mls.msg.ExecutionContext,
+  step: mls.msg.AIAgentStep,
+  workflowDefinitions: PlanWorkflowDefinitionOutput[],
+  pageDefinitions: PlanPageDefinitionOutput[],
+): Promise<void> {
+  try {
+    if (pageDefinitions.length === 0) return;
+
+    for (const workflowOutput of workflowDefinitions) {
+      const workflow = workflowOutput.result.workflowDefinition;
+      const workflowId = workflow.workflowId;
+      if (!workflowId) continue;
+      const workflowUsecases = new Set(asStrings(workflow.usecaseRefs));
+      const related = new Set(asStrings(workflow.relatedPages));
+      const before = related.size;
+
+      for (const pageOutput of pageDefinitions) {
+        const page = pageOutput.result.pageDefinition;
+        if (!page.pageId) continue;
+        const flowRefs = [
+          ...asStrings(page.flowRefs?.experienceFlows),
+          ...asStrings(page.flowRefs?.entityLifecycles),
+          ...asStrings(page.flowRefs?.taskWorkflows),
+          ...asStrings(page.flowRefs?.automations),
+        ];
+        const direct = flowRefs.includes(workflowId);
+        const viaUsecase = !direct && workflowUsecases.size > 0
+          && pageOutput.result.bffCommands.some(cmd => cmd.usecaseRefs.some(ref => workflowUsecases.has(ref)));
+        if (direct || viaUsecase) related.add(page.pageId);
+      }
+
+      if (related.size === before) continue;
+      const relatedPages = [...related].sort();
+      workflow.relatedPages = relatedPages;
+      console.warn(`[agentValidateSolutionCoverage] backfilled relatedPages for workflow ${workflowId}: ${relatedPages.join(', ')} (T-010)`);
+      await saveNewSolutionPlanArtifacts(context, 'agentPlanWorkflowDefinition', step, workflowOutput);
+    }
+  } catch (error) {
+    console.warn('[agentValidateSolutionCoverage] relatedPages backfill skipped:', error);
+  }
 }
 
 function asArray(value: unknown): unknown[] {

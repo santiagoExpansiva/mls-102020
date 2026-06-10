@@ -80,17 +80,19 @@ const entityFieldSchema = {
   },
 };
 
+// T-001: fields is required (min 1) — entities without a declared shape cannot be
+// materialized into .defs.ts downstream (see mls-102045 analiseErros E-001).
 const ontologyEntitySchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['title', 'description'],
+  required: ['title', 'description', 'fields'],
   properties: {
     entityId: stringSchema,
     title: stringSchema,
     description: stringSchema,
     kind: stringSchema,
     ownership: { enum: ['moduleOwned', 'mdmOwned', 'horizontalOwned', 'pluginOwned', 'external'] },
-    fields: { type: 'array', items: entityFieldSchema },
+    fields: { type: 'array', items: entityFieldSchema, minItems: 1 },
     statusEnum: stringArraySchema,
     lifecycleStates: stringArraySchema,
     rulesApplied: stringArraySchema,

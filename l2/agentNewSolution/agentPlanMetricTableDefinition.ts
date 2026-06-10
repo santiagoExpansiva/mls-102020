@@ -11,10 +11,11 @@ import {
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
   getPlannerOutputsWithFileFallback,
+  reconcileParallelDynamicFanOut,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
-import { saveNewSolutionAgentTracePayload, saveNewSolutionPlanArtifacts } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { readSavedPlanArtifactDataList, saveNewSolutionAgentTracePayload, saveNewSolutionPlanArtifacts } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import { getPlanMetricsIndexOutput } from '/_102020_/l2/agentNewSolution/agentPlanMetricsIndex.js';
 import type { PlanMetricsIndexOutput } from '/_102020_/l2/agentNewSolution/agentPlanMetricsIndex.js';
 import { getPlanPersistenceIndexOutput } from '/_102020_/l2/agentNewSolution/agentPlanPersistenceIndex.js';
@@ -289,9 +290,36 @@ async function afterPromptStep(
     cleaner = saved.length > 0 ? 'input_output' : 'input';
   }
 
+  // T-006: when this child is the last live one, reconcile the approved index selectors vs the
+  // saved artifacts; re-spawn missing children (limited rounds) before the fan-out is finalized.
+  const reconcileIntents = await buildMetricTableFanOutReconcileIntents(context, parentStep, step, hookSequential);
+
   // Parallel fan-out: the metrics index opened all metric-table children at once, so this step
   // only validates/saves its own table and reports status — it does NOT chain the next one.
-  return [createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, cleaner)];
+  return [...reconcileIntents, createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, cleaner)];
+}
+
+// T-006: expected selectors come from the approved metrics index; saved selectors from the
+// plan artifacts manifest ('metricTable' artifacts). Best-effort: never throws.
+async function buildMetricTableFanOutReconcileIntents(
+  context: mls.msg.ExecutionContext,
+  parentStep: mls.msg.AIAgentStep,
+  step: mls.msg.AIAgentStep,
+  hookSequential: number,
+): Promise<mls.msg.AgentIntent[]> {
+  try {
+    const expectedSelectors = getPlanMetricsIndexOutput(context).result.metricTables.map(table => table.metricTableId);
+    const savedSelectors = new Set<string>();
+    for (const data of await readSavedPlanArtifactDataList(context, 'metricTable')) {
+      const table = data.metricTableDefinition;
+      const id = table && typeof table === 'object' ? (table as Record<string, unknown>).metricTableId : undefined;
+      if (typeof id === 'string' && id) savedSelectors.add(id);
+    }
+    return reconcileParallelDynamicFanOut(context, parentStep, step, hookSequential, { expectedSelectors, savedSelectors });
+  } catch (error) {
+    console.warn('[agentPlanMetricTableDefinition] fan-out reconcile skipped:', error);
+    return [];
+  }
 }
 
 // TODO-FINAL-010/023: also reads metric table definitions back from saved .defs.ts when the
@@ -458,6 +486,7 @@ Do not return prose.
 - hypertable.chunkTimeInterval must define the TimescaleDB chunk policy, such as "7 days" or another explicit interval.
 - hypertable.retentionPolicy must define the retention window.
 - hypertable.indexes must include at least one index whose columns include the timeColumn, plus dimension indexes when dimensions exist.
+- dimensions must include the FK columns of the source entities' direct ontology relationships (e.g. Deal related to Lead means this metric table needs a lead_id dimension), and never drop the dimensions declared in the metrics index item.
 - Declare that pages and BFF controllers cannot update this metric table directly.
 - updatePolicy.updatedByLayer must be layer_3_usecases.
 - defsPlan.fileName should be stable and metric-table-specific, such as tables/{metricTableId}.defs.ts.

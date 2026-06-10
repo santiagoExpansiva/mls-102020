@@ -47,6 +47,60 @@ export interface PlanMDMResult {
 
 export type PlanMDMOutput = PlannerOutput<PlanMDMResult>;
 
+// T-003: shared MDM infrastructure project (mls-102034, l1/mdm). When available, MDM domains are
+// planned as references to it instead of new l5/{domainId}/module.defs.ts drafts (E-002, E-018).
+export const MDM_INFRASTRUCTURE_PROJECT = 102034;
+
+// Logical shared tables provided by 102034 (see mls-102034/l1/mdm/tableNames.ts; env suffix omitted).
+const MDM_SHARED_TABLES = [
+  'mdm_documents',
+  'mdm_documents_entities_index',
+  'mdm_documents_prospects_index',
+  'mdm_kv',
+  'mdm_relationship',
+  'mdm_prospect_relationship',
+  'mdm_audit_log',
+  'mdm_tag',
+  'mdm_comment',
+  'mdm_attachment',
+  'mdm_number_sequence',
+  'mdm_outbox',
+  'mdm_replication_failures',
+  'mdm_monitoring_write',
+  'mdm_error_log',
+  'mdm_status_history',
+];
+
+export interface MdmInventory {
+  available: boolean;
+  infrastructureProject: number;
+  moduleRef: string; // '102034' when available, '' otherwise
+  sharedTables: string[];
+  notes: string[];
+}
+
+// T-003: analogous to the pluginInventory of agentPlanPlugins — tells the agent (and the
+// artifact builder) whether the platform's shared MDM infrastructure is available.
+export function buildMdmInventory(): MdmInventory {
+  const actualProject = mls.actualProject || 0;
+  const dependencies = mls.l5.getProjectDependencies(actualProject, false) || [];
+  const inDependencies = dependencies.includes(MDM_INFRASTRUCTURE_PROJECT);
+  const hasFiles = Object.values(mls.stor.files).some(file =>
+    file.project === MDM_INFRASTRUCTURE_PROJECT
+    && file.status !== 'deleted'
+    && (file.folder === 'mdm' || file.folder.startsWith('mdm/')));
+  const available = inDependencies || hasFiles;
+  return {
+    available,
+    infrastructureProject: MDM_INFRASTRUCTURE_PROJECT,
+    moduleRef: available ? String(MDM_INFRASTRUCTURE_PROJECT) : '',
+    sharedTables: available ? [...MDM_SHARED_TABLES] : [],
+    notes: available
+      ? [`Shared MDM infrastructure exists (project ${MDM_INFRASTRUCTURE_PROJECT}, l1/mdm): master data lives in the generic shared tables; MDM domains are recorded as references to it, never as new persistence modules.`]
+      : ['No shared MDM infrastructure found; MDM domains may be planned as new module drafts.'],
+  };
+}
+
 const planMdmToolSchema = createPlannerVariableToolSchema(
   PLAN_MDM_TOOL_NAME,
   'Submit mandatory MDM planning for the newSolution final plan.',
@@ -88,6 +142,7 @@ async function beforePromptStep(
   if (!context.task) throw new Error(`[${agent.agentName}](beforePromptStep) task invalid`);
 
   const finalPlan = getFinalizeSolutionPlanOutput(context);
+  const mdmInventory = buildMdmInventory(); // T-003
   return [
     createPlannerPromptReadyIntent(
       context,
@@ -95,7 +150,7 @@ async function beforePromptStep(
       hookSequential,
       args,
       systemPrompt.split('{{toolName}}').join(PLAN_MDM_TOOL_NAME),
-      buildHumanPrompt(args, finalPlan),
+      buildHumanPrompt(args, finalPlan, mdmInventory),
       planMdmToolSchema,
       PLAN_MDM_TOOL_NAME
     ),
@@ -136,9 +191,40 @@ async function afterPromptStep(
   // so usecase materialization and l1 mock generation can use the MDM entities.
   if (status === 'completed' && output) {
     const ontologyEntities = getFinalizeSolutionPlanOutput(context).result.ontology.entities;
-    await saveNewSolutionPlanArtifacts(context, agent.agentName, step, output, { ontologyEntities });
+    // T-002: hard gate — an mdmEntity candidate with fields: [] would materialize an empty
+    // {Entity}.defs.ts (E-001). Fail the step instead of saving silently.
+    const missing = output.status === 'ok' ? findMasterEntitiesWithoutFields(output.result.mdmDomains, ontologyEntities) : [];
+    if (missing.length > 0) {
+      status = 'failed';
+      traceMsg = `agentPlanMDM: master entities without ontology fields (cannot materialize .defs.ts): ${missing.join(', ')}`;
+      console.error(`[${agent.agentName}](afterPromptStep) ${traceMsg}`);
+    } else {
+      // T-003: when the shared MDM infrastructure exists, domain candidates are saved as
+      // references to it (moduleRef) instead of new l5/{domainId}/module.defs.ts drafts.
+      const mdmInventory = buildMdmInventory();
+      await saveNewSolutionPlanArtifacts(context, agent.agentName, step, output, {
+        ontologyEntities,
+        mdmInfrastructureModuleRef: mdmInventory.available ? mdmInventory.moduleRef : undefined,
+      });
+    }
   }
   return [createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined)];
+}
+
+// T-002: every masterEntity must resolve to an ontology entity with at least one field,
+// since the mdmEntity candidate copies its shape from ontologyEntity.fields.
+function findMasterEntitiesWithoutFields(domains: MdmDomainPlan[], ontologyEntities: Record<string, unknown>): string[] {
+  const missing: string[] = [];
+  for (const domain of domains) {
+    for (const entityValue of domain.masterEntities) {
+      const entityName = typeof entityValue === 'string' ? entityValue : '';
+      if (!entityName) continue;
+      const entity = ontologyEntities[entityName];
+      const fields = entity && typeof entity === 'object' ? (entity as Record<string, unknown>).fields : undefined;
+      if (!Array.isArray(fields) || fields.length === 0) missing.push(`${domain.domainId}.${entityName}`);
+    }
+  }
+  return missing;
 }
 
 export function getPlanMDMOutput(context: mls.msg.ExecutionContext): PlanMDMOutput {
@@ -180,7 +266,7 @@ function validatePlanMDMOutput(output: PlanMDMOutput): void {
   if (output.status === 'needs_input' && output.questions.length === 0) throw new Error('needs_input MDM plan must include questions');
 }
 
-function buildHumanPrompt(args: string, finalPlan: FinalSolutionPlanOutput): string {
+function buildHumanPrompt(args: string, finalPlan: FinalSolutionPlanOutput, mdmInventory: MdmInventory): string {
   return `## Planned step args
 ${args}
 
@@ -189,6 +275,9 @@ ${JSON.stringify(finalPlan, null, 2)}
 
 ## MDM policy
 ${JSON.stringify(mdmPolicy, null, 2)}
+
+## Platform MDM inventory
+${JSON.stringify(mdmInventory, null, 2)}
 `;
 }
 
@@ -224,4 +313,5 @@ Do not return prose.
 - Do not hard-code sample fixture entities.
 - Declare sourceOfTruth and consumers.
 - Reference pages, workflows, plugins, agents, usecases, and metric tables that consume the master data when known.
+- When the platform MDM inventory marks shared MDM infrastructure as available, plan domains assuming master data is stored in that shared infrastructure; set sourceOfTruth to the shared MDM platform (project in the inventory) and never propose a new MDM persistence module.
 `;

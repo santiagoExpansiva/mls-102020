@@ -177,6 +177,9 @@ export interface SavePlanArtifactsOptions {
   // Ontology entities (PascalCase id -> entity with fields) from the final plan. Used to enrich
   // MDM l1 reference artifacts with the entity shape for mock/usecase materialization.
   ontologyEntities?: Record<string, unknown>;
+  // T-003: project id of the shared MDM infrastructure (e.g. '102034') when it is available.
+  // When set, mdmDomain candidates become reference-only with moduleRef instead of module drafts.
+  mdmInfrastructureModuleRef?: string;
 }
 
 export async function saveNewSolutionPlanArtifacts(
@@ -824,16 +827,19 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
 
   // TODO-FINAL-015: MDM domains. Same create-if-missing / reference-if-exists rule as horizontals
   // (decision: MDM also gets a draft l5/{domainId}/module.defs.ts when no module exists yet).
+  // T-003: when the shared MDM infrastructure exists (options.mdmInfrastructureModuleRef, e.g.
+  // '102034'), every domain is a reference to it — no l5/{domainId}/module.defs.ts draft (E-002/E-018).
   if (agentName === 'agentPlanMDM') {
     const domains = Array.isArray(result.mdmDomains) ? result.mdmDomains : [];
     const existingFolders = getExistingModuleFolders();
     const ontologyEntities = isRecord(options?.ontologyEntities) ? options!.ontologyEntities! : {};
-    return domains.flatMap((value): PlanArtifactCandidate[] => {
+    const infraModuleRef = readString(options?.mdmInfrastructureModuleRef) || '';
+    const mdmCandidates = domains.flatMap((value): PlanArtifactCandidate[] => {
       const domain = getRecord(value);
       const id = readString(domain?.domainId);
       if (!domain || !id) return [];
       const folder = normalizeModuleFolderName(id, id);
-      const referenceOnly = existingFolders.has(folder);
+      const referenceOnly = !!infraModuleRef || existingFolders.has(folder);
       const candidates: PlanArtifactCandidate[] = [{
         artifactType: 'mdmDomain',
         artifactId: id,
@@ -846,6 +852,7 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
           domainId: id,
           plannedByModule: moduleName,
           referencesExisting: referenceOnly,
+          ...(infraModuleRef ? { moduleRef: infraModuleRef } : {}),
           domain,
         },
       }];
@@ -871,6 +878,7 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
             generateTable: false,
             moduleId: moduleName,
             domainId: id,
+            ...(infraModuleRef ? { infrastructureModuleRef: infraModuleRef } : {}), // T-003
             domainTitle: readString(domain.title),
             sourceOfTruth: readString(domain.sourceOfTruth),
             governanceRules,
@@ -883,6 +891,19 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
 
       return candidates;
     });
+
+    // T-004: when MDM domains resolve to the shared infrastructure, declare it as a project
+    // dependency in l5/project.json (merged, never overwritten).
+    if (infraModuleRef && mdmCandidates.length > 0) {
+      mdmCandidates.push({
+        artifactType: 'project',
+        artifactId: 'project',
+        exportName: 'projectPlan',
+        moduleName,
+        data: { dependencies: [{ projectId: infraModuleRef, kind: 'mdm-infrastructure' }] },
+      });
+    }
+    return mdmCandidates;
   }
 
   if (agentName === 'agentPlanPlugins') {
@@ -1197,7 +1218,20 @@ async function mergeAndSaveProjectJson(
     if (name) moduleMap.set(name, m); // add or replace
   }
 
-  const merged = { ...base, modules: [...moduleMap.values()] };
+  // T-004: merge project dependencies (e.g. { projectId: '102034', kind: 'mdm-infrastructure' }),
+  // deduped by projectId+kind, preserving existing entries.
+  const existingDeps = Array.isArray(base.dependencies) ? base.dependencies.filter(isRecord) : [];
+  const incomingDeps = Array.isArray(newData.dependencies) ? newData.dependencies.filter(isRecord) : [];
+  const depsMap = new Map<string, Record<string, unknown>>();
+  for (const dep of [...existingDeps, ...incomingDeps]) {
+    depsMap.set(`${readString(dep.projectId)}:${readString(dep.kind)}`, dep);
+  }
+
+  const merged = {
+    ...base,
+    modules: [...moduleMap.values()],
+    ...(depsMap.size > 0 ? { dependencies: [...depsMap.values()] } : {}),
+  };
   await saveStorContent(fileInfo, `${JSON.stringify(merged, null, 2)}\n`, false);
 }
 

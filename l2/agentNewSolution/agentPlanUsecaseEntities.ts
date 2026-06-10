@@ -463,4 +463,5 @@ Set ownership based on who owns the table:
 - "horizontalOwned"— entities excluded with ownership "horizontalOwned"
 - "pluginOwned"    — entities excluded with ownership "pluginOwned"
 MDM-owned tables must still appear in readsTables/writesTables so the materializer knows the usecase depends on MDM, but with ownership "mdmOwned".
+A usecase may declare a metric table in writesTables ONLY when it actually updates one of that table's measures (see the metrics index). Purely descriptive edits (notes, comments, labels) must not write metric tables.
 `;
