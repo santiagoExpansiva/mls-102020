@@ -17,6 +17,7 @@ import {
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import {
+  readSavedPlanArtifactDataList,
   saveNewSolutionAgentTracePayload,
   saveNewSolutionPlanArtifacts,
   saveNewSolutionPlanHealthReport,
@@ -237,7 +238,7 @@ async function afterPromptStep(
     } else if (output.status === 'needs_input') {
       traceMsg = 'agentValidateSolutionCoverage returned status needs_input; keeping validation draft.';
     } else {
-      // TODO-FINAL-023/024: coverage is no longer a late blocking gate for the end user.
+      // /024: coverage is no longer a late blocking gate for the end user.
       // Errors are caught early by per-index checkpoints and critic/repair; here the result
       // becomes a non-blocking technical report (planHealthReport) in trace/manifest.
       const readinessError = getCoverageReadinessError(output);
@@ -323,7 +324,8 @@ export async function refreshSolutionHealthReport(
       refreshedBy: 'agentNewSolutionFinal (T-016 deterministic re-validation)',
     };
     await saveNewSolutionPlanHealthReport(context, 'agentValidateSolutionCoverage', step, healthReport);
-    console.warn(`[refreshSolutionHealthReport] plan-health-report refreshed: ${errorCount} error(s), ${warningCount} warning(s) (T-016)`);
+    // E2-005: informative only (the resume screen already shows the report) — keep out of warn/error.
+    console.log(`[refreshSolutionHealthReport] plan-health-report refreshed: ${errorCount} error(s), ${warningCount} warning(s)`);
   } catch (error) {
     console.warn('[refreshSolutionHealthReport] skipped:', error);
   }
@@ -357,16 +359,28 @@ function readRootInitialPlan(context: mls.msg.ExecutionContext): RootInitialPlan
   };
 }
 
-function buildNextSteps(context: mls.msg.ExecutionContext): NewSolutionProcessNextStep[] {
+async function buildNextSteps(context: mls.msg.ExecutionContext): Promise<NewSolutionProcessNextStep[]> {
   const steps: NewSolutionProcessNextStep[] = [];
   const existingFolders = getExistingModuleFolders();
 
   try {
+    // E2-004: decide by the saved artifact's referencesExisting flag, not by folder existence —
+    // the draft l5/{id}/module.defs.ts written during THIS run creates the folder and would hide
+    // the "create module" next step. referencesExisting === false ⇒ draft created now ⇒ next step.
+    const referencesExistingById = new Map<string, boolean>();
+    for (const data of await readSavedPlanArtifactDataList(context, 'horizontalModule')) {
+      const id = typeof data.horizontalModuleId === 'string' ? data.horizontalModuleId : '';
+      if (id && typeof data.referencesExisting === 'boolean') referencesExistingById.set(id, data.referencesExisting);
+    }
+
     const horizontals = getPlanHorizontalsOutput(context);
     for (const module of horizontals.result.horizontalModules) {
       const folder = normalizeModuleFolderName(module.horizontalModuleId, module.horizontalModuleId);
-      // referenceOnly modules already exist — nothing to create, so they are not a "next step".
-      if (existingFolders.has(folder)) continue;
+      const referencesExisting = referencesExistingById.get(module.horizontalModuleId);
+      // reference modules already exist — nothing to create, so they are not a "next step".
+      if (referencesExisting === true) continue;
+      // no saved artifact flag: fall back to the previous folder heuristic.
+      if (referencesExisting === undefined && existingFolders.has(folder)) continue;
       steps.push({
         id: `horizontalModule:${module.horizontalModuleId}`,
         kind: 'horizontalModule',
@@ -453,14 +467,16 @@ async function saveProcessRun(context: mls.msg.ExecutionContext, healthReport: u
       runId: 'newSolution',
       kind: 'newSolution',
       startedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
+      // finishedAt is set ONLY by the resume screen's "Encerrar" (_onFinish). Setting it here put
+      // the widget in view/maintenance mode straight away (no "Encerrar" button) and the final
+      // clarification step never completed (erros.md rodada 2, item 3).
       initialPrompt: initial.userPrompt,
       userLanguage: initial.userLanguage,
       decisions,
       deferredItems,
       openDetails: initial.openDetails,
       healthReport,
-      nextSteps: buildNextSteps(context),
+      nextSteps: await buildNextSteps(context),
     };
 
     await saveNewSolutionProcessRun(context, run);
@@ -563,9 +579,9 @@ function buildHumanPrompt(
   pageDefinitions: PlanPageDefinitionOutput[],
   checklistNote: string,
 ): string {
-  // TODO-FINAL-008: send a compact coverage snapshot (ids, counts, cross-ref matrix and
+  // send a compact coverage snapshot (ids, counts, cross-ref matrix and
   // deterministic pre-computed issues) instead of every full artifact. Coverage is now a
-  // non-blocking technical report (TODO-FINAL-023/024); the heavy per-artifact checks already
+  // non-blocking technical report; the heavy per-artifact checks already
   // ran in the per-index checkpoints and critic/repair.
   const snapshot = buildCoverageSnapshot(
     finalPlan, mdm, horizontals, plugins, persistenceIndex, tableDefinitions, metricsIndex,
@@ -636,10 +652,13 @@ function buildCoverageSnapshot(
   }
 
   // Workflow definition refs.
+  // E2-001: persistenceRefs is the superset of what the workflow writes (T-009), so it may
+  // legitimately contain metric table ids — validate against tableIds UNION metricIds.
+  const persistenceRefIds = new Set<string>([...tableIds, ...metricIds]);
   for (const wf of workflows) {
     const wid = wf.workflowId as string;
     for (const ref of asStrings(wf.persistenceRefs)) {
-      if (tableIds.size > 0 && !tableIds.has(ref)) addIssue('error', 'workflow.persistenceRef.unknown', `workflow ${wid} references unknown table ${ref}`, `workflow.${wid}`);
+      if (persistenceRefIds.size > 0 && !persistenceRefIds.has(ref)) addIssue('error', 'workflow.persistenceRef.unknown', `workflow ${wid} references unknown table ${ref}`, `workflow.${wid}`);
     }
     for (const ref of asStrings(wf.usecaseRefs)) {
       if (usecaseIds.size > 0 && !usecaseIds.has(ref)) addIssue('warning', 'workflow.usecaseRef.unknown', `workflow ${wid} references unknown usecase ${ref}`, `workflow.${wid}`);
@@ -761,18 +780,21 @@ async function backfillWorkflowRelatedPages(
 ): Promise<void> {
   try {
     if (pageDefinitions.length === 0) return;
+    // E2-003: relatedPages is a DERIVED field — rebuild it from scratch and only keep ids that
+    // exist as real pages. Never union with the LLM-generated list (it predates the page index
+    // and contains invented page ids).
+    const validPageIds = new Set(pageDefinitions.map(pd => pd.result.pageDefinition.pageId).filter(Boolean));
 
     for (const workflowOutput of workflowDefinitions) {
       const workflow = workflowOutput.result.workflowDefinition;
       const workflowId = workflow.workflowId;
       if (!workflowId) continue;
       const workflowUsecases = new Set(asStrings(workflow.usecaseRefs));
-      const related = new Set(asStrings(workflow.relatedPages));
-      const before = related.size;
+      const related = new Set<string>();
 
       for (const pageOutput of pageDefinitions) {
         const page = pageOutput.result.pageDefinition;
-        if (!page.pageId) continue;
+        if (!page.pageId || !validPageIds.has(page.pageId)) continue;
         const flowRefs = [
           ...asStrings(page.flowRefs?.experienceFlows),
           ...asStrings(page.flowRefs?.entityLifecycles),
@@ -785,10 +807,11 @@ async function backfillWorkflowRelatedPages(
         if (direct || viaUsecase) related.add(page.pageId);
       }
 
-      if (related.size === before) continue;
       const relatedPages = [...related].sort();
+      const current = asStrings(workflow.relatedPages).slice().sort();
+      if (JSON.stringify(relatedPages) === JSON.stringify(current)) continue;
       workflow.relatedPages = relatedPages;
-      console.warn(`[agentValidateSolutionCoverage] backfilled relatedPages for workflow ${workflowId}: ${relatedPages.join(', ')} (T-010)`);
+      console.log(`[agentValidateSolutionCoverage] backfilled relatedPages for workflow ${workflowId}: ${relatedPages.join(', ')} (T-010)`);
       await saveNewSolutionPlanArtifacts(context, 'agentPlanWorkflowDefinition', step, workflowOutput);
     }
   } catch (error) {

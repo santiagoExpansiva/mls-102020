@@ -267,7 +267,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-023/024: hold the step open and run critic/repair before metric table definitions.
+  // /024: hold the step open and run critic/repair before metric table definitions.
   if (status === 'completed' && output && output.status === 'ok') {
     return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'metricsIndex');
   }
@@ -281,7 +281,7 @@ async function afterPromptStep(
 }
 
 export function getPlanMetricsIndexOutput(context: mls.msg.ExecutionContext): PlanMetricsIndexOutput {
-  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  // prefer the latest repaired index when a repair step exists.
   return getPlannerOutputWithRepair(context, 'agentPlanMetricsIndex', 'metricsIndex', planMetricsIndexConfig, output => validatePlanMetricsIndexOutput(output, getPlanningContextSnapshot(context).initialMetricsRequested));
 }
 
@@ -428,7 +428,7 @@ function buildHumanPrompt(
   tableDefinitions: PlanTableDefinitionOutput[],
   initialMetricsRequested: boolean,
 ): string {
-  // TODO-FINAL-030 (R1): compact context. The metrics index needs approved metrics/dashboards,
+  // compact context. The metrics index needs approved metrics/dashboards,
   // capabilities and the base tables to derive metrics from — not the full final plan or full
   // table definitions (columns). Table summaries (id/name/rootEntity) are enough.
   const reduced = {

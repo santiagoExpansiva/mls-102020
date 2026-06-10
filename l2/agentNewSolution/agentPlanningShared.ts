@@ -166,7 +166,7 @@ export function getPlannerOutputs<T>(
 }
 
 /**
- * TODO-FINAL-010/023: read fan-out definition outputs preferring task payloads, falling back
+ * read fan-out definition outputs preferring task payloads, falling back
  * to the saved .defs.ts artifacts when the payload was cleared with cleaner="input_output".
  * Saved artifacts are reconstructed into PlannerOutput via config.normalizeResult; task payloads
  * override file copies (more recent within the same run). Results are deduped/sorted by getId.
@@ -376,7 +376,7 @@ export function reconcileParallelDynamicFanOut(
 
 //#endregion
 
-// TODO-FINAL-023 / TODO-FINAL-024: critic/repair checkpoint support for plan indices.
+// critic/repair checkpoint support for plan indices.
 export const CRITIC_PLAN_INDEX_AGENT_NAME = 'agentCriticPlanIndex';
 export const REPAIR_PLAN_INDEX_AGENT_NAME = 'agentRepairPlanIndex';
 export const MAX_PLAN_INDEX_CRITIC_ATTEMPTS = 3; // initial critic + up to 2 repair/critic rounds
@@ -443,7 +443,7 @@ export function createHoldIndexForReviewIntents(
       indexStep,
       hookSequential,
       'in_progress',
-      `index generated; waiting critic/repair checkpoint for ${indexName} (TODO-FINAL-023/024)`,
+      `index generated; waiting critic/repair checkpoint for ${indexName}`,
     ),
     createPlanIndexReviewStepIntent(context, indexStep, CRITIC_PLAN_INDEX_AGENT_NAME, indexName, 1, `Review ${indexName} (critic 1)`),
   ];
@@ -487,7 +487,7 @@ export function findLatestPlanIndexReviewStep(
 }
 
 /**
- * TODO-FINAL-024: read a plan index output preferring the latest completed repaired version.
+ * read a plan index output preferring the latest completed repaired version.
  * Falls back to the original index agent payload when no repair step exists.
  */
 export function getPlannerOutputWithRepair<T>(
@@ -519,7 +519,7 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// TODO-FINAL-006..009: token-reduction helpers. Each definition/index agent only needs the
+// ..009: token-reduction helpers. Each definition/index agent only needs the
 // artifacts its selector references, not the full plan. These build reduced, per-item context.
 
 /** Keep only records whose id (any of `keys`) is in `ids`. Non-records are dropped. */
@@ -548,7 +548,7 @@ export function summarizeRecords(items: unknown[] | undefined, keys: string[]): 
 }
 
 /**
- * TODO-FINAL-030 (R1): compact view of the final solution plan for the index agents' prompts.
+ * (R1): compact view of the final solution plan for the index agents' prompts.
  * Drops the heavy parts (ontology entity `fields` by default, full approvedArtifacts bodies) and
  * keeps ids/titles/refs — which is all the index agents need to decide scope. Cuts the biggest
  * input contributor (the full final plan, ~29KB) to a few KB. Pass includeOntologyFields=true
@@ -595,7 +595,7 @@ export function compactFinalPlan(finalPlanResultValue: unknown, includeOntologyF
 }
 
 /**
- * TODO-FINAL-019: single source for the actor contract. All agents/validators compare against
+ * single source for the actor contract. All agents/validators compare against
  * `finalPlan.result.actors[].actorId` — never hard-coded names ("admin", "administrator", ...)
  * or translations. This keeps the flow language-agnostic (pt-BR/en-US/...). Pass the actors array.
  */

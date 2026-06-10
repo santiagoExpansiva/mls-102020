@@ -1,6 +1,6 @@
 /// <mls fileReference="_102020_/l2/agentNewSolution/agentRepairPlanIndex.ts" enhancement="_102027_/l2/enhancementAgent"/>
 
-// TODO-FINAL-024
+// 
 // Generic repair agent for plan indices. One repair run per index, parameterized by the
 // index name in the step args. It receives the current index, the critique report (LLM
 // critique payload or the deterministic local findings), the index contract/schema and a

@@ -1,10 +1,10 @@
 /// <mls fileReference="_102020_/l2/agentNewSolution/agentCriticPlanIndex.ts" enhancement="_102027_/l2/enhancementAgent"/>
 
-// TODO-FINAL-023 / TODO-FINAL-024
+// 
 // Generic critic agent for plan indices. One critic run per index, parameterized by the
 // index name in the step args. Flow per index:
 // 1. The index agent holds its step in_progress and adds this critic as a child step.
-// 2. beforePromptStep runs the deterministic local checkpoint (TODO-FINAL-023):
+// 2. beforePromptStep runs the deterministic local checkpoint:
 //    - local errors  -> skip the LLM, send the index straight to repair (synthetic critique);
 //    - skip condition (empty index) -> approve directly without LLM;
 //    - otherwise -> focused critic LLM call for this single index.
@@ -90,7 +90,7 @@ async function beforePromptStep(
     return approveIndexIntents(context, config, indexStep, step, hookSequential, output, healthReport);
   }
 
-  // TODO-FINAL-023: deterministic local errors go straight to repair, no critic LLM needed.
+  // deterministic local errors go straight to repair, no critic LLM needed.
   if (localFindings.errors.length > 0) {
     // T-017: when every local error has a mechanical repair (id normalization / referential
     // integrity), grant extra attempts — they do not consume the semantic critic budget.
@@ -226,7 +226,7 @@ async function approveIndexIntents(
   output: PlannerOutput<unknown>,
   healthReport: PlanIndexHealthReport,
 ): Promise<mls.msg.AgentIntent[]> {
-  // TODO-FINAL-023: freeze the approved index in the manifest/checkpoint before releasing children.
+  // freeze the approved index in the manifest/checkpoint before releasing children.
   await config.onApproved(context, indexStep, output, healthReport);
 
   const indexParent = findParentStepOfStep(context, indexStep.stepId);
@@ -238,7 +238,7 @@ async function approveIndexIntents(
       hookSequential,
       'completed',
       `${config.indexName} approved (attempt ${healthReport.attempts}); checkpoint frozen`,
-      // TODO-FINAL-030: the critique payload is dead after approval (healthReport already frozen in
+      // the critique payload is dead after approval (healthReport already frozen in
       // the checkpoint, no further getLatestCritiqueJson read) — clear it fully to keep the task light.
       'input_output',
     ),
@@ -248,7 +248,24 @@ async function approveIndexIntents(
       indexStep,
       hookSequential,
       'completed',
-      `${config.indexName} frozen after critic approval (TODO-FINAL-023/024)`,
+      `${config.indexName} frozen after critic approval`,
+      'input',
+    ),
+    // E2-006 (strategic4Clean F1, belt-and-braces): re-send a cleaner-only completion for the
+    // index step — same status, NO traceMsg. The index step is often auto-completed by the
+    // orchestrator when its last critic/repair child finishes, and in the observed run the
+    // cleaner of the intent above was not applied (inputs+tools of the 5 index steps stayed in
+    // the task, ~94KB). This extra intent hits the backend "clean & save" fast path
+    // (cleaner && step.status === status && !traceMsg), which demonstrably works in production
+    // (it is how the blueprint payload is cleared by the finalize step). Idempotent on backends
+    // that already cleaned via the intent above.
+    createPlannerUpdateStatusIntent(
+      context,
+      (indexParent && indexParent.type === 'agent' ? indexParent : indexStep) as mls.msg.AIAgentStep,
+      indexStep,
+      hookSequential,
+      'completed',
+      undefined,
       'input',
     ),
   ];

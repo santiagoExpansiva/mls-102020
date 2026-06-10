@@ -262,7 +262,7 @@ async function afterPromptStep(
 
   await saveNewSolutionAgentTracePayload(context, agent.agentName, step);
 
-  // TODO-FINAL-023/024: hold the step open and run critic/repair before approving the usecase plan.
+  // /024: hold the step open and run critic/repair before approving the usecase plan.
   // The incremental artifact save moves to the critic approval path (possibly with a repaired plan).
   if (status === 'completed' && output && output.status === 'ok') {
     return createHoldIndexForReviewIntents(context, parentStep, step, hookSequential, 'usecasePlan');
@@ -273,7 +273,7 @@ async function afterPromptStep(
 }
 
 export function getPlanUsecaseEntitiesOutput(context: mls.msg.ExecutionContext): PlanUsecaseEntitiesOutput {
-  // TODO-FINAL-024: prefer the latest repaired index when a repair step exists.
+  // prefer the latest repaired index when a repair step exists.
   return getPlannerOutputWithRepair(context, 'agentPlanUsecaseEntities', 'usecasePlan', planUsecaseEntitiesConfig, output => validatePlanUsecaseEntitiesOutput(output, getPlanPersistenceIndexOutput(context).result.tables.length > 0));
 }
 
@@ -401,7 +401,7 @@ function buildHumanPrompt(
   metricsIndex: PlanMetricsIndexOutput,
   metricTableDefinitions: PlanMetricTableDefinitionOutput[],
 ): string {
-  // TODO-FINAL-030 (R1): compact context. Usecase planning references tables/entities by id/name
+  // compact context. Usecase planning references tables/entities by id/name
   // and ownership (to mark mdm/horizontal/plugin), and which metrics to update — not the full
   // final plan, full table columns or full metric table definitions.
   const reduced = {
@@ -442,9 +442,9 @@ Do not return prose.
 - BFF commands generated later must be able to reference these use cases by usecaseId.
 - Do not generate TypeScript code.
 
-## Concepts (TODO-FINAL-020) — do not confuse these three
+## Concepts — do not confuse these three
 - approvedArtifacts.usecaseEntities (final plan): plan-level list of approved usecase ENTITY GROUPS (e.g. "OrderEntity"). It is a coarse approval signal, NOT a 1:1 target.
-- usecaseEntities (this output): the layer_3 aggregate entities you DETAIL here (usecaseEntityId, sourceTables, allowedOperations). You MAY consolidate several approved groups into fewer entities — the COUNT need NOT match approvedArtifacts.usecaseEntities.
+- usecaseEntities (this output): the layer_3 aggregate entities you DETAIL here (usecaseEntityId, sourceTables, allowedOperations). You MAY consolidate several approved groups into fewer entities — the COUNT need NOT match approvedArtifacts.usecaseEntities. Each group is ALSO materialized as a layer_4_entities/{Entity}.defs.ts contract (the layer that owns table access), so: every table referenced by any usecase's readsTables/writesTables MUST appear in the sourceTables of at least one usecaseEntity, and allowedOperations must cover the operations those usecases perform.
 - usecases (this output): INDIVIDUAL operations (usecaseId, actor, reads/writes, commands). Workflows/agents/BFF reference operations by usecaseId, never by usecaseEntityId.
 Coverage compares usecases by usecaseId; it must NOT require parity between approvedArtifacts.usecaseEntities and usecaseEntities.
 
