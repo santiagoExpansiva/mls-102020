@@ -5,8 +5,8 @@ import { findPreviousAgentStep } from '/_102027_/l2/aiAgentHelper.js';
 import { createStorFile, IReqCreateStorFile } from '/_102027_/l2/libStor.js';
 import { convertFileNameToTag, convertTagToFileName } from '/_102027_/l2/utils.js';
 import { getMaterializeOrchestrator } from '/_102020_/l2/agentMaterializeSolution/materializeOrchestrator.js';
-import { addModuleNav, addModuleRoute } from '/_102020_/l2/newModule/astModuleFront.js';
-import { addNav, addPage } from '/_102020_/l2/newModule/astIndex.js';
+import { addModuleNav, addModuleRoute } from '/_102020_/l2/agentMaterializeSolution/ast/astModuleFront.js';
+import { addNav, addPage } from '/_102020_/l2/agentMaterializeSolution/ast/astIndex.js';
 import { getConfigProject } from '/_102027_/l2/libProjectConfig.js';
 
 // ─── mutex ────────────────────────────────────────────────────────────────────

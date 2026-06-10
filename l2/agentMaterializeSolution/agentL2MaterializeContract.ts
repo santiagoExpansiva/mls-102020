@@ -23,14 +23,21 @@ async function beforePromptImplicit(
   userPrompt: string,
 ): Promise<mls.msg.AgentIntent[]> {
 
-  const info = JSON.parse(userPrompt) as { path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id:string };
+  const info = JSON.parse(userPrompt) as { pathDefs?: string, path: string, item: mls.defs.MaterializeEntry, project?: number, moduleName: string, device: string, type: string, id: string };
   const moduleName = info.moduleName || context.task?.iaCompressed?.longMemory['moduleName'] as string;
   const device = info.device || context.task?.iaCompressed?.longMemory['device'] as string || 'web';
   const type = info.type || context.task?.iaCompressed?.longMemory['type'] as string || 'page11';
 
-  info.project = mls.actualProject || 0; 
-  const orch = getMaterializeOrchestrator(info.path);
-  info.item = await orch.getToExecuteOnlyMaterialize(info.id) as mls.defs.MaterializeEntry;  
+  info.project = mls.actualProject || 0;
+
+  if (info.pathDefs) {
+    const pageId = info.pathDefs.replace(/^\/+/, '').split('/').pop()?.replace(/\.defs\.ts$|\.ts$/, '') || '';
+    info.path = info.pathDefs;
+    info.item = { id: 'contract', agent: agent.agentName, defsPath: info.pathDefs, outputPath: `${pageId}.ts`, skillPath: '_102020_/l2/agentMaterializeSolution/skills/genContract.ts', dependsOn: [], moduleName } as unknown as mls.defs.MaterializeEntry;
+  } else {
+    const orch = getMaterializeOrchestrator(info.path);
+    info.item = await orch.getToExecuteOnlyMaterialize(info.id) as mls.defs.MaterializeEntry;
+  }
 
   const prompt = await getSkill(info, moduleName, device);
   console.info(prompt);
@@ -134,39 +141,32 @@ async function processOutput(context: mls.msg.ExecutionContext, output: any, age
 
   const stepOri = context.task ? (findPreviousAgentStep(context.task, parentStep.stepId))?.stepId : parentStep.stepId;
 
-  const group = await orch.processGroup(output.id);
   const newSteps: mls.msg.AgentIntentAddStep[] = [];
 
-  Object.keys(group).forEach((g) => {
-
-    const info = group[g];
-
-    info.forEach((i: any) => {
-
-      const newStep: mls.msg.AgentIntentAddStep = {
-        type: "add-step",
-        messageId: context.message.orderAt,
-        threadId: context.message.threadId,
-        taskId: context.task?.PK || '',
-        parentStepId: stepOri || parentStep.stepId,
-        step:
-        {
-          type: 'agent',
-          stepId: 0,
-          interaction: null,
-          status: 'waiting_human_input',
-          nextSteps: [],
-          agentName: g,
-          prompt: JSON.stringify({ path: output.path, item: i }),
-          rags: [],
-        }
-      };
-
-      if(!onlyThisStep) newSteps.push(newStep);
-
-    })
-
-  });
+  if (!onlyThisStep) {
+    const group = await orch.processGroup(output.id);
+    Object.keys(group).forEach((g) => {
+      group[g].forEach((i: any) => {
+        newSteps.push({
+          type: "add-step",
+          messageId: context.message.orderAt,
+          threadId: context.message.threadId,
+          taskId: context.task?.PK || '',
+          parentStepId: stepOri || parentStep.stepId,
+          step: {
+            type: 'agent',
+            stepId: 0,
+            interaction: null,
+            status: 'waiting_human_input',
+            nextSteps: [],
+            agentName: g,
+            prompt: JSON.stringify({ path: output.path, item: i }),
+            rags: [],
+          }
+        });
+      });
+    });
+  }
 
   return newSteps;
 }
