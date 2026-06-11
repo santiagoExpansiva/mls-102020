@@ -173,6 +173,28 @@ export function logTaskSizeIfLarge(context: mls.msg.ExecutionContext, label: str
   }
 }
 
+// layer_4_entities catalog (layer4.md §8 / adjustments A1–A3): everything the writer needs to
+// gap-fill and enrich entity defs deterministically — built from the frozen plan outputs.
+export interface EntityCatalogTable { tableId: string; tableName: string; rootEntity: string }
+export interface EntityCatalogMetricTable {
+  metricTableId: string;
+  tableName: string;
+  sourceEntities: string[];
+  timeColumn?: string;
+  dimensions?: unknown[];
+  measures?: unknown[];
+}
+export interface EntityCatalogMdmEntity { entity: string; fields: unknown[] }
+export interface EntityCatalog {
+  ontologyEntities: Record<string, unknown>;
+  tables: EntityCatalogTable[];
+  metricTables: EntityCatalogMetricTable[];
+  mdmEntities: EntityCatalogMdmEntity[];
+  // A5: tables persisted by OTHER existing modules (maintenance/extension runs) — entities over
+  // them get a storage binding { kind: 'existingModule', moduleRef, ... } instead of mdm/local.
+  existingTables?: ExistingModuleTable[];
+}
+
 export interface SavePlanArtifactsOptions {
   // Ontology entities (PascalCase id -> entity with fields) from the final plan. Used to enrich
   // MDM l1 reference artifacts with the entity shape for mock/usecase materialization.
@@ -180,6 +202,8 @@ export interface SavePlanArtifactsOptions {
   // T-003: project id of the shared MDM infrastructure (e.g. '102034') when it is available.
   // When set, mdmDomain candidates become reference-only with moduleRef instead of module drafts.
   mdmInfrastructureModuleRef?: string;
+  // A1–A3: catalog used by the layer_4 entity generation (gap-fill + fields + storage binding).
+  entityCatalog?: EntityCatalog;
 }
 
 export async function saveNewSolutionPlanArtifacts(
@@ -690,13 +714,19 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
       ...moduleData
     } = result;
 
+    // A6 (layer4.md §8): module.defs.ts keeps the domain MAP only — entity id/title/description/
+    // ownership/kind + relationships. Per-entity shapes (fields/statusEnum/lifecycleStates) are
+    // canonical in l1/{module}/layer_4_entities/{entity}.defs.ts; keeping them here too caused
+    // redundancy and drift on maintenance edits.
+    const moduleDataSlim = { ...moduleData, ontology: slimOntologyForModuleDefs(moduleData.ontology) };
+
     const candidates: PlanArtifactCandidate[] = [
       {
         artifactType: 'module',
         artifactId: moduleName,
         exportName: 'modulePlan',
         moduleName,
-        data: moduleData,
+        data: moduleDataSlim,
       },
       {
         artifactType: 'project',
@@ -753,62 +783,252 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
     const usecases = Array.isArray(result.usecases) ? result.usecases : [];
     const usecaseEntities = Array.isArray(result.usecaseEntities) ? result.usecaseEntities : [];
 
-    // layer_4_entities (see mls-102045/layer4.md §8): each usecaseEntity group becomes a
-    // deterministic l1/{module}/layer_4_entities/{Entity}.defs.ts contract. Field shapes stay in
-    // the table defs (single source of truth); this defs carries the entity-level contract only.
-    // tableName -> entityIds map used to derive usecase.entityRefs below.
-    const entityIdsByTable = new Map<string, string[]>();
-    const entityCandidates: PlanArtifactCandidate[] = [];
-    for (const value of usecaseEntities) {
-      const entity = getRecord(value);
-      const entityId = readString(entity?.usecaseEntityId);
-      if (!entity || !entityId) continue;
-      const sourceTables = Array.isArray(entity.sourceTables) ? entity.sourceTables : [];
-      for (const tableValue of sourceTables) {
-        const tableName = readString(getRecord(tableValue)?.tableName);
-        if (!tableName) continue;
-        const list = entityIdsByTable.get(tableName) || [];
-        if (!list.includes(entityId)) list.push(entityId);
-        entityIdsByTable.set(tableName, list);
+    // layer_4_entities (layer4.md §8, adjustments A1–A4/A6): each entity defs is the CANONICAL
+    // domain shape (fields/types live here, not in l5/module.defs.ts) plus the storage binding
+    // (local table in layer_1 or shared MDM 102034). Groups planned by the LLM are enriched;
+    // every catalog table/metric/MDM entity not covered by a group is gap-filled
+    // deterministically — the layer_4 is always complete, with zero extra LLM calls.
+    const catalog = options?.entityCatalog;
+    const ontologyEntities = isRecord(catalog?.ontologyEntities) ? catalog!.ontologyEntities : {};
+    const project = mls.actualProject || 0;
+    const usecaseRecords = usecases
+      .map(item => getRecord(item))
+      .filter((item): item is Record<string, unknown> => !!item);
+
+    const tableByName = new Map<string, EntityCatalogTable>();
+    for (const table of catalog?.tables || []) {
+      tableByName.set(table.tableName, table);
+      tableByName.set(table.tableId, table);
+    }
+    const metricByName = new Map<string, EntityCatalogMetricTable>();
+    for (const metric of catalog?.metricTables || []) {
+      metricByName.set(metric.tableName, metric);
+      metricByName.set(metric.metricTableId, metric);
+    }
+    const mdmByKey = new Map<string, EntityCatalogMdmEntity>();
+    const mdmNameVariants = (entity: string): string[] => {
+      const snake = entity.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+      return [...new Set([entity, entity.toLowerCase(), snake])];
+    };
+    for (const mdmEntity of catalog?.mdmEntities || []) {
+      for (const key of mdmNameVariants(mdmEntity.entity)) mdmByKey.set(key, mdmEntity);
+    }
+    // A5: tables of OTHER existing modules, matched by tableName/tableId/rootEntity variants.
+    const existingByKey = new Map<string, ExistingModuleTable>();
+    for (const existing of catalog?.existingTables || []) {
+      const keys = new Set([existing.tableName, existing.tableId, ...(existing.rootEntity ? mdmNameVariants(existing.rootEntity) : [])]);
+      for (const key of keys) if (key && !existingByKey.has(key)) existingByKey.set(key, existing);
+    }
+
+    const layer1FileRef = (shortName: string) => `_${project}_/l1/${moduleName}/layer_1_external/${toSafeShortName(shortName)}.defs.ts`;
+
+    const resolveStorage = (tableName: string, ownership: string): Record<string, unknown> => {
+      const table = tableByName.get(tableName);
+      if (table) return { kind: 'moduleTable', tableId: table.tableId, tableName: table.tableName, fileRef: layer1FileRef(table.tableId) };
+      const metric = metricByName.get(tableName);
+      if (metric) return { kind: 'metricTable', metricTableId: metric.metricTableId, tableName: metric.tableName, fileRef: layer1FileRef(metric.metricTableId) };
+      // A5: tables of another existing module take precedence over the MDM fallback when the
+      // ownership says so (or when only the existing inventory resolves the name).
+      const existing = existingByKey.get(tableName) || existingByKey.get(tableName.toLowerCase());
+      if (existing && (ownership === 'existingModuleOwned' || !mdmByKey.has(tableName.toLowerCase()))) {
+        return { kind: 'existingModule', moduleRef: existing.moduleId, tableId: existing.tableId, tableName: existing.tableName, fileRef: existing.fileRef };
       }
-      const className = entityId.charAt(0).toUpperCase() + entityId.slice(1);
-      const usecaseRefs = usecases
-        .map(item => getRecord(item))
-        .filter((usecase): usecase is Record<string, unknown> =>
-          !!usecase && usecaseTouchesEntityTables(usecase, sourceTables))
-        .map(usecase => readString(usecase.usecaseId) || '')
-        .filter(Boolean);
+      const mdmEntity = mdmByKey.get(tableName) || mdmByKey.get(tableName.toLowerCase());
+      if (mdmEntity) return { kind: 'mdm', moduleRef: '102034', entity: mdmEntity.entity, fileRef: layer1FileRef(mdmEntity.entity) };
+      console.warn(`[buildPlanArtifactCandidates] layer_4 storage not resolved for table '${tableName}' (ownership: ${ownership || '?'})`);
+      return { kind: 'unknown', tableName, ownership };
+    };
+
+    // A4: unified naming — defs file is {entityId}.defs.ts; class/contract are {Entity}Entity/I{Entity}Entity.
+    const entityNaming = (entityId: string) => {
+      const pascal = entityId.charAt(0).toUpperCase() + entityId.slice(1);
+      const className = pascal.endsWith('Entity') ? pascal : `${pascal}Entity`;
+      return { fileName: `layer_4_entities/${className}.ts`, className, contractName: `I${className}` };
+    };
+
+    // A2/A6: per-entity shape copied from the final plan ontology (canonical here from now on).
+    const shapeFromOntology = (ontologyId: string | undefined): Record<string, unknown> => {
+      const entity = ontologyId ? getRecord(ontologyEntities[ontologyId]) : undefined;
+      if (!entity) return {};
+      const shape: Record<string, unknown> = {};
+      if (Array.isArray(entity.fields)) shape.fields = entity.fields;
+      if (Array.isArray(entity.statusEnum)) shape.statusEnum = entity.statusEnum;
+      if (Array.isArray(entity.lifecycleStates)) shape.lifecycleStates = entity.lifecycleStates;
+      return shape;
+    };
+
+    const usecaseIdsTouching = (names: Set<string>): string[] => usecaseRecords
+      .filter(usecase => [...usecaseTableNames(usecase)].some(name => names.has(name)))
+      .map(usecase => readString(usecase.usecaseId) || '')
+      .filter(Boolean);
+
+    const someUsecaseWrites = (names: Set<string>): boolean => usecaseRecords
+      .some(usecase => [...usecaseWriteTableNames(usecase)].some(name => names.has(name)));
+
+    const entityIdsByTable = new Map<string, string[]>();
+    const registerEntityTables = (entityId: string, names: Iterable<string>) => {
+      for (const name of names) {
+        const list = entityIdsByTable.get(name) || [];
+        if (!list.includes(entityId)) list.push(entityId);
+        entityIdsByTable.set(name, list);
+      }
+    };
+
+    const entityCandidates: PlanArtifactCandidate[] = [];
+    const coveredTables = new Set<string>();
+    const usedEntityIds = new Set<string>();
+
+    const pushEntity = (entityId: string, data: Record<string, unknown>) => {
+      if (usedEntityIds.has(entityId)) return;
+      usedEntityIds.add(entityId);
       entityCandidates.push({
         artifactType: 'entity',
         artifactId: entityId,
         exportName: 'entity',
         moduleName,
         bareExport: true,
-        data: {
-          entityId,
-          title: readString(entity.title) || entityId,
-          purpose: readString(entity.purpose) || '',
-          layer: 'layer_4_entities',
-          sourceTables: sourceTables,
-          allowedOperations: Array.isArray(entity.allowedOperations) ? entity.allowedOperations : [],
-          rulesApplied: Array.isArray(entity.rulesApplied) ? entity.rulesApplied : [],
-          usecaseRefs,
-          // Materialization plan: the contract is a TypeScript interface exported from the SAME
-          // layer_4_entities/{Entity}.ts file, so layer_3 imports contract + instance together.
-          materialization: {
-            fileName: `layer_4_entities/${className}.ts`,
-            className,
-            contractName: `I${className}`,
-          },
-        },
+        data: { ...data, materialization: entityNaming(entityId) },
+      });
+    };
+
+    // ---- 1. groups planned by the LLM (enriched with shape + storage) ----------------------
+    for (const value of usecaseEntities) {
+      const entity = getRecord(value);
+      const entityId = readString(entity?.usecaseEntityId);
+      if (!entity || !entityId) continue;
+      const sourceTables = Array.isArray(entity.sourceTables) ? entity.sourceTables : [];
+      const tableNames: string[] = [];
+      const storage: Record<string, unknown>[] = [];
+      for (const tableValue of sourceTables) {
+        const tableName = readString(getRecord(tableValue)?.tableName) || (typeof tableValue === 'string' ? tableValue : '');
+        if (!tableName) continue;
+        tableNames.push(tableName);
+        const binding = resolveStorage(tableName, readString(getRecord(tableValue)?.ownership) || '');
+        storage.push(binding);
+        // mark BOTH spellings (physical name and canonical id) as covered, so the gap-fill
+        // below does not duplicate this entity under another id.
+        coveredTables.add(tableName);
+        for (const key of ['tableId', 'metricTableId', 'tableName', 'entity']) {
+          const alias = readString(binding[key]);
+          if (alias) coveredTables.add(alias);
+        }
+      }
+      registerEntityTables(entityId, tableNames);
+      // shape only when the group maps to ONE ontology entity (single table); multi-table groups
+      // keep storage refs only (each table defs carries its own physical shape).
+      const single = storage.length === 1 ? storage[0] : undefined;
+      const ontologyId = single?.kind === 'moduleTable'
+        ? tableByName.get(tableNames[0])?.rootEntity
+        : single?.kind === 'mdm' ? readString(single.entity) : undefined;
+      const usecaseRefs = usecases
+        .map(item => getRecord(item))
+        .filter((usecase): usecase is Record<string, unknown> => !!usecase && usecaseTouchesEntityTables(usecase, sourceTables))
+        .map(usecase => readString(usecase.usecaseId) || '')
+        .filter(Boolean);
+      pushEntity(entityId, {
+        entityId,
+        title: readString(entity.title) || entityId,
+        purpose: readString(entity.purpose) || '',
+        layer: 'layer_4_entities',
+        ...shapeFromOntology(ontologyId),
+        sourceTables,
+        storage,
+        allowedOperations: Array.isArray(entity.allowedOperations) ? entity.allowedOperations : [],
+        rulesApplied: Array.isArray(entity.rulesApplied) ? entity.rulesApplied : [],
+        usecaseRefs,
       });
     }
 
+    // ---- 2. deterministic gap-fill (A1): one entity per uncovered table/metric/MDM ---------
+    const lowerFirst = (value: string) => value ? value.charAt(0).toLowerCase() + value.slice(1) : value;
+    if (catalog) {
+      for (const table of catalog.tables) {
+        if (coveredTables.has(table.tableName) || coveredTables.has(table.tableId)) continue;
+        const entityId = lowerFirst(table.rootEntity) || table.tableId;
+        const names = new Set([table.tableName, table.tableId]);
+        const ontologyEntity = getRecord(ontologyEntities[table.rootEntity]);
+        registerEntityTables(entityId, names);
+        pushEntity(entityId, {
+          entityId,
+          title: readString(ontologyEntity?.title) || table.rootEntity || table.tableId,
+          purpose: `Operates table ${table.tableName} (gap-filled deterministically: no usecaseEntity group covered it)`,
+          layer: 'layer_4_entities',
+          ...shapeFromOntology(table.rootEntity),
+          sourceTables: [{ tableName: table.tableName, ownership: 'moduleOwned' }],
+          storage: [resolveStorage(table.tableName, 'moduleOwned')],
+          allowedOperations: someUsecaseWrites(names) ? ['create', 'read', 'update', 'list'] : ['read', 'list'],
+          rulesApplied: [],
+          usecaseRefs: usecaseIdsTouching(names),
+        });
+      }
+      for (const metric of catalog.metricTables) {
+        if (coveredTables.has(metric.tableName) || coveredTables.has(metric.metricTableId)) continue;
+        const entityId = metric.metricTableId;
+        const names = new Set([metric.tableName, metric.metricTableId]);
+        registerEntityTables(entityId, names);
+        pushEntity(entityId, {
+          entityId,
+          title: metric.metricTableId,
+          purpose: `Appends rows to metric table ${metric.tableName} (gap-filled deterministically)`,
+          layer: 'layer_4_entities',
+          metricShape: { timeColumn: metric.timeColumn, dimensions: metric.dimensions || [], measures: metric.measures || [] },
+          sourceTables: [{ tableName: metric.tableName, ownership: 'moduleOwned' }],
+          storage: [resolveStorage(metric.tableName, 'moduleOwned')],
+          allowedOperations: ['record', 'list'],
+          rulesApplied: [],
+          usecaseRefs: usecaseIdsTouching(names),
+        });
+      }
+      // A5: entities over tables of ANOTHER existing module — only when some usecase touches
+      // them (the base module may have many tables this run never uses).
+      for (const existing of catalog.existingTables || []) {
+        const names = new Set([existing.tableName, existing.tableId, ...(existing.rootEntity ? mdmNameVariants(existing.rootEntity) : [])]);
+        if ([...names].some(name => coveredTables.has(name))) continue;
+        const usecaseRefs = usecaseIdsTouching(names);
+        if (usecaseRefs.length === 0) continue;
+        const entityId = existing.rootEntity ? lowerFirst(existing.rootEntity) : existing.tableId;
+        for (const name of names) coveredTables.add(name);
+        registerEntityTables(entityId, names);
+        pushEntity(entityId, {
+          entityId,
+          title: existing.rootEntity || existing.tableId,
+          purpose: `Operates table ${existing.tableName} of existing module ${existing.moduleId} (gap-filled deterministically)`,
+          layer: 'layer_4_entities',
+          ...shapeFromOntology(existing.rootEntity || undefined),
+          sourceTables: [{ tableName: existing.tableName, ownership: 'existingModuleOwned' }],
+          storage: [{ kind: 'existingModule', moduleRef: existing.moduleId, tableId: existing.tableId, tableName: existing.tableName, fileRef: existing.fileRef }],
+          allowedOperations: someUsecaseWrites(names) ? ['create', 'read', 'update', 'list'] : ['read', 'list'],
+          rulesApplied: [],
+          usecaseRefs,
+        });
+      }
+      for (const mdmEntity of catalog.mdmEntities) {
+        const variants = mdmNameVariants(mdmEntity.entity);
+        if (variants.some(name => coveredTables.has(name))) continue;
+        const entityId = lowerFirst(mdmEntity.entity);
+        const names = new Set(variants);
+        registerEntityTables(entityId, names);
+        pushEntity(entityId, {
+          entityId,
+          title: readString(getRecord(ontologyEntities[mdmEntity.entity])?.title) || mdmEntity.entity,
+          purpose: `MDM-backed entity for ${mdmEntity.entity} (data lives in the shared MDM infrastructure, project 102034)`,
+          layer: 'layer_4_entities',
+          ...shapeFromOntology(mdmEntity.entity),
+          sourceTables: [{ tableName: mdmEntity.entity, ownership: 'mdmOwned' }],
+          storage: [{ kind: 'mdm', moduleRef: '102034', entity: mdmEntity.entity, fileRef: layer1FileRef(mdmEntity.entity) }],
+          allowedOperations: someUsecaseWrites(names) ? ['read', 'list', 'update'] : ['read', 'list'],
+          rulesApplied: [],
+          usecaseRefs: usecaseIdsTouching(names),
+        });
+      }
+    }
+
+    // ---- 3. usecases with derived entityRefs ------------------------------------------------
     const usecaseCandidates = usecases.flatMap((value): PlanArtifactCandidate[] => {
       const usecase = getRecord(value);
       const id = readString(usecase?.usecaseId);
       if (!usecase || !id) return [];
-      // Derived layer_4 references: entities whose sourceTables intersect this usecase's
+      // Derived layer_4 references: entities whose tables intersect this usecase's
       // reads/writesTables. The L3 materializer imports the entity contracts from these refs.
       const entityRefs = collectUsecaseEntityRefs(usecase, entityIdsByTable);
       // The usecase .defs.ts exports the usecase object directly under a fixed name `useCase`
@@ -1006,6 +1226,17 @@ function usecaseTableNames(usecase: Record<string, unknown>): Set<string> {
   return names;
 }
 
+// Same as usecaseTableNames, but writesTables only (used to derive allowedOperations in gap-fill).
+function usecaseWriteTableNames(usecase: Record<string, unknown>): Set<string> {
+  const names = new Set<string>();
+  const refs = Array.isArray(usecase.writesTables) ? usecase.writesTables as unknown[] : [];
+  for (const ref of refs) {
+    const name = typeof ref === 'string' ? ref : readString(getRecord(ref)?.tableName);
+    if (name) names.add(name);
+  }
+  return names;
+}
+
 function usecaseTouchesEntityTables(usecase: Record<string, unknown>, sourceTables: unknown[]): boolean {
   const names = usecaseTableNames(usecase);
   if (names.size === 0) return false;
@@ -1023,6 +1254,28 @@ function collectUsecaseEntityRefs(usecase: Record<string, unknown>, entityIdsByT
     }
   }
   return refs.sort();
+}
+
+// A6: ontology entities saved in l5/module.defs.ts keep only the map-level keys; shapes live in
+// layer_4_entities defs. The in-task final plan payload is NOT affected (planning checks use it).
+function slimOntologyForModuleDefs(value: unknown): unknown {
+  const ontology = getRecord(value);
+  const entities = getRecord(ontology?.entities);
+  if (!ontology || !entities) return value;
+  const slim: Record<string, unknown> = {};
+  for (const [id, entityValue] of Object.entries(entities)) {
+    const entity = getRecord(entityValue);
+    if (!entity) {
+      slim[id] = entityValue;
+      continue;
+    }
+    const item: Record<string, unknown> = {};
+    for (const key of ['entityId', 'title', 'description', 'ownership', 'kind']) {
+      if (entity[key] !== undefined) item[key] = entity[key];
+    }
+    slim[id] = item;
+  }
+  return { ...ontology, entities: slim };
 }
 
 function buildProjectPlanData(moduleName: string, finalPlan: Record<string, unknown>): Record<string, unknown> {
@@ -1259,6 +1512,58 @@ function getRecord(value: unknown): Record<string, unknown> | undefined {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+// A5: inventory of tables persisted by OTHER existing modules of this project. Used by the
+// persistence index prompt (so maintenance runs exclude them as 'existingModuleOwned' instead of
+// the 'mdmOwned' catch-all) and by the layer_4 entity writer (storage binding to the base module).
+export interface ExistingModuleTable {
+  moduleId: string;
+  tableId: string;
+  tableName: string;
+  rootEntity: string;
+  kind: 'transactional' | 'metricTimeseries';
+  fileRef: string;
+}
+
+export async function readExistingModuleTables(currentModuleName: string): Promise<ExistingModuleTable[]> {
+  const out: ExistingModuleTable[] = [];
+  try {
+    const project = mls.actualProject || 0;
+    const current = normalizeModuleFolderName(currentModuleName, 'module');
+    for (const file of Object.values(mls.stor.files)) {
+      if (file.project !== project || file.level !== 1 || file.extension !== '.defs.ts') continue;
+      if (file.status === 'deleted') continue;
+      const match = /^([^/]+)\/layer_1_external$/.exec(file.folder);
+      if (!match || match[1] === current) continue;
+      const moduleId = match[1];
+      try {
+        const raw = await file.getContent();
+        if (typeof raw !== 'string') continue;
+        const artifact = parsePlanArtifactSource(raw, '.defs.ts');
+        if (!isRecord(artifact)) continue;
+        const data = isRecord(artifact.data) ? artifact.data : artifact;
+        const table = getRecord(data.tableDefinition);
+        const metric = getRecord(data.metricTableDefinition);
+        const def = table || metric;
+        if (!def) continue; // mdmEntity refs and other artifacts are not module tables
+        const tableId = readString(table ? def.tableId : def.metricTableId) || file.shortName;
+        out.push({
+          moduleId,
+          tableId,
+          tableName: readString(def.tableName) || tableId,
+          rootEntity: readString(def.rootEntity) || '',
+          kind: table ? 'transactional' : 'metricTimeseries',
+          fileRef: `_${project}_/l1/${moduleId}/layer_1_external/${file.shortName}${file.extension}`,
+        });
+      } catch {
+        // unreadable file: skip silently (inventory is best-effort)
+      }
+    }
+  } catch (error) {
+    console.warn('[readExistingModuleTables] failed', error);
+  }
+  return out;
 }
 
 export function getExistingModuleFolders(): Set<string> {

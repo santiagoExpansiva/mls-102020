@@ -23,7 +23,8 @@ import {
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
-import { saveNewSolutionAgentTracePayload } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { readExistingModuleTables, saveNewSolutionAgentTracePayload } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import type { ExistingModuleTable } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
 import { getPlanHorizontalsOutput } from '/_102020_/l2/agentNewSolution/agentPlanHorizontals.js';
 import type { PlanHorizontalsOutput } from '/_102020_/l2/agentNewSolution/agentPlanHorizontals.js';
 import { getPlanMDMOutput } from '/_102020_/l2/agentNewSolution/agentPlanMDM.js';
@@ -99,7 +100,11 @@ export const PLAN_PERSISTENCE_INDEX_RESULT_SCHEMA: Record<string, unknown> = {
               required: ['entityId', 'ownership', 'reason'],
               properties: {
                 entityId: { type: 'string' },
-                ownership: { enum: ['mdmOwned', 'horizontalOwned', 'pluginOwned', 'external'] },
+                // A5: 'existingModuleOwned' = table already persisted by another existing module
+                // (set moduleRef); 'metricOwned' = realized as a metric table of THIS module
+                // (planned by the metrics index). Never use 'mdmOwned' as a catch-all.
+                ownership: { enum: ['mdmOwned', 'horizontalOwned', 'pluginOwned', 'existingModuleOwned', 'metricOwned', 'external'] },
+                moduleRef: { type: 'string' },
                 reason: { type: 'string' },
               },
             },
@@ -175,6 +180,10 @@ async function beforePromptStep(
   const horizontalPlan = getPlanHorizontalsOutput(context);
   const pluginPlan = getPlanPluginsOutput(context);
   const snapshot = getPlanningContextSnapshot(context);
+  // A5: tables persisted by OTHER existing modules — maintenance/extension runs must exclude
+  // those entities as 'existingModuleOwned' (moduleRef), never as the 'mdmOwned' catch-all.
+  const currentModuleName = assertString(finalPlan.result.module.moduleName, 'result.module.moduleName');
+  const existingModuleTables = await readExistingModuleTables(currentModuleName);
 
   return [
     createPlannerPromptReadyIntent(
@@ -183,7 +192,7 @@ async function beforePromptStep(
       hookSequential,
       args,
       systemPrompt.split('{{toolName}}').join(PLAN_PERSISTENCE_INDEX_TOOL_NAME),
-      buildHumanPrompt(args, finalPlan, mdmPlan, horizontalPlan, pluginPlan, snapshot.initialMetricsRequested),
+      buildHumanPrompt(args, finalPlan, mdmPlan, horizontalPlan, pluginPlan, snapshot.initialMetricsRequested, existingModuleTables),
       planPersistenceIndexToolSchema,
       PLAN_PERSISTENCE_INDEX_TOOL_NAME
     ),
@@ -368,6 +377,7 @@ function buildHumanPrompt(
   horizontalPlan: PlanHorizontalsOutput,
   pluginPlan: PlanPluginsOutput,
   initialMetricsRequested: boolean,
+  existingModuleTables: ExistingModuleTable[],
 ): string {
   // compact context. The persistence index only needs entity ownership and
   // who reads/writes what — not the full final plan, ontology fields or full mdm/horizontal/plugin
@@ -378,6 +388,15 @@ function buildHumanPrompt(
     horizontalModules: summarizeRecords(horizontalPlan.result.horizontalModules, ['horizontalModuleId', 'reusedOntologyRefs']),
     plugins: summarizeRecords(pluginPlan.result.plugins, ['pluginId', 'provider']),
     initialMetricsRequested,
+    // A5: tables that ALREADY exist in other modules of this project. Entities persisted by them
+    // go to excludedEntities with ownership 'existingModuleOwned' + moduleRef.
+    existingModulesInventory: existingModuleTables.map(table => ({
+      moduleId: table.moduleId,
+      tableId: table.tableId,
+      tableName: table.tableName,
+      rootEntity: table.rootEntity,
+      kind: table.kind,
+    })),
   };
 
   return `## Planned step args
@@ -412,6 +431,8 @@ Do not return prose.
 - Do not generate tables for MDM entities; list them in excludedEntities with ownership "mdmOwned".
 - Do not generate tables for horizontal module entities; list them in excludedEntities with ownership "horizontalOwned".
 - Do not generate tables for plugin-owned entities; list them in excludedEntities with ownership "pluginOwned".
+- Do not generate tables for entities already persisted by ANOTHER existing module (see the existing modules inventory): list them in excludedEntities with ownership "existingModuleOwned" and moduleRef set to that module id. NEVER label them "mdmOwned" — mdmOwned is only for master data in the shared MDM platform.
+- Entities realized as metric tables of THIS module are excluded with ownership "metricOwned" (they are planned by the metrics index, not here).
 - Use embeddedEntities when an ontology entity or child collection should live inside the root table details column.
 - persistencePattern must be one of singleEntity, aggregateJsonDetails, eventLog, lookup, readModel.
 - Prefer aggregateJsonDetails when child data is normally read with the parent and does not need independent lifecycle or frequent filtering.

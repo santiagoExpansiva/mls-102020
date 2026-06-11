@@ -25,6 +25,9 @@ import {
   saveNewSolutionIndexCheckpoint,
   saveNewSolutionPlanArtifacts,
 } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import type { EntityCatalogMdmEntity, SavePlanArtifactsOptions } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { readExistingModuleTables } from '/_102020_/l2/agentNewSolution/agentNewSolutionArtifacts.js';
+import { getPlanMDMOutput } from '/_102020_/l2/agentNewSolution/agentPlanMDM.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import type { FinalSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
 import {
@@ -877,11 +880,65 @@ const reviewConfigs: Record<PlanIndexName, PlanIndexReviewConfig> = {
     onApproved: async (context, indexStep, output, healthReport) => {
       await saveNewSolutionIndexCheckpoint(context, 'usecasePlan', 'agentPlanUsecaseEntities', indexStep, output, healthReport);
       // incremental plan artifacts now persist the approved (possibly repaired) usecase plan.
-      await saveNewSolutionPlanArtifacts(context, 'agentPlanUsecaseEntities', indexStep, output);
+      // A1–A3 (layer4.md §8): the entity catalog lets the writer gap-fill and enrich the
+      // layer_4_entities defs deterministically (fields, storage binding, naming).
+      await saveNewSolutionPlanArtifacts(context, 'agentPlanUsecaseEntities', indexStep, output, await buildEntityCatalogOptions(context));
     },
     createChildrenIntents: () => [],
   },
 };
+
+/**
+ * A1–A3 (layer4.md §8): catalog consumed by the layer_4_entities writer — built from the frozen
+ * plan outputs available at usecasePlan approval time (persistence + metrics indices, MDM plan,
+ * final plan ontology). Best-effort: missing sources just shrink the catalog.
+ */
+async function buildEntityCatalogOptions(context: mls.msg.ExecutionContext): Promise<SavePlanArtifactsOptions> {
+  const finalPlan = getFinalPlanSafe(context);
+  const persistence = safe(() => getPlanPersistenceIndexOutput(context));
+  const metrics = safe(() => getPlanMetricsIndexOutput(context));
+  const mdm = safe(() => getPlanMDMOutput(context));
+  const ontologyEntities = finalPlan?.result.ontology.entities || {};
+  // A5: tables of OTHER existing modules (maintenance/extension runs).
+  const moduleName = typeof finalPlan?.result.module.moduleName === 'string' ? finalPlan.result.module.moduleName as string : '';
+  const existingTables = moduleName ? await readExistingModuleTables(moduleName).catch(() => []) : [];
+
+  const mdmEntities: EntityCatalogMdmEntity[] = [];
+  const seen = new Set<string>();
+  for (const domain of mdm?.result.mdmDomains || []) {
+    for (const value of domain.masterEntities) {
+      const entity = typeof value === 'string' ? value : '';
+      if (!entity || seen.has(entity)) continue;
+      seen.add(entity);
+      const ontologyEntity = ontologyEntities[entity];
+      const fields = ontologyEntity && typeof ontologyEntity === 'object' && Array.isArray((ontologyEntity as Record<string, unknown>).fields)
+        ? (ontologyEntity as Record<string, unknown>).fields as unknown[]
+        : [];
+      mdmEntities.push({ entity, fields });
+    }
+  }
+
+  return {
+    entityCatalog: {
+      ontologyEntities,
+      tables: (persistence?.result.tables || []).map(table => ({
+        tableId: table.tableId,
+        tableName: table.tableName,
+        rootEntity: table.rootEntity,
+      })),
+      metricTables: (metrics?.result.metricTables || []).map(metric => ({
+        metricTableId: metric.metricTableId,
+        tableName: metric.tableName,
+        sourceEntities: metric.sourceEntities,
+        timeColumn: metric.timeColumn,
+        dimensions: metric.dimensions,
+        measures: metric.measures,
+      })),
+      mdmEntities,
+      existingTables,
+    },
+  };
+}
 
 export function getPlanIndexReviewConfig(indexName: string): PlanIndexReviewConfig {
   const config = reviewConfigs[indexName as PlanIndexName];

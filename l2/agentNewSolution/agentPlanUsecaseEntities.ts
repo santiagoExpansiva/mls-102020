@@ -67,7 +67,7 @@ export interface PlanUsecaseEntitiesResult {
 export type PlanUsecaseEntitiesOutput = PlannerOutput<PlanUsecaseEntitiesResult>;
 
 /** Ownership values for table references — mirrors foreignRefs.targetOwnership in table definitions. */
-export type TableOwnership = 'moduleOwned' | 'mdmOwned' | 'horizontalOwned' | 'pluginOwned';
+export type TableOwnership = 'moduleOwned' | 'mdmOwned' | 'horizontalOwned' | 'pluginOwned' | 'existingModuleOwned';
 
 /**
  * A table reference with explicit ownership so the materializer knows whether to call
@@ -78,7 +78,7 @@ export interface TableRef {
   ownership: TableOwnership;
 }
 
-const TABLE_OWNERSHIP_ENUM: TableOwnership[] = ['moduleOwned', 'mdmOwned', 'horizontalOwned', 'pluginOwned'];
+const TABLE_OWNERSHIP_ENUM: TableOwnership[] = ['moduleOwned', 'mdmOwned', 'horizontalOwned', 'pluginOwned', 'existingModuleOwned'];
 
 /** JSON schema fragment reused in usecaseEntities.sourceTables and usecases.readsTables/writesTables. */
 const TABLE_REF_SCHEMA = {
@@ -462,6 +462,7 @@ Set ownership based on who owns the table:
 - "mdmOwned"       — entities in persistenceIndex.excludedEntities with ownership "mdmOwned"; accessed at runtime via ctx.data.mdmDocument / ctx.data.mdmEntityIndex (project 102034)
 - "horizontalOwned"— entities excluded with ownership "horizontalOwned"
 - "pluginOwned"    — entities excluded with ownership "pluginOwned"
+- "existingModuleOwned" — tables persisted by ANOTHER existing module (persistenceIndex.excludedEntities with ownership "existingModuleOwned"); reference them by their physical tableName, never re-create them and never label them "mdmOwned"
 MDM-owned tables must still appear in readsTables/writesTables so the materializer knows the usecase depends on MDM, but with ownership "mdmOwned".
 A usecase may declare a metric table in writesTables ONLY when it actually updates one of that table's measures (see the metrics index). Purely descriptive edits (notes, comments, labels) must not write metric tables.
 `;

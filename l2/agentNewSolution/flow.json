@@ -114,7 +114,7 @@
       "output": {
         "result": "FinalSolutionPlanResult { module, actors, capabilities, ontology.entities, rules, relationships, userActions, approvedArtifacts{pages,workflows,plugins,agents,horizontalModules,mdm,metricTables,metricDashboards,usecaseEntities}, decisions, deferredItems }",
         "savedArtifact": [
-          "l5/{module}/module.defs.ts  (somente estrutural: module, actors, capabilities, ontology, relationships - rules/userActions/approvedArtifacts/decisions/deferredItems sao removidos: TODO-FINAL-031)",
+          "l5/{module}/module.defs.ts  (somente estrutural: module, actors, capabilities, ontology SLIM, relationships. A6/layer4.md: ontology.entities guarda so o MAPA {entityId,title,description,ownership,kind}; fields/statusEnum/lifecycleStates sao canonicos em l1/{module}/layer_4_entities/{entity}.defs.ts)",
           "l5/{module}/rules.defs.ts  (rules)",
           "l5/project.json  (registro do modulo; merge, nao overwrite)"
         ]
@@ -173,8 +173,8 @@
       "type": "agent",
       "executionMode": "sequential",
       "dependsOn": ["plan-mdm", "plan-horizontals", "plan-plugins"],
-      "goal": "Indice das tabelas transacionais NOVAS do modulo (exclui MDM/horizontais/plugins).",
-      "input": ["finalize plan", "plan-mdm", "plan-horizontals", "plan-plugins"],
+      "goal": "Indice das tabelas transacionais NOVAS do modulo (exclui MDM/horizontais/plugins). A5: runs de manutencao/extensao recebem o inventario dos modulos existentes e excluem entidades ja persistidas por eles com ownership 'existingModuleOwned' + moduleRef (nunca 'mdmOwned' como vala comum); entidades realizadas como metric tables deste modulo saem como 'metricOwned'.",
+      "input": ["finalize plan", "plan-mdm", "plan-horizontals", "plan-plugins", "existingModulesInventory (readExistingModuleTables: tabelas de outros modulos do projeto)"],
       "output": { "result": "persistenceIndex { tables[] (tableId, rootEntity, ...) }", "savedArtifact": "checkpoint apos aprovacao" },
       "criticRepair": { "index": "persistenceIndex", "checkpoint": "l2/{module}/trace/checkpoint-persistenceIndex.json" }
     },
@@ -229,7 +229,7 @@
         "result": "PlanUsecaseEntitiesResult { usecases[], usecaseEntities[], backendArchitecture, controllerRules }",
         "savedArtifact": [
           "l1/{module}/layer_3_usecases/{usecaseId}.defs.ts  (um por usecase, com entityRefs derivado)",
-          "l1/{module}/layer_4_entities/{usecaseEntityId}.defs.ts  (um por usecaseEntity: contrato da entity — sourceTables, allowedOperations, usecaseRefs, materialization {fileName, className, contractName})"
+          "l1/{module}/layer_4_entities/{entityId}.defs.ts  (CANONICO para o shape da entidade: fields/statusEnum/lifecycleStates copiados da ontologia + storage binding [moduleTable fileRef | metricTable | mdm 102034 | existingModule moduleRef (A5)] + allowedOperations + usecaseRefs + materialization {fileName, className IXxxEntity}. Grupos do LLM enriquecidos + GAP-FILL deterministico: 1 entity por tabela transacional, metric table, entidade MDM e tabela de modulo existente TOCADA por usecases — layer_4 sempre completa, zero LLM extra)"
         ]
       },
       "criticRepair": { "index": "usecasePlan", "checkpoint": "l2/{module}/trace/checkpoint-usecasePlan.json" }

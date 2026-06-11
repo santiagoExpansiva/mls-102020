@@ -102,7 +102,7 @@ const planTableDefinitionToolSchema = createPlannerVariableToolSchema(
               properties: {
                 fieldName: { type: 'string' },
                 targetEntity: { type: 'string' },
-                targetOwnership: { enum: ['moduleOwned', 'mdmOwned', 'horizontalOwned', 'pluginOwned', 'external'] },
+                targetOwnership: { enum: ['moduleOwned', 'mdmOwned', 'horizontalOwned', 'pluginOwned', 'existingModuleOwned', 'external'] },
                 reason: { type: 'string' },
               },
             },

@@ -91,7 +91,9 @@ const ontologyEntitySchema = {
     title: stringSchema,
     description: stringSchema,
     kind: stringSchema,
-    ownership: { enum: ['moduleOwned', 'mdmOwned', 'horizontalOwned', 'pluginOwned', 'external'] },
+    // A5: 'existingModuleOwned' = entity already persisted by ANOTHER existing module (used by
+    // maintenance/extension runs); never model it as a new table nor as MDM.
+    ownership: { enum: ['moduleOwned', 'mdmOwned', 'horizontalOwned', 'pluginOwned', 'existingModuleOwned', 'external'] },
     fields: { type: 'array', items: entityFieldSchema, minItems: 1 },
     statusEnum: stringArraySchema,
     lifecycleStates: stringArraySchema,
