@@ -19,6 +19,7 @@ export const PLAN_IDS = [
   'plan-metrics-index',
   'plan-metric-table-definition',
   'plan-usecase-entities',
+  'plan-usecase-definition',
   'plan-workflow-index',
   'plan-workflow-definition',
   'plan-agents',

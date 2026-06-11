@@ -71,6 +71,7 @@ import {
 import type { PlanPluginsOutput } from '/_102020_/l2/agentNewSolution/agentPlanPlugins.js';
 import {
   PLAN_USECASE_ENTITIES_RESULT_SCHEMA,
+  createUsecaseDefinitionParallelIntent,
   getPlanUsecaseEntitiesOutput,
   planUsecaseEntitiesConfig,
   validatePlanUsecaseEntitiesOutput,
@@ -767,7 +768,7 @@ const reviewConfigs: Record<PlanIndexName, PlanIndexReviewConfig> = {
 - executionMode must reflect reality: documentationOnly, uiState, entityLifecycle, taskWorkflow or automation.
 - createsTask must be true only for workflows that create or coordinate tasks for staff/managers/agents.
 - actors must come from final plan actorIds, never invented or translated names.
-- persistenceRefs only for module-owned tables; usecaseRefs when layer_3 executes transitions; metricRefs when transitions feed metrics.
+- persistenceRefs is the persistence SUPERSET (T-009): module-owned table ids PLUS the metric table ids the workflow writes. A metric table a workflow feeds MUST appear in BOTH persistenceRefs and metricRefs — do NOT flag a metric table present in persistenceRefs as an error. Do not include MDM/horizontal/plugin tables in persistenceRefs. usecaseRefs when layer_3 executes transitions; metricRefs lists the metric tables fed.
 - No unnecessary workflows: each workflow must map to multi-step state, coordination, approval, fulfillment, reminders, integration or scheduled automation.`,
     resultSchema: PLAN_WORKFLOW_INDEX_RESULT_SCHEMA,
     getCurrentOutput: context => getPlanWorkflowIndexOutput(context),
@@ -884,7 +885,7 @@ const reviewConfigs: Record<PlanIndexName, PlanIndexReviewConfig> = {
       // layer_4_entities defs deterministically (fields, storage binding, naming).
       await saveNewSolutionPlanArtifacts(context, 'agentPlanUsecaseEntities', indexStep, output, await buildEntityCatalogOptions(context));
     },
-    createChildrenIntents: () => [],
+    createChildrenIntents: (context, output) => createUsecaseDefinitionParallelIntent(context, output as PlanUsecaseEntitiesOutput),
   },
 };
 

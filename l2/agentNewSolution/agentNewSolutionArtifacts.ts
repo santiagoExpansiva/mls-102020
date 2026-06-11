@@ -779,6 +779,21 @@ function buildPlanArtifactCandidates(agentName: string, moduleName: string, outp
     }];
   }
 
+  if (agentName === 'agentPlanUsecaseDefinition') {
+    // Per-usecase command signatures (input/output), produced by the parallel usecase-definition
+    // fan-out. Persisted for the future materialization step; not consumed by the planning flow.
+    const def = getRecord(result.usecaseDefinition);
+    const id = readString(def?.usecaseId);
+    if (!def || !id) return [];
+    return [{
+      artifactType: 'usecaseCommands',
+      artifactId: id,
+      exportName: `${toExportIdentifier(id)}Commands`,
+      moduleName,
+      data: { usecaseDefinition: def },
+    }];
+  }
+
   if (agentName === 'agentPlanUsecaseEntities') {
     const usecases = Array.isArray(result.usecases) ? result.usecases : [];
     const usecaseEntities = Array.isArray(result.usecaseEntities) ? result.usecaseEntities : [];
@@ -1315,6 +1330,9 @@ function resolvePlanArtifactFileInfo(candidate: PlanArtifactCandidate): Pick<mls
   }
   if (candidate.artifactType === 'usecase') {
     return { project, level: 1, folder: `${candidate.moduleName}/layer_3_usecases`, shortName, extension: '.defs.ts' };
+  }
+  if (candidate.artifactType === 'usecaseCommands') {
+    return { project, level: 1, folder: `${candidate.moduleName}/layer_3_usecases`, shortName: `${shortName}-commands`, extension: '.defs.ts' };
   }
   // layer_4_entities contract defs (see mls-102045/layer4.md §8): one per usecaseEntity group.
   if (candidate.artifactType === 'entity') {

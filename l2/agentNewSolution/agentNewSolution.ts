@@ -204,6 +204,14 @@ function buildPlannedTree(initialPlan: InitialNewSolutionPlan): PlannedAgentStep
       argsField: 'metricTableId',
     }),
     plannedAgent('plan-usecase-entities', 'agentPlanUsecaseEntities', title('plan-usecase-entities'), ['plan-persistence-index', 'plan-metrics-index'], 'sequential'),
+    // Heavy per-usecase command signatures run as a parallel fan-out AFTER the (light) usecase
+    // index. Downstream index steps (workflow/page/agents) depend on the index, not on this, so
+    // they proceed in parallel; only coverage waits for these definitions.
+    plannedAgent('plan-usecase-definition', 'agentPlanUsecaseDefinition', title('plan-usecase-definition'), ['plan-usecase-entities'], 'parallel_dynamic', {
+      sourcePlanId: 'plan-usecase-entities',
+      selectorField: 'usecaseId',
+      argsField: 'usecaseId',
+    }),
     plannedAgent('plan-workflow-index', 'agentPlanWorkflowIndex', title('plan-workflow-index'), ['plan-usecase-entities'], 'sequential'),
     plannedAgent('plan-workflow-definition', 'agentPlanWorkflowDefinition', title('plan-workflow-definition'), ['plan-workflow-index'], 'parallel_dynamic', {
       sourcePlanId: 'plan-workflow-index',
@@ -217,7 +225,7 @@ function buildPlannedTree(initialPlan: InitialNewSolutionPlan): PlannedAgentStep
       selectorField: 'pageId',
       argsField: 'pageId',
     }),
-    plannedAgent('plan-validate-solution-coverage', 'agentValidateSolutionCoverage', title('plan-validate-solution-coverage'), ['plan-mdm', 'plan-horizontals', 'plan-plugins', 'plan-persistence-index', 'plan-table-definition', 'plan-metrics-index', 'plan-metric-table-definition', 'plan-usecase-entities', 'plan-workflow-definition', 'plan-agents', 'plan-page-definition'], 'sequential'),
+    plannedAgent('plan-validate-solution-coverage', 'agentValidateSolutionCoverage', title('plan-validate-solution-coverage'), ['plan-mdm', 'plan-horizontals', 'plan-plugins', 'plan-persistence-index', 'plan-table-definition', 'plan-metrics-index', 'plan-metric-table-definition', 'plan-usecase-entities', 'plan-usecase-definition', 'plan-workflow-definition', 'plan-agents', 'plan-page-definition'], 'sequential'),
   ];
 
   // The former materialization step is now the "Final data" (Dados finais) resume screen:
@@ -320,6 +328,7 @@ const fallbackTitlesEn: Record<NewSolutionPlanId, string> = {
   'plan-metrics-index': 'Plan metrics index',
   'plan-metric-table-definition': 'Plan metric table definitions',
   'plan-usecase-entities': 'Plan usecase entities',
+  'plan-usecase-definition': 'Plan usecase definitions',
   'plan-workflow-index': 'Plan workflow index',
   'plan-workflow-definition': 'Plan workflow definitions',
   'plan-agents': 'Plan operational agents',
@@ -348,6 +357,7 @@ const fallbackTitlesPt: Record<NewSolutionPlanId, string> = {
   'plan-metrics-index': 'Planejar indice de metricas',
   'plan-metric-table-definition': 'Planejar definicoes de tabelas de metricas',
   'plan-usecase-entities': 'Planejar entidades e casos de uso',
+  'plan-usecase-definition': 'Planejar definicoes de casos de uso',
   'plan-workflow-index': 'Planejar indice de workflows',
   'plan-workflow-definition': 'Planejar definicoes de workflows',
   'plan-agents': 'Planejar agentes operacionais',

@@ -223,16 +223,30 @@
       "type": "agent",
       "executionMode": "sequential",
       "dependsOn": ["plan-persistence-index", "plan-metrics-index"],
-      "goal": "Planejar entidades e casos de uso do layer_3_usecases (writes, lifecycle, BFF, updates de metrica). Depende dos INDICES (persistencia + metricas), nao das definicoes (column/hypertable detail not needed) — roda em paralelo com plan-table-definition / plan-metric-table-definition. layer4.md §8: os usecaseEntities viram contratos layer_4_entities (deterministico, sem LLM) e cada usecase ganha entityRefs derivado (intersecao reads/writesTables x sourceTables).",
+      "goal": "INDICE (leve) de entidades e casos de uso do layer_3_usecases. NAO planeja mais os commands (parte pesada) — isso foi movido para plan-usecase-definition (paralelo) para o indice sobreviver a strict/timeout em modulos grandes. Depende dos INDICES (persistencia + metricas). layer4.md §8: os usecaseEntities viram contratos layer_4_entities (deterministico, sem LLM) e cada usecase ganha entityRefs derivado (intersecao reads/writesTables x sourceTables).",
       "input": ["finalize plan", "plan-persistence-index (resumo)", "plan-metrics-index (resumo)"],
       "output": {
-        "result": "PlanUsecaseEntitiesResult { usecases[], usecaseEntities[], backendArchitecture, controllerRules }",
+        "result": "PlanUsecaseEntitiesResult { usecases[] (SEM commands), usecaseEntities[], backendArchitecture, controllerRules }",
         "savedArtifact": [
           "l1/{module}/layer_3_usecases/{usecaseId}.defs.ts  (um por usecase, com entityRefs derivado)",
           "l1/{module}/layer_4_entities/{entityId}.defs.ts  (CANONICO para o shape da entidade: fields/statusEnum/lifecycleStates copiados da ontologia + storage binding [moduleTable fileRef | metricTable | mdm 102034 | existingModule moduleRef (A5)] + allowedOperations + usecaseRefs + materialization {fileName, className IXxxEntity}. Grupos do LLM enriquecidos + GAP-FILL deterministico: 1 entity por tabela transacional, metric table, entidade MDM e tabela de modulo existente TOCADA por usecases — layer_4 sempre completa, zero LLM extra)"
         ]
       },
       "criticRepair": { "index": "usecasePlan", "checkpoint": "l2/{module}/trace/checkpoint-usecasePlan.json" }
+    },
+    {
+      "planId": "plan-usecase-definition",
+      "agentName": "agentPlanUsecaseDefinition",
+      "type": "agent",
+      "executionMode": "parallel_dynamic",
+      "dynamicSource": { "sourcePlanId": "plan-usecase-entities", "selectorField": "usecaseId" },
+      "dependsOn": ["plan-usecase-entities"],
+      "goal": "Para cada usecaseId: detalhar as assinaturas dos commands (input/output tipados) — a parte pesada, tirada do indice. Lancado pelo release do critic (createUsecaseDefinitionParallelIntent). Roda em PARALELO com workflow/page/agents (que so precisam do indice). So o coverage espera por ele.",
+      "input": ["plan-usecase-entities (usecase do selector + backendArchitecture)"],
+      "output": {
+        "result": "PlanUsecaseDefinitionResult { usecaseDefinition { usecaseId, commands[] } }",
+        "savedArtifact": "l1/{module}/layer_3_usecases/{usecaseId}-commands.defs.ts (para materializacao futura)"
+      }
     },
     {
       "planId": "plan-workflow-index",
@@ -302,7 +316,7 @@
       "dependsOn": [
         "plan-mdm", "plan-horizontals", "plan-plugins", "plan-persistence-index",
         "plan-table-definition", "plan-metrics-index", "plan-metric-table-definition",
-        "plan-usecase-entities", "plan-workflow-definition", "plan-agents", "plan-page-definition"
+        "plan-usecase-entities", "plan-usecase-definition", "plan-workflow-definition", "plan-agents", "plan-page-definition"
       ],
       "goal": "Relatorio tecnico NAO-bloqueante de cobertura/integracao (TODO-FINAL-023/024). Com status=ok completa e grava o run em process.defs.ts (T-011: decisoes refinadas por agentes especializados ganham revisedBy/revisedScope, ex.: escopo MDM do agentPlanMDM). NAO fecha mais o root: o fluxo segue para 'Revendo plano' (sequential) e o root e fechado no 'Encerrar' da tela final. T-010: antes do prompt, backfill deterministico de relatedPages nos l4/workflows/*.defs.ts (pageDefinition.flowRefs + bffCommands.usecaseRefs x workflow.usecaseRefs). T-012/T-015: deterministicIssues incluem horizontal.artifact.missing e usecase.consumer.missing.",
       "input": ["coverageSnapshot compacto (counts/ids/matriz)", "deterministicIssues pre-computadas no cliente"],

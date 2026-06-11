@@ -9,10 +9,12 @@ import {
   compactFinalPlan,
   summarizeRecords,
   createHoldIndexForReviewIntents,
+  createParallelDynamicAgentStepIntent,
   createPlannerPromptReadyIntent,
   createPlannerVariableToolSchema,
   createPlannerUpdateStatusIntent,
   extractPlannerOutput,
+  findStepByPlanId,
   getPlannerOutputWithRepair,
 } from '/_102020_/l2/agentNewSolution/agentPlanningShared.js';
 import { getFinalizeSolutionPlanOutput } from '/_102020_/l2/agentNewSolution/agentFinalizeSolutionPlan.js';
@@ -140,44 +142,9 @@ export const PLAN_USECASE_ENTITIES_RESULT_SCHEMA: Record<string, unknown> = {
             outputEntities: { type: 'array', items: { type: 'string' } },
             readsTables: { type: 'array', items: TABLE_REF_SCHEMA },
             writesTables: { type: 'array', items: TABLE_REF_SCHEMA },
-            // TODO (usecase commands): each command must declare its input/output as structured
-            // typed fields (not just a name), so the materialization step can generate signatures.
-            commands: {
-              type: 'array',
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                required: ['commandId', 'input', 'output'],
-                properties: {
-                  commandId: { type: 'string' },
-                  input: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      additionalProperties: false,
-                      required: ['name', 'type', 'required'],
-                      properties: {
-                        name: { type: 'string' },
-                        type: { type: 'string' },
-                        required: { type: 'boolean' },
-                      },
-                    },
-                  },
-                  output: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      additionalProperties: false,
-                      required: ['name', 'type'],
-                      properties: {
-                        name: { type: 'string' },
-                        type: { type: 'string' },
-                      },
-                    },
-                  },
-                },
-              },
-            },
+            // Command signatures (input/output typed fields) are NOT planned here — that is the
+            // heavy part. They are produced per-usecase by agentPlanUsecaseDefinition (parallel),
+            // keeping this index light so it survives strict/timeout on large modules.
             rulesApplied: { type: 'array', items: { type: 'string' } },
           },
         },
@@ -272,6 +239,35 @@ async function afterPromptStep(
   return [createPlannerUpdateStatusIntent(context, parentStep, step, hookSequential, status, traceMsg, status === 'completed' ? 'input' : undefined)];
 }
 
+// Launches the per-usecase command detailing as a controlled parallel fan-out (like the table /
+// metric / workflow / page definitions). Called from the critic release path once the usecase
+// index is approved. Each child runs in parallel WHILE the downstream index steps (workflow/page/
+// agents) proceed — they only need the light index, not the commands.
+export function createUsecaseDefinitionParallelIntent(context: mls.msg.ExecutionContext, output: PlanUsecaseEntitiesOutput): mls.msg.AgentIntent[] {
+  const placeholder = findStepByPlanId(context, 'plan-usecase-definition') as mls.msg.AIAgentStep | null;
+  if (!placeholder || placeholder.type !== 'agent' || placeholder.status === 'completed') return [];
+
+  const usecaseIds = output.result.usecases
+    .map(usecase => (usecase as { usecaseId?: string }).usecaseId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+  if (usecaseIds.length === 0) {
+    return [createPlannerUpdateStatusIntent(context, placeholder, placeholder, 0, 'completed', 'No usecases to detail commands for.')];
+  }
+
+  return [
+    createParallelDynamicAgentStepIntent(
+      context,
+      placeholder,
+      'agentPlanUsecaseDefinition',
+      'plan-usecase-definition:parallel',
+      'Detail usecase commands {{completed}}/{{total}}, errors: {{failed}}',
+      usecaseIds,
+      5
+    ),
+  ];
+}
+
 export function getPlanUsecaseEntitiesOutput(context: mls.msg.ExecutionContext): PlanUsecaseEntitiesOutput {
   // prefer the latest repaired index when a repair step exists.
   return getPlannerOutputWithRepair(context, 'agentPlanUsecaseEntities', 'usecasePlan', planUsecaseEntitiesConfig, output => validatePlanUsecaseEntitiesOutput(output, getPlanPersistenceIndexOutput(context).result.tables.length > 0));
@@ -339,28 +335,8 @@ function normalizeUsecase(value: unknown, path: string): unknown {
   normalizeStringArray(usecase.outputEntities, `${path}.outputEntities`);
   normalizeTableRefArray(usecase.readsTables, `${path}.readsTables`);
   normalizeTableRefArray(usecase.writesTables, `${path}.writesTables`);
-  if (usecase.commands !== undefined) {
-    assertArray(usecase.commands, `${path}.commands`).forEach((cmd, index) => normalizeUsecaseCommand(cmd, `${path}.commands[${index}]`));
-  }
   normalizeStringArray(usecase.rulesApplied, `${path}.rulesApplied`);
   return usecase;
-}
-
-function normalizeUsecaseCommand(value: unknown, path: string): unknown {
-  const command = assertRecord(value, path);
-  assertString(command.commandId, `${path}.commandId`);
-  assertArray(command.input, `${path}.input`).forEach((field, index) => {
-    const record = assertRecord(field, `${path}.input[${index}]`);
-    assertString(record.name, `${path}.input[${index}].name`);
-    assertString(record.type, `${path}.input[${index}].type`);
-    if (typeof record.required !== 'boolean') throw new Error(`${path}.input[${index}].required must be a boolean`);
-  });
-  assertArray(command.output, `${path}.output`).forEach((field, index) => {
-    const record = assertRecord(field, `${path}.output[${index}]`);
-    assertString(record.name, `${path}.output[${index}].name`);
-    assertString(record.type, `${path}.output[${index}].type`);
-  });
-  return command;
 }
 
 function normalizeTableRef(value: unknown, path: string): TableRef {
@@ -445,15 +421,8 @@ Do not return prose.
 ## Concepts — do not confuse these three
 - approvedArtifacts.usecaseEntities (final plan): plan-level list of approved usecase ENTITY GROUPS (e.g. "OrderEntity"). It is a coarse approval signal, NOT a 1:1 target.
 - usecaseEntities (this output): the layer_3 aggregate entities you DETAIL here (usecaseEntityId, sourceTables, allowedOperations). You MAY consolidate several approved groups into fewer entities — the COUNT need NOT match approvedArtifacts.usecaseEntities. Each group is ALSO materialized as a layer_4_entities/{Entity}.defs.ts contract (the layer that owns table access), so: every table referenced by any usecase's readsTables/writesTables MUST appear in the sourceTables of at least one usecaseEntity, and allowedOperations must cover the operations those usecases perform.
-- usecases (this output): INDIVIDUAL operations (usecaseId, actor, reads/writes, commands). Workflows/agents/BFF reference operations by usecaseId, never by usecaseEntityId.
+- usecases (this output): INDIVIDUAL operations (usecaseId, actor, reads/writes). Workflows/agents/BFF reference operations by usecaseId, never by usecaseEntityId. Command signatures are detailed later by agentPlanUsecaseDefinition.
 Coverage compares usecases by usecaseId; it must NOT require parity between approvedArtifacts.usecaseEntities and usecaseEntities.
-
-## Usecase commands (input/output)
-Each command in a usecase's commands[] must declare its signature as structured typed fields:
-- commandId: stable camelCase id of the command.
-- input: array of { name, type, required } — the parameters the command receives (empty array when none).
-- output: array of { name, type } — the fields the command returns (empty array when none).
-Use concise primitive/domain types in "type" (e.g. string, number, boolean, date, or an entity/enum id). Do not embed free-form JSON; only the declared fields.
 
 ## Table references (sourceTables, readsTables, writesTables)
 Each entry must be an object { tableName, ownership } — never a plain string.
